@@ -1,150 +1,84 @@
-use std::{f64::consts::PI, ops::{Add, Mul, Deref, Div}};
-
-use autodiff::*;
-
-//type F3 = (f64, f64, f64);
-#[derive(Debug)]
-pub struct F3([f64; 3]);
-
-#[derive(Debug)]
-pub struct D(F<f64, F3>);
-
-impl Deref for F3 {
-    type Target = [f64; 3];
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl Deref for D {
-    type Target = F<f64, F3>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-// pub trait Z(Zero);
-
-impl Add for F3 {
-    type Output = Self;
-    fn add(self, rhs: Self) -> Self {
-        F3([self[0] + rhs[0], self[1] + rhs[1], self[2] + rhs[2]])
-    }
-}
-
-impl Zero for F3 {
-    fn zero() -> Self {
-        F3([0.0, 0.0, 0.0])
-    }
-
-    fn is_zero(&self) -> bool {
-        self[0] == 0.0 && self[1] == 0.0 && self[2] == 0.0
-    }
-}
-
-// impl Mul for F3 {
-//     type Output = Self;
-//     fn mul(self, rhs: Self) -> Self {
-//         F3([self[0] * rhs[0], self[1] * rhs[1], self[2] * rhs[2]])
-//     }
-// }
-
-impl Mul<f64> for F3 {
-    type Output = Self;
-    fn mul(self, rhs: f64) -> Self {
-        F3([self[0] * rhs, self[1] * rhs, self[2] * rhs])
-    }
-}
-
-impl Div<f64> for F3 {
-    type Output = Self;
-    fn div(self, rhs: f64) -> Self {
-        F3([self[0] / rhs, self[1] / rhs, self[2] / rhs])
-    }
-}
-
-// trait Area {
-//     fn area<T: Float>(&self) -> T;
-// }
-
-pub trait FromFloat {
-    fn from<T>(f: f64) -> Self;
-}
-
-impl FromFloat for f64 {
-    fn from<T>(f: f64) -> Self {
-        f
-    }
-}
-
-impl FromFloat for FT<f64> {
-    fn from<T>(f: f64) -> Self {
-        F::cst(f)
-    }
-}
-
-impl FromFloat for D {
-    fn from<T>(f: f64) -> Self {
-        D(F::cst(f))
-    }
-}
-
-pub struct Point<T> {
-    x: T,
-    y: T,
-}
-
-pub struct Circle<T> {
-    c: Point<T>,
-    r: T,
-}
-
-impl<T: Mul<T, Output = T> + Mul<f64, Output = T> + FromFloat> Circle<T>
-{
-    pub fn area(&self) -> T {
-        // let pi: T = FromFloat::from::<T>(PI);
-        let pi_r: T = self.r * PI;
-        pi_r * self.r
-    }
-}
-
-// use autodiff::F::var;
+use autograd as ag;
+use ag::{tensor_ops::*, Tensor};
 
 fn main() {
-    // let var = F::var;
-    let z = F3([0.0, 0.0, 0.0]);
-    let r: D = D(F::new(1.0, z));
-    let x: D = D(F::new(0.0, z));
-    let y: D = D(F::new(0.0, z));
-    let c: Point<D> = Point { x, y };
-    let c1 = Circle {
-        r,
-        c,
-     };
-    // let c2: Circle<FT<f64>> = Circle {
-    //     r: F::new(1.0, F3([1, 0, 0])),
-    //     c: Point {
-    //         x: F::new(1.0, F3([0, 1, 0])),
-    //         y: F::new(1.0, F3([0, 0, 1])),
-    //      },
-    //  };
-    // let c3 = Circle { r: 2 };
+    ag::run(|ctx: &mut ag::Context<_>| {
+        // let x = ctx.placeholder("x", &[]);
+        // let y = ctx.placeholder("y", &[]);
+        // let z = 2.*x*x + 3.*y + 1.;
 
-    dbg!("c1: {}", c1.area());
-    dbg!("c2: {}", c2.area());
+        // dz/dy
+        // let gy = &grad(&[z], &[y])[0];
+        // println!("gy: {:?}", gy.eval(ctx));
 
-    // let circle_area = |r: FT<f64>| PI * r * r;
-    // let r = F::var(1.0);
-    // let area = circle_area(r);
-    // dbg!("value: {}, deriv: {}", area.value(), area.deriv());
+        // let r = ctx.placeholder("r", &[]);
+        // let A = r * r;
 
-    // let grad = area.grad();
-    // dbg!("area: {}", area);
-    // dbg!("grad: {}", grad);
-    // FT::from(na::Vector2::new(1.0, 2.0));
-    // dbg!(FT::from(1.0));
-    // let r = FT::from(1.0);
-    // let area = circle_area(r);
-    // println!("area: {}", area);
-    // println!("Hello, world!");
+        // dA/dr
+        // let dAdr = &grad(&[A], &[r])[0];
+        // let feed = ag::ndarray::arr0(3.);
+        // println!("dAdr: {:?}", ctx.evaluator().push(dAdr).feed(r, feed.view()).run()[0]);
+
+        // dz/dx (requires to fill the placeholder `x`)
+        // let gx = &grad(&[z], &[x])[0];
+        // let feed = ag::ndarray::arr0(2.);
+        // println!("gx: {:?}", ctx.evaluator().push(gx).feed(x, feed.view()).run()[0]);  // => Ok(8.)
+
+        // // ddz/dx (differentiates `z` again)
+        // let ggx = &grad(&[gx], &[x])[0];
+        // println!("ggx: {:?}", ggx.eval(ctx));  // => Ok(4.)
+
+        let cx: Tensor<'_, f64> = ctx.placeholder("cx", &[]);
+        let cy: Tensor<'_, f64> = ctx.placeholder("cy", &[]);
+        let r: Tensor<'_, f64> = ctx.placeholder("r", &[]);
+        let C: Tensor<'_, f64> = cx*cx + cy+cy;
+        // let D = C - r*r + 1;
+        // let b2a = cx*D / 2 / C;
+
+        // fn eval(y: &Tensor<'_, f64>, x: impl Placeholder, v: f64, ctx: &mut ag::Context<f64>) -> Result<f64, ag::EvalError> {
+        //     let feed = ag::ndarray::arr0(v);
+        //     return ctx.evaluator().push(y).feed(x, feed.view()).run()[0];
+        // }
+
+        // let z = 2.*x*x + 3.*y + 1.;
+        let dcdx = &grad(&[C], &[cx])[0];
+        let feed = ag::ndarray::arr0(2.);
+        let ran = ctx.evaluator().push(dcdx).feed(cx, feed.view()).run();
+        let val = &ran[0];
+        // let val = {
+        //     let feed = ag::ndarray::arr0(2.);
+        //     let pushed = ctx.evaluator().push(dcdx);
+        //     let fed = pushed.feed(cx, feed.view());
+        //     let ran = fed.run();
+        //     &ran[0]
+        // };
+        match val {
+            Ok(val) =>
+                println!("dcdx: {:?}", val),
+            Err(err) => println!("dcdx: err {:?}", err),
+        }
+        // let if Ok(val) = val {
+        //     println!("dCdx: {:?}", val);
+        // } else {
+        //     println!("dCdx: err");
+        // }
+
+        // println!("dCdx: {:?}",);
+
+        // let dCdy = &grad(&[C], &[cy])[0];
+        // print!("dCdy: {:?}", dCdy.eval(ctx));
+
+        // dz/dy
+        // let gy = &grad(&[z], &[y])[0];
+        // println!("{:?}", gy.eval(ctx));   // => Ok(3.)
+
+        // // dz/dx (requires to fill the placeholder `x`)
+        // let gx = &grad(&[z], &[x])[0];
+        // let feed = ag::ndarray::arr0(2.);
+        // println!("{:?}", ctx.evaluator().push(gx).feed(x, feed.view()).run()[0]);  // => Ok(8.)
+
+        // // ddz/dx (differentiates `z` again)
+        // let ggx = &grad(&[gx], &[x])[0];
+        // println!("{:?}", ggx.eval(ctx));  // => Ok(4.)
+     });
 }

@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 autodiff = "0.7.0"
+autograd = "2.0.0-rc1"
