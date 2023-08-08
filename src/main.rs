@@ -53,9 +53,12 @@ fn main() {
         //     &ran[0]
         // };
         match val {
-            Ok(val) =>
-                println!("dcdx: {:?}", val),
-            Err(err) => println!("dcdx: err {:?}", err),
+            Ok(val) => {
+                println!("dcdx: {:?}", val);
+                println!("val: {}", val);
+            },
+            Err(err) =>
+            println!("dcdx: err {:?}", err),
         }
         // let if Ok(val) = val {
         //     println!("dCdx: {:?}", val);
