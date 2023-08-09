@@ -6,4 +6,6 @@ edition = "2021"
 [dependencies]
 autodiff = "0.7.0"
 autograd = "2.0.0-rc1"
+nalgebra = "0.32.3"
+num-dual = "0.7.1"
 roots = "0.0.8"
