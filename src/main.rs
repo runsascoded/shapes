@@ -1,7 +1,35 @@
-use num_dual::*;
-use nalgebra::SMatrix;
+use std::f64::consts::PI;
 
-fn f<D: DualNum<f64> + PartialOrd + Copy>(cx: D, cy: D, r: D) -> SMatrix<D, 4, 1> {
+use num_dual::*;
+use nalgebra::{SMatrix, Point2, Scalar};
+
+pub struct R2<D> {
+    x: D,
+    y: D,
+}
+
+pub struct Circle<D: Scalar> {
+    c: Point2<D>,
+    r: D,
+}
+
+impl<D: DualNum<f64> + Copy> Circle<D> {
+    pub fn x(&self) -> D {
+        self.c.x
+    }
+    pub fn y(&self) -> D {
+        self.c.y
+    }
+    pub fn area(&self) -> D {
+        self.r * self.r * PI
+    }
+}
+
+
+fn f<D: DualNum<f64> + PartialOrd + Copy>(c: Circle<D>) -> [D; 4] {
+    let cx = c.x();
+    let cy = c.y();
+    let r = c.r;
     let cx2 = cx * cx;
     let cy2 = cy * cy;
     let C = cx2 + cy2;
@@ -42,11 +70,12 @@ fn f<D: DualNum<f64> + PartialOrd + Copy>(cx: D, cy: D, r: D) -> SMatrix<D, 4, 1
     let y1 = if check1_0 < check1_1 { y1_0 } else { y1_1 };
     println!("checks1: {:?}, {:?}", check1_0, check1_1);
 
-    return SMatrix::from([ x0, y0, x1, y1 ]);
+    [ x0, y0, x1, y1 ]
 }
 
 fn main() {
     let (cx, cy, r) = (1., 1., 2.);
-    let (value, grad) = jacobian(|v| f(v[0], v[1], v[2]), SMatrix::from([cx, cy, r]));
+    let m = SMatrix::from([cx, cy, r]);
+    let (value, grad) = jacobian(|v| SMatrix::from(f(Circle { c: Point2::new(v[0], v[1]), r: v[2] })), m);
     println!("{value} {grad}");
 }
