@@ -3,6 +3,7 @@ use std::f64::consts::PI;
 use nalgebra::{Point2, SMatrix, Scalar};
 use num_dual::*;
 
+#[derive(Debug, PartialEq)]
 pub struct R2<D> {
     x: D,
     y: D,
@@ -102,87 +103,21 @@ mod tests {
             dv
         };
 
-        let dvs = [ dv(value[0], 0), dv(value[1], 1), dv(value[2], 2), dv(value[3], 3) ];
-        let [ p0x, p0y, p1x, p1y ] = dvs;
-        let p0 = R2 { x: p0x, y: p0y };
-        let p1 = R2 { x: p1x, y: p1y };
+        let p0 = R2 { x: dv(value[0], 0), y: dv(value[1], 1) };
+        let p1 = R2 { x: dv(value[2], 2), y: dv(value[3], 3) };
 
-        assert_eq!(p0.x, DualVec64::<Const<3>>::new(-0.9114378277661477, Derivative::new(Some(Matrix3x1::from([ 0.5944911182523069 , 0.18305329048615926, -0.6220355269907728, ])))));
-        assert_eq!(p0.y, DualVec64::<Const<3>>::new( 0.4114378277661476, Derivative::new(Some(Matrix3x1::from([ 1.3169467095138412 , 0.40550888174769345, -1.3779644730092273, ])))));
-        assert_eq!(p1.x, DualVec64::<Const<3>>::new( 0.4114378277661477, Derivative::new(Some(Matrix3x1::from([ 0.40550888174769306, 1.3169467095138407 , -1.3779644730092273, ])))));
-        assert_eq!(p1.y, DualVec64::<Const<3>>::new(-0.9114378277661477, Derivative::new(Some(Matrix3x1::from([ 0.18305329048615915, 0.5944911182523069 , -0.622035526990773 , ])))));
-        // assert_eq!
-        //     p0,
-        //     R2 {
-        //         x: DualVec64::<Const<3>>::new(-0.9114378277661477, Derivative::new(Some(Matrix3x1::from([0.5944911182523069 , 0.18305329048615926, -0.6220355269907728])))),
-        //         y: DualVec64::<Const<3>>::new( 0.4114378277661477, Derivative::new(Some(Matrix3x1::from([1.3169467095138412 , 0.40550888174769345, -1.3779644730092273]))))
-        //     }
-        // );
-
-        // let dvs: Vec<DualVec64<Const<3>>> = value.as_slice().iter().enumerate().map(|(i, v)| {
-        //     let grad0 = grad.row(i).transpose();
-        //     let dv0 = DualVec64::<Const<3>>::new(*v, Derivative::new(Some(grad0)));
-        //     dv0
-        // }).collect();
-
-
-        let re0 = value[0];
-        let grad0 = grad.row(0).transpose();
-        let dv0 = DualVec64::<Const<3>>::new(re0, Derivative::new(Some(grad0)));
-        assert_eq!(dvs[0], dv0);
-
-        let t = grad.transpose();
-        let g0 = t.as_slice();
-        assert_eq!(g0, [
-            0.5944911182523069 , 0.18305329048615926, -0.6220355269907728,
-            1.3169467095138412 , 0.40550888174769345, -1.3779644730092273,
-            0.40550888174769306, 1.3169467095138407 , -1.3779644730092273,
-            0.18305329048615915, 0.5944911182523069 , -0.622035526990773 ,
-        ]);
-
+        // assert_eq!(p0.x, DualVec64::<Const<3>>::new(-0.9114378277661477, Derivative::new(Some(Matrix3x1::from([ 0.5944911182523069 , 0.18305329048615926, -0.6220355269907728, ])))));
+        // assert_eq!(p0.y, DualVec64::<Const<3>>::new( 0.4114378277661476, Derivative::new(Some(Matrix3x1::from([ 1.3169467095138412 , 0.40550888174769345, -1.3779644730092273, ])))));
+        // assert_eq!(p1.x, DualVec64::<Const<3>>::new( 0.4114378277661477, Derivative::new(Some(Matrix3x1::from([ 0.40550888174769306, 1.3169467095138407 , -1.3779644730092273, ])))));
+        // assert_eq!(p1.y, DualVec64::<Const<3>>::new(-0.9114378277661477, Derivative::new(Some(Matrix3x1::from([ 0.18305329048615915, 0.5944911182523069 , -0.622035526990773 , ])))));
         assert_eq!(
-            value.as_slice(),
+            [ p0, p1 ],
             [
-                -0.9114378277661477,  0.4114378277661476,
-                 0.4114378277661477, -0.9114378277661477,
+                R2 { x: DualVec64::<Const<3>>::new(-0.9114378277661477, Derivative::new(Some(Matrix3x1::from([0.5944911182523069 , 0.18305329048615926, -0.6220355269907728])))),
+                     y: DualVec64::<Const<3>>::new( 0.4114378277661476, Derivative::new(Some(Matrix3x1::from([1.3169467095138412 , 0.40550888174769345, -1.3779644730092273])))) },
+                R2 { x: DualVec64::<Const<3>>::new( 0.4114378277661477, Derivative::new(Some(Matrix3x1::from([0.40550888174769306, 1.3169467095138407 , -1.3779644730092273])))),
+                     y: DualVec64::<Const<3>>::new(-0.9114378277661477, Derivative::new(Some(Matrix3x1::from([0.18305329048615915, 0.5944911182523069 , -0.622035526990773 ])))) },
             ]
         );
-
-        let v0 = -0.9114378277661477;
-        let g0 = [0.5944911182523069 , 0.18305329048615926, -0.6220355269907728];
-        assert_eq!(dv0.re, re0);
-        assert_eq!(dv0.re, v0);
-
-        let m0: Matrix3x1<f64> = dv0.eps.unwrap_generic(U3, U1);
-        assert_eq!(m0, Matrix3x1::from(g0));
-
-        let row0 = m0.as_slice();
-        assert_eq!(row0, g0);
-
-        assert_eq!(
-            value,
-            Vector4::new(
-                -0.9114378277661477,  0.4114378277661476,
-                 0.4114378277661477, -0.9114378277661477,
-            )
-        );
-        assert_eq!(
-            grad,
-            Matrix4x3::new(
-                0.5944911182523069 , 0.18305329048615926, -0.6220355269907728,
-                1.3169467095138412 , 0.40550888174769345, -1.3779644730092273,
-                0.40550888174769306, 1.3169467095138407 , -1.3779644730092273,
-                0.18305329048615915, 0.5944911182523069 , -0.622035526990773 ,
-            )
-        );
-
-        // assert_eq!(grad.norm(), 0.)
     }
 }
-
-// fn main() {
-//     let (cx, cy, r) = (1., 1., 2.);
-//     let m = SMatrix::from([cx, cy, r]);
-//     let (value, grad) = jacobian(|v| SMatrix::from(Circle { c: Point2::new(v[0], v[1]), r: v[2] }.unit_intersections()), m);
-//     println!("{value} {grad}");
-// }
