@@ -1,11 +1,52 @@
-use std::f64::consts::PI;
+use std::{f64::consts::PI, ops::{Sub, Mul, Add}};
 
+use nalgebra::{SMatrix, Const};
 use num_dual::*;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct R2<D> {
     x: D,
     y: D,
+}
+
+impl<D: Add<Output = D>> Add for R2<D> {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self::Output {
+        R2 {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+        }
+    }
+}
+
+impl<D: Sub<Output = D>> Sub for R2<D> {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self::Output {
+        R2 {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+        }
+    }
+}
+
+impl<D: Mul<Output = D>> Mul for R2<D> {
+    type Output = Self;
+    fn mul(self, rhs: Self) -> Self::Output {
+        R2 {
+            x: self.x * rhs.x,
+            y: self.y * rhs.y,
+        }
+    }
+}
+
+impl<D: Mul<D, Output = D> + Copy> Mul<D> for R2<D> {
+    type Output = Self;
+    fn mul(self, rhs: D) -> Self::Output {
+        R2 {
+            x: self.x * rhs,
+            y: self.y * rhs,
+        }
+    }
 }
 
 pub struct Circle<D> {
@@ -72,6 +113,41 @@ impl<D: DualNum<f64> + PartialOrd + Copy> Circle<D> {
             R2 { x: x1, y: y1 },
         ]
     }
+    pub fn unit_intersection_duals(&self) -> [ R2<DualVec<D, f64, Const<3>>>; 2] {
+        let (value, grad) = jacobian(
+            |v| {
+                let [ cx, cy, r ] = [ v[0], v[1], v[2] ];
+                let c = R2 { x: cx, y: cy };
+                let points = Circle { c, r }.unit_intersections();
+                let [ p0, p1 ] = points;
+                SMatrix::from([p0.x, p0.y, p1.x, p1.y])
+            },
+            SMatrix::from([self.c.x, self.c.y, self.r]),
+        );
+
+        // Unwrap to R2<DualVec64>'s
+        let dv = |i: usize| {
+            DualVec::<D, f64, Const<3>>::new(
+                value[i],
+                Derivative::new(Some(grad.row(i).transpose()))
+            )
+        };
+        let p0 = R2 { x: dv(0), y: dv(1) };
+        let p1 = R2 { x: dv(2), y: dv(3) };
+
+        [ p0, p1 ]
+    }
+    pub fn project(&self, o: &Circle<D>) -> Self {
+        let c = self.c - o.c;
+        let r = self.r / o.r;
+        Circle { c, r, }
+    }
+    pub fn invert(&self, p: &R2<D>) -> R2<D> {
+        *p * self.r + self.c
+    }
+    pub fn intersect(&self, o: &Circle<D>) -> [R2<D>; 2] {
+        self.project(o).unit_intersections().map(|p| o.invert(&p))
+    }
 }
 
 #[cfg(test)]
@@ -81,8 +157,7 @@ mod tests {
 
     #[test]
     fn unit_intersections() {
-        let compute = |cx: f64, cy: f64, r: f64| {
-
+        let compute = |c: Circle<f64>| {
             // Compute Jacobian
             let (value, grad) = jacobian(
                 |v| {
@@ -92,7 +167,7 @@ mod tests {
                     let [ p0, p1 ] = points;
                     SMatrix::from([p0.x, p0.y, p1.x, p1.y])
                 },
-                SMatrix::from([cx, cy, r]),
+                SMatrix::from([c.c.x, c.c.y, c.r]),
             );
 
             // Unwrap to R2<DualVec64>'s
@@ -108,8 +183,11 @@ mod tests {
             [ p0, p1 ]
         };
 
-        let (cx, cy, r) = (1., 1., 2.);
-        let [ p0, p1 ] = compute(cx, cy, r);
+        let c = Circle {
+            c: R2 { x: 1., y: 1. },
+            r: 2.
+        };
+        let [ p0, p1 ] = c.unit_intersection_duals();
         assert_eq!(
             [ p0, p1 ],
             [
