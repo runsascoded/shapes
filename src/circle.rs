@@ -2,11 +2,13 @@ use std::f64::consts::PI;
 
 use nalgebra::{Const, SMatrix};
 use num_dual::{DualNum, jacobian, DualVec, Derivative};
+use serde::{Deserialize, Serialize};
 use crate::r2::R2;
 
+#[derive(Serialize, Deserialize)]
 pub struct Circle<D> {
-    c: R2<D>,
-    r: D,
+    pub c: R2<D>,
+    pub r: D,
 }
 
 impl<D: DualNum<f64> + PartialOrd + Copy> Circle<D> {

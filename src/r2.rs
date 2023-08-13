@@ -1,9 +1,25 @@
 use std::ops::{Sub, Mul, Add};
+use derive_more::{From};
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+use nalgebra::Const;
+use num_dual::DualVec64;
+use serde::{Deserialize, Serialize};
+
+use crate::dual::Dual;
+
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct R2<D> {
     pub x: D,
     pub y: D,
+}
+
+impl From<R2<DualVec64<Const<3>>>> for R2<Dual> {
+    fn from(dv: R2<DualVec64<Const<3>>>) -> Self {
+        R2 {
+            x: dv.x.into(),
+            y: dv.y.into(),
+        }
+    }
 }
 
 impl<D: Add<Output = D>> Add for R2<D> {
