@@ -153,48 +153,22 @@ impl<D: DualNum<f64> + PartialOrd + Copy> Circle<D> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nalgebra::{Const, Matrix3x1, SMatrix};
+    use nalgebra::{Const, Matrix3x1};
 
     #[test]
     fn unit_intersections() {
-        let compute = |c: Circle<f64>| {
-            // Compute Jacobian
-            let (value, grad) = jacobian(
-                |v| {
-                    let [ cx, cy, r ] = [ v[0], v[1], v[2] ];
-                    let c = R2 { x: cx, y: cy };
-                    let points = Circle { c, r }.unit_intersections();
-                    let [ p0, p1 ] = points;
-                    SMatrix::from([p0.x, p0.y, p1.x, p1.y])
-                },
-                SMatrix::from([c.c.x, c.c.y, c.r]),
-            );
-
-            // Unwrap to R2<DualVec64>'s
-            let dv = |i| {
-                DualVec64::<Const<3>>::new(
-                    value[i],
-                    Derivative::new(Some(grad.row(i).transpose()))
-                )
-            };
-            let p0 = R2 { x: dv(0), y: dv(1) };
-            let p1 = R2 { x: dv(2), y: dv(3) };
-
-            [ p0, p1 ]
-        };
-
         let c = Circle {
             c: R2 { x: 1., y: 1. },
             r: 2.
         };
-        let [ p0, p1 ] = c.unit_intersection_duals();
+        let [ p0, p1 ]: [ R2<DualVec64<Const<3>>>; 2 ] = c.unit_intersection_duals();
         assert_eq!(
             [ p0, p1 ],
             [
-                R2 { x: DualVec64::<Const<3>>::new(-0.9114378277661477, Derivative::new(Some(Matrix3x1::from([0.5944911182523069 , 0.18305329048615926, -0.6220355269907728])))),
-                     y: DualVec64::<Const<3>>::new( 0.4114378277661476, Derivative::new(Some(Matrix3x1::from([1.3169467095138412 , 0.40550888174769345, -1.3779644730092273])))), },
-                R2 { x: DualVec64::<Const<3>>::new( 0.4114378277661477, Derivative::new(Some(Matrix3x1::from([0.40550888174769306, 1.3169467095138407 , -1.3779644730092273])))),
-                     y: DualVec64::<Const<3>>::new(-0.9114378277661477, Derivative::new(Some(Matrix3x1::from([0.18305329048615915, 0.5944911182523069 , -0.622035526990773 ])))), },
+                R2 { x: DualVec64::new(-0.9114378277661477, Derivative::new(Some(Matrix3x1::from([0.5944911182523069 , 0.18305329048615926, -0.6220355269907728])))),
+                     y: DualVec64::new( 0.4114378277661476, Derivative::new(Some(Matrix3x1::from([1.3169467095138412 , 0.40550888174769345, -1.3779644730092273])))), },
+                R2 { x: DualVec64::new( 0.4114378277661477, Derivative::new(Some(Matrix3x1::from([0.40550888174769306, 1.3169467095138407 , -1.3779644730092273])))),
+                     y: DualVec64::new(-0.9114378277661477, Derivative::new(Some(Matrix3x1::from([0.18305329048615915, 0.5944911182523069 , -0.622035526990773 ])))), },
             ]
         );
     }
