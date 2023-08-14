@@ -23,7 +23,7 @@ type D = DualDVec64;
 impl Circle<f64> {
     pub fn dual(&self, pre_zeros: usize, post_zeros: usize) -> Circle<D> {
         let n = 3;
-        let mut idx = n;
+        let mut idx = pre_zeros;
         let zeros = vec![0.; pre_zeros + n + post_zeros];
         let mut dv = || {
             let mut v = zeros.clone();
@@ -90,18 +90,19 @@ impl<D: DualNum<f64> + PartialOrd> Circle<D> {
         let cx2 = cx.clone() * cx.clone();
         let cy2 = cy.clone() * cy.clone();
         let C = cx2.clone() + cy2.clone();
-        let r2 = r.clone() * r;
+        let r2 = r.clone() * r.clone();
         let D = C.clone() - r2.clone() + 1.;
         let a = C.clone() * 4.;
         let b = cx.clone() * D.clone() * -4.;
-        let c = D.clone() * D - cy2 * 4.;
+        let c = D.clone() * D.clone() - cy2.clone() * 4.;
 
         let d = b.clone() * b.clone() - a.clone() * c * 4.;
         let dsqrt = d.sqrt();
-        let rhs = dsqrt / 2. / a.clone();
-        let lhs = -b / 2. / a;
+        let rhs = dsqrt.clone() / 2. / a.clone();
+        let lhs = -b.clone() / 2. / a.clone();
 
-        let x0 = lhs.clone() - rhs.clone();
+        let x0 = if d.re() == 0. { lhs.clone() } else { lhs.clone() - rhs.clone() };
+        // dbg!("x0: {}", x0.clone());
         let y0sq = -x0.clone() * x0.clone() + 1.;
         let y0_0 = y0sq.sqrt();
         let y0_1 = -y0_0.clone();
@@ -109,22 +110,27 @@ impl<D: DualNum<f64> + PartialOrd> Circle<D> {
         let x0cx2 = x0cx.clone() * x0cx;
         let y0_0cy = y0_0.clone() - cy.clone();
         let y0_1cy = y0_1.clone() - cy.clone();
-        let check0_0 = (x0cx2.clone() + y0_0cy.clone() * y0_0cy - r2.clone()).abs();
-        let check0_1 = (x0cx2 + y0_1cy.clone() * y0_1cy - r2.clone()).abs();
-        let y0 = if check0_0 < check0_1 { y0_0 } else { y0_1 };
+        let check0_0 = (x0cx2.clone() + y0_0cy.clone() * y0_0cy.clone() - r2.clone()).abs();
+        let check0_1 = (x0cx2 + y0_1cy.clone() * y0_1cy.clone() - r2.clone()).abs();
+        let y0 = if check0_0 < check0_1 { y0_0.clone() } else { y0_1.clone() };
         // println!("checks0: {:?}, {:?}", check0_0, check0_1);
+        // dbg!("y0: {}", y0.clone());
 
-        let x1 = lhs + rhs;
-        let y1sq = -x1.clone() * x1.clone() + 1.;
-        let y1_0 = y1sq.sqrt();
-        let y1_1 = -y1_0.clone();
-        let x1cx = x1.clone() - cx.clone();
-        let x1cx2 = x1cx.clone() * x1cx;
-        let y1_0cy = y1_0.clone() - cy.clone();
-        let y1_1cy = y1_1.clone() - cy.clone();
-        let check1_0 = (x1cx2.clone() + y1_0cy.clone() * y1_0cy - r2.clone()).abs();
-        let check1_1 = (x1cx2.clone() + y1_1cy.clone() * y1_1cy - r2.clone()).abs();
-        let y1 = if check1_0 < check1_1 { y1_0 } else { y1_1 };
+        let x1 = if d.re() == 0. { lhs.clone() } else { lhs.clone() + rhs.clone() };
+        // dbg!("x1: {}", x1.clone());
+        let y1 = if x0 == x1 { y0_0 } else {
+            let y1sq = -x1.clone() * x1.clone() + 1.;
+            let y1_0 = y1sq.sqrt();
+            let y1_1 = -y1_0.clone();
+            let x1cx = x1.clone() - cx.clone();
+            let x1cx2 = x1cx.clone() * x1cx;
+            let y1_0cy = y1_0.clone() - cy.clone();
+            let y1_1cy = y1_1.clone() - cy.clone();
+            let check1_0 = (x1cx2.clone() + y1_0cy.clone() * y1_0cy.clone() - r2.clone()).abs();
+            let check1_1 = (x1cx2.clone() + y1_1cy.clone() * y1_1cy.clone() - r2.clone()).abs();
+            if check1_0 < check1_1 { y1_0.clone() } else { y1_1.clone() }
+        };
+        // dbg!("y1: {}", y1.clone());
         // println!("checks1: {:?}, {:?}", check1_0, check1_1);
 
         [
@@ -172,7 +178,7 @@ impl<D: DualNum<f64> + PartialOrd> Circle<D> {
 
 impl<D: Display> Display for Circle<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "C({}, {}, {})", self.c.x, self.c.y, self.r)
+        write!(f, "C({:.3}, {:.3}, {:.3})", self.c.x, self.c.y, self.r)
     }
 }
 

@@ -12,6 +12,6 @@ pub struct Intersection<D> {
 
 impl<D: Display> Display for Intersection<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "I({}, {}, {}, {})", self.x, self.y, self.c1, self.c2)
+        write!(f, "I({:.3}, {:.3}, {}, {})", self.x, self.y, self.c1, self.c2)
     }
 }

@@ -15,7 +15,7 @@ pub struct R2<D> {
 
 impl<D: Display> Display for R2<D> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "R2 {{ x: {}, y: {} }}", self.x, self.y)
+        write!(f, "R2 {{ x: {:.3}, y: {:.3} }}", self.x, self.y)
     }
 }
 
