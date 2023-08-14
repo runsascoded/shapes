@@ -1,4 +1,4 @@
-use std::ops::{Sub, Mul, Add};
+use std::{ops::{Sub, Mul, Add, Div}, fmt::{Display, Formatter, self}};
 use derive_more::{From};
 
 use nalgebra::Const;
@@ -11,6 +11,12 @@ use crate::dual::Dual;
 pub struct R2<D> {
     pub x: D,
     pub y: D,
+}
+
+impl<D: Display> Display for R2<D> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "R2 {{ x: {}, y: {} }}", self.x, self.y)
+    }
 }
 
 impl<'a> From<R2<DualVec64<Const<3>>>> for R2<Dual> {
@@ -52,12 +58,33 @@ impl<D: Mul<Output = D>> Mul for R2<D> {
     }
 }
 
-impl<D: Mul<D, Output = D>> Mul<D> for R2<D> {
+impl<D: Mul<D, Output = D> + Clone> Mul<D> for R2<D> {
     type Output = Self;
     fn mul(self, rhs: D) -> Self::Output {
         R2 {
-            x: self.x * rhs,
-            y: self.y * rhs,
+            x: self.x * rhs.clone(),
+            y: self.y * rhs.clone(),
         }
     }
 }
+
+impl<D: Div<Output = D>> Div for R2<D> {
+    type Output = Self;
+    fn div(self, rhs: Self) -> Self::Output {
+        R2 {
+            x: self.x / rhs.x,
+            y: self.y / rhs.y,
+        }
+    }
+}
+
+impl<D: Div<D, Output = D> + Clone> Div<D> for R2<D> {
+    type Output = Self;
+    fn div(self, rhs: D) -> Self::Output {
+        R2 {
+            x: self.x / rhs.clone(),
+            y: self.y / rhs.clone(),
+        }
+    }
+}
+

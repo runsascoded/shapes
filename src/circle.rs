@@ -1,4 +1,4 @@
-use std::f64::consts::PI;
+use std::{f64::consts::PI, fmt::Display};
 // use derive_more::{Clone};
 
 use nalgebra::{Const, SMatrix, SVector, RowDVector, Dyn, Matrix};
@@ -17,10 +17,11 @@ pub struct Circle<D> {
     pub r: D,
 }
 
+type D = DualDVec64;
 // type Dual = DualVec64<Dyn>;
 
 impl Circle<f64> {
-    pub fn dual(&self, pre_zeros: usize, post_zeros: usize) -> Circle<DualDVec64> {
+    pub fn dual(&self, pre_zeros: usize, post_zeros: usize) -> Circle<D> {
         let n = 3;
         let mut idx = n;
         let zeros = vec![0.; pre_zeros + n + post_zeros];
@@ -39,10 +40,13 @@ impl Circle<f64> {
         let c = R2 { x, y };
         Circle { c, r }
     }
-    pub fn intersect(&self, o: &Circle<f64>) -> Region<DualDVec64> {
+    pub fn intersect(&self, o: &Circle<f64>) -> Region<D> {
         let sd = self.dual(3, 0);
         let od = o.dual(0, 3);
-        let points = sd.project(&od).unit_intersections().map(|p| od.invert(&p));
+        let unit_intersections = sd.project(&od).unit_intersections();
+
+        let invert = |p: R2<D>, od: &Circle<D>| od.invert(p);
+        let points = unit_intersections.map(|p| invert(p, &od));
         let intersections = points.map(|p| Intersection { x: p.x, y: p.y, c1: sd.clone(), c2: od.clone() });
         let edge0 = Edge { c: sd, intersections: intersections.clone() };
         let edge1 = Edge { c: od, intersections: intersections.clone() };
@@ -76,49 +80,50 @@ impl Circle<f64> {
     //     let points = self.project(o).unit_intersection_duals().map(|p| o.invert(&p));
     //     let intersections = points.map(|p| Intersection { x: p.x, y: p.y, c1: *self, c2: o });
     // }
-}
+// }
+
 impl<D: DualNum<f64> + PartialOrd> Circle<D> {
     pub fn unit_intersections(&self) -> [R2<D>; 2] {
         let cx = self.c.x.clone();
         let cy = self.c.y.clone();
         let r = self.r.clone();
-        let cx2 = cx * cx;
-        let cy2 = cy * cy;
-        let C = cx2 + cy2;
-        let r2 = r * r;
-        let D = C - r2 + 1.;
-        let a = C * 4.;
-        let b = cx * D * -4.;
-        let c = D * D - cy2 * 4.;
+        let cx2 = cx.clone() * cx.clone();
+        let cy2 = cy.clone() * cy.clone();
+        let C = cx2.clone() + cy2.clone();
+        let r2 = r.clone() * r;
+        let D = C.clone() - r2.clone() + 1.;
+        let a = C.clone() * 4.;
+        let b = cx.clone() * D.clone() * -4.;
+        let c = D.clone() * D - cy2 * 4.;
 
-        let d = b * b - a * c * 4.;
+        let d = b.clone() * b.clone() - a.clone() * c * 4.;
         let dsqrt = d.sqrt();
-        let rhs = dsqrt / 2. / a;
+        let rhs = dsqrt / 2. / a.clone();
         let lhs = -b / 2. / a;
 
-        let x0 = lhs - rhs;
-        let y0sq = -x0 * x0 + 1.;
+        let x0 = lhs.clone() - rhs.clone();
+        let y0sq = -x0.clone() * x0.clone() + 1.;
         let y0_0 = y0sq.sqrt();
-        let y0_1 = -y0_0;
-        let x0cx = x0 - cx;
-        let x0cx2 = x0cx * x0cx;
-        let y0_0cy = y0_0 - cy;
-        let y0_1cy = y0_1 - cy;
-        let check0_0 = (x0cx2 + y0_0cy * y0_0cy - r2).abs();
-        let check0_1 = (x0cx2 + y0_1cy * y0_1cy - r2).abs();
+        let y0_1 = -y0_0.clone();
+        let x0cx = x0.clone() - cx.clone();
+        let x0cx2 = x0cx.clone() * x0cx;
+        let y0_0cy = y0_0.clone() - cy.clone();
+        let y0_1cy = y0_1.clone() - cy.clone();
+        let check0_0 = (x0cx2.clone() + y0_0cy.clone() * y0_0cy - r2.clone()).abs();
+        let check0_1 = (x0cx2 + y0_1cy.clone() * y0_1cy - r2.clone()).abs();
         let y0 = if check0_0 < check0_1 { y0_0 } else { y0_1 };
         // println!("checks0: {:?}, {:?}", check0_0, check0_1);
 
         let x1 = lhs + rhs;
-        let y1sq = -x1 * x1 + 1.;
+        let y1sq = -x1.clone() * x1.clone() + 1.;
         let y1_0 = y1sq.sqrt();
-        let y1_1 = -y1_0;
-        let x1cx = x1 - cx;
-        let x1cx2 = x1cx * x1cx;
-        let y1_0cy = y1_0 - cy;
-        let y1_1cy = y1_1 - cy;
-        let check1_0 = (x1cx2 + y1_0cy * y1_0cy - r2).abs();
-        let check1_1 = (x1cx2 + y1_1cy * y1_1cy - r2).abs();
+        let y1_1 = -y1_0.clone();
+        let x1cx = x1.clone() - cx.clone();
+        let x1cx2 = x1cx.clone() * x1cx;
+        let y1_0cy = y1_0.clone() - cy.clone();
+        let y1_1cy = y1_1.clone() - cy.clone();
+        let check1_0 = (x1cx2.clone() + y1_0cy.clone() * y1_0cy - r2.clone()).abs();
+        let check1_1 = (x1cx2.clone() + y1_1cy.clone() * y1_1cy - r2.clone()).abs();
         let y1 = if check1_0 < check1_1 { y1_0 } else { y1_1 };
         // println!("checks1: {:?}, {:?}", check1_0, check1_1);
 
@@ -128,12 +133,13 @@ impl<D: DualNum<f64> + PartialOrd> Circle<D> {
         ]
     }
     pub fn project(&self, o: &Circle<D>) -> Self {
-        let c = self.c - o.c;
-        let r = self.r / o.r;
+        let c = self.c.clone() - o.c.clone();
+        let r = self.r.clone() / o.r.clone();
+        let c = c / o.r.clone();
         Circle { c, r, }
     }
-    pub fn invert(&self, p: &R2<D>) -> R2<D> {
-        *p * self.r + self.c
+    pub fn invert(&self, p: R2<D>) -> R2<D> {
+        p * self.r.clone() + self.c.clone()
     }
     // pub fn unit_intersection_duals(&self) -> [ R2<Dual>; 2] {
     //     self.unit_intersection_dual_vecs().map(|i| R2::<Dual>::from(i))
@@ -164,6 +170,12 @@ impl<D: DualNum<f64> + PartialOrd> Circle<D> {
     // }
 }
 
+impl<D: Display> Display for Circle<D> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "C({}, {}, {})", self.c.x, self.c.y, self.r)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -181,7 +193,12 @@ mod tests {
             r: 2.
         };
         let region = c0.intersect(&c1);
-        assert_eq!(region.polygon_area().re, 0.);
+        dbg!(&region);
+        let area = region.polygon_area();
+        dbg!(&area);
+        assert_eq!(area.re, 0.);
+        // println!("region: {:?}", region);
+        println!("region: {}", region);
         // let [ p0, p1 ]: [ R2<DualVec64<Const<3>>>; 2 ] = c.unit_intersection_dual_vecs();
         // assert_eq!(
         //     [ p0, p1 ],
