@@ -8,12 +8,12 @@ use serde::{Deserialize, Serialize};
 use crate::dual::Dual;
 
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
-pub struct R2<'a, D> {
-    pub x: &'a D,
-    pub y: &'a D,
+pub struct R2<D> {
+    pub x: D,
+    pub y: D,
 }
 
-impl<'a> From<R2<'a, DualVec64<Const<3>>>> for R2<'a, Dual> {
+impl<'a> From<R2<DualVec64<Const<3>>>> for R2<Dual> {
     fn from(dv: R2<DualVec64<Const<3>>>) -> Self {
         R2 {
             x: dv.x.into(),
@@ -22,7 +22,7 @@ impl<'a> From<R2<'a, DualVec64<Const<3>>>> for R2<'a, Dual> {
     }
 }
 
-impl<'a, D: Add<Output = D>> Add for R2<'a, D> {
+impl<D: Add<Output = D>> Add for R2<D> {
     type Output = Self;
     fn add(self, rhs: Self) -> Self::Output {
         R2 {
@@ -32,7 +32,7 @@ impl<'a, D: Add<Output = D>> Add for R2<'a, D> {
     }
 }
 
-impl<'a, D: Sub<Output = D>> Sub for R2<'a, D> {
+impl<D: Sub<Output = D>> Sub for R2<D> {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self::Output {
         R2 {
@@ -42,7 +42,7 @@ impl<'a, D: Sub<Output = D>> Sub for R2<'a, D> {
     }
 }
 
-impl<'a, D: Mul<Output = D>> Mul for R2<'a, D> {
+impl<D: Mul<Output = D>> Mul for R2<D> {
     type Output = Self;
     fn mul(self, rhs: Self) -> Self::Output {
         R2 {
@@ -52,7 +52,7 @@ impl<'a, D: Mul<Output = D>> Mul for R2<'a, D> {
     }
 }
 
-impl<'a, D: Mul<D, Output = D>> Mul<D> for R2<'a, D> {
+impl<D: Mul<D, Output = D>> Mul<D> for R2<D> {
     type Output = Self;
     fn mul(self, rhs: D) -> Self::Output {
         R2 {

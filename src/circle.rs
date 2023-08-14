@@ -12,14 +12,14 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct Circle<'a, D> {
-    pub c: R2<'a, D>,
-    pub r: &'a D,
+pub struct Circle<D> {
+    pub c: R2<D>,
+    pub r: D,
 }
 
 // type Dual = DualVec64<Dyn>;
 
-impl<'a> Circle<'a, f64> {
+impl Circle<f64> {
     pub fn dual(&self, pre_zeros: usize, post_zeros: usize) -> Circle<DualDVec64> {
         let n = 3;
         let mut idx = n;
@@ -43,24 +43,28 @@ impl<'a> Circle<'a, f64> {
         let sd = self.dual(3, 0);
         let od = o.dual(0, 3);
         let points = sd.project(&od).unit_intersections().map(|p| od.invert(&p));
-        let intersections = points.map(|p| Intersection { x: &p.x, y: &p.y, c1: &sd, c2: &od });
-        let edge0 = Edge { c: sd, intersections };
-        let edge1 = Edge { c: od, intersections };
+        let intersections = points.map(|p| Intersection { x: p.x, y: p.y, c1: sd.clone(), c2: od.clone() });
+        let edge0 = Edge { c: sd, intersections: intersections.clone() };
+        let edge1 = Edge { c: od, intersections: intersections.clone() };
         let region = Region { edges: vec![ edge0, edge1 ], intersections: intersections.into() };
         region
     }
 }
 
-impl<D: DualNum<f64> + PartialOrd + Copy> Circle<D> {
-    pub fn x(&self) -> D {
-        self.c.x
-    }
-    pub fn y(&self) -> D {
-        self.c.y
-    }
-    pub fn area(&self) -> D {
-        self.r * self.r * PI
-    }
+// impl<D: Clone> Circle<D> {
+
+// type D = DualDVec64;
+// impl Circle<DualDVec64> {
+// impl<D: DualNum<f64> + PartialOrd + Copy> Circle<D> {
+    // pub fn x(&self) -> D {
+    //     self.c.x.clone()
+    // }
+    // pub fn y(&self) -> D {
+    //     self.c.y.clone()
+    // }
+    // pub fn area(&self) -> D {
+    //     self.r.clone() * self.r.clone() * PI
+    // }
     // pub fn intersect(&self, other: &Circle<D>) -> Region<D> {
     //     self.project(o).unit_intersection_dual_vecs();
     //     let dx = self.c.x - other.c.x;
