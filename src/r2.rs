@@ -1,4 +1,5 @@
 use std::{ops::{Sub, Mul, Add, Div}, fmt::{Display, Formatter, self}};
+use approx::{AbsDiffEq, RelativeEq};
 use derive_more::{From};
 
 use nalgebra::Const;
@@ -27,6 +28,25 @@ impl<D: Display> Display for R2<D> {
 //         }
 //     }
 // }
+
+impl AbsDiffEq for R2<Dual> {
+    type Epsilon = f64;
+    fn default_epsilon() -> Self::Epsilon {
+        Dual::default_epsilon()
+    }
+    fn abs_diff_eq(&self, other: &Self, epsilon: Self::Epsilon) -> bool {
+        self.x.abs_diff_eq(&other.x, epsilon.clone()) && self.y.abs_diff_eq(&other.y, epsilon)
+    }
+}
+
+impl RelativeEq for R2<Dual> {
+    fn default_max_relative() -> Self::Epsilon {
+        Dual::default_max_relative()
+    }
+    fn relative_eq(&self, other: &Self, epsilon: Self::Epsilon, max_relative: Self::Epsilon) -> bool {
+        self.x.relative_eq(&other.x, epsilon.clone(), max_relative.clone()) && self.y.relative_eq(&other.y, epsilon, max_relative)
+    }
+}
 
 impl<D: Add<Output = D>> Add for R2<D> {
     type Output = Self;

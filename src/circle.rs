@@ -175,7 +175,7 @@ mod tests {
     use num_dual::DualVec64;
 
     #[test]
-    fn unit_intersections() {
+    fn unit_intersections1() {
         let c0 = Circle { c: R2 { x: 0., y: 0. }, r: 1. };
         let c1 = Circle { c: R2 { x: 1., y: 0. }, r: 1. };
         let d0 = c0.dual(0, 3);
@@ -186,17 +186,30 @@ mod tests {
         println!("{}", p0);
         println!("{}", p1);
         println!();
-        assert_eq!(
-            [ p0, p1 ],
-            [
-                R2 { x: Dual::new( 0.5,                vec![  0.5,                  0.8660254037844386,  1.,                  0.5,                -0.8660254037844386, -1.                 ]),
-                     y: Dual::new( 0.8660254037844386, vec![  0.28867513459481287,  0.5,                 0.5773502691896257, -0.28867513459481287, 0.5,                 0.5773502691896257 ]), },
-                R2 { x: Dual::new( 0.5               , vec![  0.5,                 -0.8660254037844386,  1.,                  0.5,                 0.8660254037844386, -1.                 ]),
-                     y: Dual::new(-0.8660254037844386, vec![ -0.28867513459481287,  0.5,                -0.5773502691896257,  0.28867513459481287, 0.5,                -0.5773502691896257 ]), },
-            ]
-        );
-
+        assert_relative_eq!(p0, r2(0.5, vec![ 0.500,  0.866, 1.000, 0.500, -0.866, -1.000],  0.866, vec![ 0.289, 0.500,  0.577, -0.289, 0.500,  0.577]), epsilon = 1e-3);
+        assert_relative_eq!(p1, r2(0.5, vec![ 0.500, -0.866, 1.000, 0.500,  0.866, -1.000], -0.866, vec![-0.289, 0.500, -0.577,  0.289, 0.500, -0.577]), epsilon = 1e-3);
     }
+
+    fn r2(x: f64, dx: Vec<f64>, y: f64, dy: Vec<f64>) -> R2<D> {
+        R2 { x: Dual::new(x, dx), y: Dual::new(y, dy) }
+    }
+
+    #[test]
+    fn unit_intersections2() {
+        let c0 = Circle { c: R2 { x: 1., y: 1. }, r: 2. };
+        let c1 = Circle { c: R2 { x: 3., y: 1. }, r: 2. };
+        let d0 = c0.dual(0, 3);
+        let d1 = c1.dual(3, 0);
+        let [ p0, p1 ] = d0.intersections(&d1);
+        // dbg!([ p0.clone(), p1.clone() ]);
+        println!("unit_intersections");
+        println!("{}", p0);
+        println!("{}", p1);
+        println!();
+        assert_relative_eq!(p0, r2(2., vec![ 0.500,  0.866, 1.000, 0.500, -0.866, -1.000],  2.732, vec![ 0.289, 0.500,  0.577, -0.289, 0.500,  0.577]), epsilon = 1e-3);
+        assert_relative_eq!(p1, r2(2., vec![ 0.500, -0.866, 1.000, 0.500,  0.866, -1.000], -0.732, vec![-0.289, 0.500, -0.577,  0.289, 0.500, -0.577]), epsilon = 1e-3);
+    }
+
     #[test]
     fn projected_intersections() {
         let c0 = Circle { c: R2 { x: 0., y: 0. }, r: 1. };
