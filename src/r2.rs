@@ -15,18 +15,18 @@ pub struct R2<D> {
 
 impl<D: Display> Display for R2<D> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "R2 {{ x: {:.3}, y: {:.3} }}", self.x, self.y)
+        write!(f, "({:.3}, {:.3})", self.x, self.y)
     }
 }
 
-impl<'a> From<R2<DualVec64<Const<3>>>> for R2<Dual> {
-    fn from(dv: R2<DualVec64<Const<3>>>) -> Self {
-        R2 {
-            x: dv.x.into(),
-            y: dv.y.into(),
-        }
-    }
-}
+// impl<'a> From<R2<DualVec64<Const<3>>>> for R2<Dual> {
+//     fn from(dv: R2<DualVec64<Const<3>>>) -> Self {
+//         R2 {
+//             x: dv.x.into(),
+//             y: dv.y.into(),
+//         }
+//     }
+// }
 
 impl<D: Add<Output = D>> Add for R2<D> {
     type Output = Self;
