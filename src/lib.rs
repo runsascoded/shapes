@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate approx;
+
 mod circle;
 mod dual;
 mod edge;
