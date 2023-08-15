@@ -1,4 +1,4 @@
-use std::{iter::Sum, ops::{Div, Mul, Sub}, fmt::{Formatter, Display, self}};
+use std::{iter::Sum, ops::{Div, Mul, Sub, Add}, fmt::{Formatter, Display, self}};
 
 use crate::{edge::Edge, intersection::Intersection};
 
@@ -8,7 +8,7 @@ pub struct Region<D> {
     pub intersections: Vec<Intersection<D>>,
 }
 
-impl<'a, D: 'a + Clone + Sum + Mul<Output = D> + Sub<Output = D> + Div<f64, Output = D>> Region<D>
+impl<D: Clone + Sum + Add<Output = D> + Mul<Output = D> + Sub<Output = D> + Div<f64, Output = D>> Region<D>
 where
 //     &'a D: Mul<&'a D, Output = &'a D>,
 //     &'a D: Sub<&'a D, Output = &'a D>,
@@ -29,7 +29,7 @@ where
         todo!();
     }
     pub fn area(&self) -> D {
-        todo!();
+        self.polygon_area() + self.secant_area()
     }
 }
 

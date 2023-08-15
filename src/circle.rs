@@ -43,7 +43,8 @@ impl Circle<f64> {
     pub fn intersect(&self, o: &Circle<f64>) -> Region<D> {
         let sd = self.dual(3, 0);
         let od = o.dual(0, 3);
-        let unit_intersections = sd.project(&od).unit_intersections();
+        let projected = sd.project(&od);
+        let unit_intersections = projected.unit_intersections();
 
         let invert = |p: R2<D>, od: &Circle<D>| od.invert(p);
         let points = unit_intersections.map(|p| invert(p, &od));
@@ -55,34 +56,50 @@ impl Circle<f64> {
     }
 }
 
-// impl<D: Clone> Circle<D> {
-
-// type D = DualDVec64;
-// impl Circle<DualDVec64> {
-// impl<D: DualNum<f64> + PartialOrd + Copy> Circle<D> {
-    // pub fn x(&self) -> D {
-    //     self.c.x.clone()
-    // }
-    // pub fn y(&self) -> D {
-    //     self.c.y.clone()
-    // }
-    // pub fn area(&self) -> D {
-    //     self.r.clone() * self.r.clone() * PI
-    // }
-    // pub fn intersect(&self, other: &Circle<D>) -> Region<D> {
-    //     self.project(o).unit_intersection_dual_vecs();
-    //     let dx = self.c.x - other.c.x;
-    //     let dy = self.c.y - other.c.y;
-    //     let d = (dx * dx + dy * dy).sqrt();
-    //     d < self.r + other.r
-    // }
-    // pub fn intersect(&self, o: &Circle<D>) -> Region<D> {
-    //     let points = self.project(o).unit_intersection_duals().map(|p| o.invert(&p));
-    //     let intersections = points.map(|p| Intersection { x: p.x, y: p.y, c1: *self, c2: o });
-    // }
-// }
-
 impl<D: DualNum<f64> + PartialOrd> Circle<D> {
+    pub fn intersections(&self, o: &Circle<D>) -> [R2<D>; 2] {
+        let x0 = self.c.x.clone();
+        let y0 = self.c.y.clone();
+        let r0 = self.r.clone();
+        let x0sq = x0.clone() * x0.clone();
+        let y0sq = y0.clone() * y0.clone();
+        let r0sq = r0.clone() * r0.clone();
+
+        let x1 = o.c.x.clone();
+        let y1 = o.c.y.clone();
+        let r1 = o.r.clone();
+        let x1sq = x1.clone() * x1.clone();
+        let y1sq = y1.clone() * y1.clone();
+        let r1sq = r1.clone() * r1.clone();
+
+        let z = (r1sq.clone() - r0sq.clone() + x0sq.clone() - x1sq.clone() + y0sq.clone() - y1sq.clone()) / 2.;
+        let dy = y1.clone() - y0.clone();
+        let dx = x1.clone() - x0.clone();
+        let dr = r1.clone() - r0.clone();
+        let u = -dy.clone() / dx.clone();
+        let v = -z.clone() / dx.clone();
+        let a = u.clone() * u.clone() + 1.;
+        let b = u.clone() * (v.clone() - x0.clone()) - y0.clone();
+        let vsq = v.clone() * v.clone();
+        let c = vsq.clone() - v.clone() * x0.clone() * 2. + x0sq.clone() + y0sq.clone() - r0sq.clone();
+        let f = b.clone() / a.clone();
+        let dsq = f.clone() * f.clone() - c.clone() / a.clone();
+        let [ y_0, y_1 ] = if dsq.re() == 0. {
+            [
+                -f.clone(),
+                -f.clone(),
+            ]
+        } else {
+            let d = dsq.sqrt();
+            [
+                -f.clone() + d.clone(),
+                -f.clone() - d.clone(),
+            ]
+        };
+        let x_0 = u.clone() * y_0.clone() + v.clone();
+        let x_1 = u.clone() * y_1.clone() + v.clone();
+        [ R2 { x: x_0, y: y_0 }, R2 { x: x_1, y: y_1 } ]
+    }
     pub fn unit_intersections(&self) -> [R2<D>; 2] {
         let cx = self.c.x.clone();
         let cy = self.c.y.clone();
@@ -147,33 +164,6 @@ impl<D: DualNum<f64> + PartialOrd> Circle<D> {
     pub fn invert(&self, p: R2<D>) -> R2<D> {
         p * self.r.clone() + self.c.clone()
     }
-    // pub fn unit_intersection_duals(&self) -> [ R2<Dual>; 2] {
-    //     self.unit_intersection_dual_vecs().map(|i| R2::<Dual>::from(i))
-    // }
-    // pub fn unit_intersection_dual_vecs(&self) -> [ R2<DualVec<D, f64, Const<3>>>; 2] {
-    //     let (value, grad) = jacobian(
-    //         |v| {
-    //             let [ cx, cy, r ] = [ v[0], v[1], v[2] ];
-    //             let c = R2 { x: cx, y: cy };
-    //             let points = Circle { c, r }.unit_intersections();
-    //             let [ p0, p1 ] = points;
-    //             SMatrix::from([p0.x, p0.y, p1.x, p1.y])
-    //         },
-    //         SMatrix::from([self.c.x, self.c.y, self.r]),
-    //     );
-
-    //     // Unwrap to R2<DualVec>'s
-    //     let dv = |i: usize| {
-    //         DualVec::<D, f64, Const<3>>::new(
-    //             value[i],
-    //             Derivative::new(Some(grad.row(i).transpose()))
-    //         )
-    //     };
-    //     let p0 = R2 { x: dv(0), y: dv(1) };
-    //     let p1 = R2 { x: dv(2), y: dv(3) };
-
-    //     [ p0, p1 ]
-    // }
 }
 
 impl<D: Display> Display for Circle<D> {
@@ -192,19 +182,30 @@ mod tests {
     fn unit_intersections() {
         let c0 = Circle {
             c: R2 { x: 0., y: 0. },
-            r: 2.
+            r: 1.
         };
         let c1 = Circle {
-            c: R2 { x: 3., y: 0. },
-            r: 2.
+            c: R2 { x: 1., y: 0. },
+            r: 1.
         };
-        let region = c0.intersect(&c1);
-        dbg!(&region);
-        let area = region.polygon_area();
-        dbg!(&area);
-        assert_eq!(area.re, 0.);
+        let d0 = c0.dual(0, 3);
+        let d1 = c1.dual(3, 0);
+        let [ i0, i1 ] = d0.intersections(&d1);
+        dbg!([ i0.clone(), i1.clone() ]);
+        println!("{}", i0);
+        println!("{}", i1);
+        assert_eq!(i0.x.re(),  0.5);
+        assert_eq!(i0.y.re(),  0.8660254037844386);
+        assert_eq!(i1.x.re(),  0.5);
+        assert_eq!(i1.y.re(), -0.8660254037844386);
+        // let region = c0.intersect(&c1);
+        // dbg!(&region);
+        // let area = region.polygon_area();
+        // dbg!(&area);
+        // assert_eq!(area.re, 0.);
+
         // println!("region: {:?}", region);
-        println!("region: {}", region);
+        // println!("region: {}", region);
         // let [ p0, p1 ]: [ R2<DualVec64<Const<3>>>; 2 ] = c.unit_intersection_dual_vecs();
         // assert_eq!(
         //     [ p0, p1 ],
