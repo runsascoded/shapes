@@ -41,8 +41,8 @@ impl Circle<f64> {
         Circle { c, r }
     }
     pub fn intersect(&self, o: &Circle<f64>) -> Region<D> {
-        let sd = self.dual(3, 0);
-        let od = o.dual(0, 3);
+        let sd = self.dual(0, 3);
+        let od = o.dual(3, 0);
         let projected = sd.project(&od);
         let unit_intersections = projected.unit_intersections();
 
@@ -84,17 +84,11 @@ impl<D: DualNum<f64> + PartialOrd> Circle<D> {
         let c = vsq.clone() - v.clone() * x0.clone() * 2. + x0sq.clone() + y0sq.clone() - r0sq.clone();
         let f = b.clone() / a.clone();
         let dsq = f.clone() * f.clone() - c.clone() / a.clone();
-        let [ y_0, y_1 ] = if dsq.re() == 0. {
-            [
-                -f.clone(),
-                -f.clone(),
-            ]
-        } else {
+        let [ mut y_0, mut y_1 ] = [ -f.clone(), -f.clone(), ];
+        if dsq.re() != 0. {
             let d = dsq.sqrt();
-            [
-                -f.clone() + d.clone(),
-                -f.clone() - d.clone(),
-            ]
+            y_0 += d.clone();
+            y_1 -= d.clone();
         };
         let x_0 = u.clone() * y_0.clone() + v.clone();
         let x_1 = u.clone() * y_1.clone() + v.clone();
@@ -156,9 +150,8 @@ impl<D: DualNum<f64> + PartialOrd> Circle<D> {
         ]
     }
     pub fn project(&self, o: &Circle<D>) -> Self {
-        let c = self.c.clone() - o.c.clone();
+        let c = (self.c.clone() - o.c.clone()) / o.r.clone();
         let r = self.r.clone() / o.r.clone();
-        let c = c / o.r.clone();
         Circle { c, r, }
     }
     pub fn invert(&self, p: R2<D>) -> R2<D> {
@@ -175,29 +168,62 @@ impl<D: Display> Display for Circle<D> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use nalgebra::{Const, Matrix3x1};
     use num_dual::DualVec64;
 
+    fn dual(re: f64, eps: Vec<f64>) -> DualDVec64 {
+        DualDVec64::new(re, Derivative::new(Some(Matrix::from(eps))))
+    }
+
     #[test]
     fn unit_intersections() {
-        let c0 = Circle {
-            c: R2 { x: 0., y: 0. },
-            r: 1.
-        };
-        let c1 = Circle {
-            c: R2 { x: 1., y: 0. },
-            r: 1.
-        };
+        let c0 = Circle { c: R2 { x: 0., y: 0. }, r: 1. };
+        let c1 = Circle { c: R2 { x: 1., y: 0. }, r: 1. };
         let d0 = c0.dual(0, 3);
         let d1 = c1.dual(3, 0);
-        let [ i0, i1 ] = d0.intersections(&d1);
-        dbg!([ i0.clone(), i1.clone() ]);
-        println!("{}", i0);
-        println!("{}", i1);
-        assert_eq!(i0.x.re(),  0.5);
-        assert_eq!(i0.y.re(),  0.8660254037844386);
-        assert_eq!(i1.x.re(),  0.5);
-        assert_eq!(i1.y.re(), -0.8660254037844386);
+        let [ p0, p1 ] = d0.intersections(&d1);
+        // dbg!([ p0.clone(), p1.clone() ]);
+        println!("unit_intersections");
+        println!("{}", p0);
+        println!("{}", p1);
+        assert_eq!(
+            [ p0, p1 ],
+            [
+                R2 { x: dual( 0.5,                vec![  0.5,                  0.8660254037844386,  1.,                  0.5,                -0.8660254037844386, -1.                 ]),
+                     y: dual( 0.8660254037844386, vec![  0.28867513459481287,  0.5,                 0.5773502691896257, -0.28867513459481287, 0.5,                 0.5773502691896257 ]), },
+                R2 { x: dual( 0.5               , vec![  0.5,                 -0.8660254037844386,  1.,                  0.5,                 0.8660254037844386, -1.                 ]),
+                     y: dual(-0.8660254037844386, vec![ -0.28867513459481287,  0.5,                -0.5773502691896257,  0.28867513459481287, 0.5,                -0.5773502691896257 ]), },
+            ]
+        );
+
+    }
+    #[test]
+    fn projected_intersections() {
+        let c0 = Circle { c: R2 { x: 0., y: 0. }, r: 1. };
+        let c1 = Circle { c: R2 { x: 1., y: 0. }, r: 1. };
+        let d0 = c0.dual(0, 3);
+        let d1 = c1.dual(3, 0);
+
+        let projected = d0.project(&d1);
+        let unit_intersections = projected.unit_intersections();
+        let invert = |p: R2<D>, od: &Circle<D>| od.invert(p);
+        let [ p0, p1 ] = unit_intersections.map(|p| invert(p, &d1));
+        // dbg!([ p0.clone(), p1.clone() ]);
+        println!("projected_intersections");
+        println!("{}", p0);
+        println!("{}", p1);
+        println!();
+        let projected = d1.project(&d0);
+        let unit_intersections = projected.unit_intersections();
+        let invert = |p: R2<D>, od: &Circle<D>| od.invert(p);
+        let [ p0, p1 ] = unit_intersections.map(|p| invert(p, &d0));
+        // dbg!([ p0.clone(), p1.clone() ]);
+        println!("{}", p0);
+        println!("{}", p1);
+
+        // let d0 = c0.dual(0, 3);
+        // let d1 = c1.dual(3, 0);
         // let region = c0.intersect(&c1);
         // dbg!(&region);
         // let area = region.polygon_area();
