@@ -115,6 +115,13 @@ impl Sub for Dual {
     }
 }
 
+impl Sub<f64> for Dual {
+    type Output = Self;
+    fn sub(self, rhs: f64) -> Self::Output {
+        Dual(self.0 - rhs, self.1)
+    }
+}
+
 impl Sub<Dual> for f64 {
     type Output = Dual;
     fn sub(self, rhs: Dual) -> Self::Output {
@@ -156,6 +163,13 @@ impl Add for Dual {
     fn add(self, rhs: Self) -> Self::Output {
         assert_eq!(self.1, rhs.1);
         Dual(self.0 + rhs.0, self.1)
+    }
+}
+
+impl Add<Dual> for f64 {
+    type Output = Dual;
+    fn add(self, rhs: Dual) -> Self::Output {
+        Dual(rhs.0 + self, rhs.1)
     }
 }
 

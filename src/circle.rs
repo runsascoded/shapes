@@ -141,13 +141,38 @@ impl Circle<D> {
         let r = self.r.clone();
         let cx2 = cx.clone() * &cx;
         let cy2 = cy.clone() * cy.clone();
-        let C = cx2.clone() + cy2.clone();
         let r2 = r.clone() * r.clone();
-        let D = C.clone() - r2.clone() + 1.;
-        let a = C.clone() * 4.;
-        let b = cx.clone() * D.clone() * -2.;
-        let c = D.clone() * D.clone() - cy2.clone() * 4.;
+        let z = (1. + cx2.clone() + cy2.clone() - r2.clone()) / 2.;
+        let [ u, v ] = if cx.re == 0. {
+            [ -cx.clone() / cy.clone(), z.clone() / cy.clone(), ]
+        } else {
+            [ -cy.clone() / cx.clone(), z.clone() / cx.clone(), ]
+        };
+        let a = 1. + u.clone() * u.clone();
+        let b = u.clone() * v.clone();
+        let c = v.clone() * v.clone() - 1.;
         let f = -b.clone() / a.clone();
+        let dsq = f.clone() * f.clone() - c.clone() / a.clone();
+        let d = dsq.clone().sqrt();
+        let [ x0, y0, x1, y1 ] = if cx.re == 0. {
+            let x0 = f.clone() + d;
+            let x1 = f.clone() - d;
+            let y0 = u.clone() * x0.clone() + v.clone();
+            let y1 = u.clone() * x1.clone() + v.clone();
+            [ x0, y0, x1, y1 ]
+        } else {
+            let y0 = f.clone() + d;
+            let y1 = f.clone() - d;
+            let x0 = u.clone() * y0.clone() + v.clone();
+            let x1 = u.clone() * y1.clone() + v.clone();
+            [ x0, y0, x1, y1 ]
+        };
+        [ R2 { x: x0, y: y0 }, R2 { x: x1, y: y1 } ]
+
+        // let a = C.clone() * 4.;
+        // let b = cx.clone() * D.clone() * -2.;
+        // let c = D.clone() * D.clone() - cy2.clone() * 4.;
+        // let f = -b.clone() / a.clone();
         println!("a: {}", a.clone());
         println!("b: {}", b.clone());
         println!("c: {}", c.clone());
