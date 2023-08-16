@@ -155,82 +155,19 @@ impl Circle<D> {
         let dsq = f.clone() * f.clone() - c.clone() / a.clone();
         let d = dsq.clone().sqrt();
         let [ x0, y0, x1, y1 ] = if cx.re == 0. {
-            let x0 = f.clone() + d;
-            let x1 = f.clone() - d;
+            let x0 = f.clone() + d.clone();
+            let x1 = f.clone() - d.clone();
             let y0 = u.clone() * x0.clone() + v.clone();
             let y1 = u.clone() * x1.clone() + v.clone();
             [ x0, y0, x1, y1 ]
         } else {
-            let y0 = f.clone() + d;
-            let y1 = f.clone() - d;
+            let y0 = f.clone() + d.clone();
+            let y1 = f.clone() - d.clone();
             let x0 = u.clone() * y0.clone() + v.clone();
             let x1 = u.clone() * y1.clone() + v.clone();
             [ x0, y0, x1, y1 ]
         };
         [ R2 { x: x0, y: y0 }, R2 { x: x1, y: y1 } ]
-
-        // let a = C.clone() * 4.;
-        // let b = cx.clone() * D.clone() * -2.;
-        // let c = D.clone() * D.clone() - cy2.clone() * 4.;
-        // let f = -b.clone() / a.clone();
-        println!("a: {}", a.clone());
-        println!("b: {}", b.clone());
-        println!("c: {}", c.clone());
-        println!("f: {}", f.clone());
-
-        let d = f.clone() * f.clone() - c.clone() / a.clone();
-        println!("d²: {}", d.clone());
-        let dsqrt = d.sqrt();
-        let rhs = dsqrt.clone() / a.clone();
-
-        let x0 = if d.re() == 0. { f.clone() } else { f.clone() - rhs.clone() };
-        println!("x0: {}", x0.clone());
-
-        let x0cx = x0.clone() - cx.clone();
-        let x0cx2 = x0cx.clone() * x0cx.clone();
-
-        let ydsq = r2.clone() - x0cx2.clone();
-        let mut y0_0 = ydsq.clone().sqrt();
-        let mut y0_1 = -y0_0.clone();
-        y0_0 += cy.clone();
-        y0_1 += cy.clone();
-        let x0sq = x0.clone() * x0.clone();
-        let check0_0 = (1. - x0sq.clone() - y0_0.clone() * y0_0.clone()).abs();
-        let check0_1 = (1. - x0sq.clone() - y0_1.clone() * y0_1.clone()).abs();
-        let y0 = if check0_0 < check0_1 { y0_0.clone() } else { y0_1.clone() };
-
-        // let y0sq = r0sq - x0.clone() * x0.clone();
-        // let y0_1 = y0sq.sqrt();
-        // let y0_0 = -y0_1.clone();
-        // let y0_0cy = y0_0.clone() - cy.clone();
-        // let y0_1cy = y0_1.clone() - cy.clone();
-        // let check0_0 = (x0cx2.clone() + y0_0cy.clone() * y0_0cy.clone() - r2.clone()).abs();
-        // let check0_1 = (x0cx2.clone() + y0_1cy.clone() * y0_1cy.clone() - r2.clone()).abs();
-        // let y0 = if check0_0 < check0_1 { y0_0.clone() } else { y0_1.clone() };
-        // println!("checks0: {:?}, {:?}", check0_0, check0_1);
-        // dbg!("y0: {}", y0.clone());
-
-        let x1 = if d.re() == 0. { f.clone() } else { f.clone() + rhs.clone() };
-        // dbg!("x1: {}", x1.clone());
-        let y1 = if x0 == x1 { y0_0 } else {
-            let y1sq = -x1.clone() * x1.clone() + 1.;
-            let y1_0 = y1sq.sqrt();
-            let y1_1 = -y1_0.clone();
-            let x1cx = x1.clone() - cx.clone();
-            let x1cx2 = x1cx.clone() * x1cx.clone();
-            let y1_0cy = y1_0.clone() - cy.clone();
-            let y1_1cy = y1_1.clone() - cy.clone();
-            let check1_0 = (x1cx2.clone() + y1_0cy.clone() * y1_0cy.clone() - r2.clone()).abs();
-            let check1_1 = (x1cx2.clone() + y1_1cy.clone() * y1_1cy.clone() - r2.clone()).abs();
-            if check1_0 < check1_1 { y1_0.clone() } else { y1_1.clone() }
-        };
-        // dbg!("y1: {}", y1.clone());
-        // println!("checks1: {:?}, {:?}", check1_0, check1_1);
-
-        [
-            R2 { x: x0, y: y0 },
-            R2 { x: x1, y: y1 },
-        ]
     }
     pub fn project(&self, o: &Circle<D>) -> Self {
         let c = (self.c.clone() - o.c.clone()) / o.r.clone();
@@ -314,30 +251,14 @@ mod tests {
         let d0 = c0.dual(0, 3);
         let d1 = c1.dual(3, 0);
 
-        // let projected = d0.project(&d1);
-        // let unit_intersections = projected.unit_intersections();
-        // let invert = |p: R2<D>, od: &Circle<D>| od.invert(p);
-        // let [ p0, p1 ] = unit_intersections.map(|p| invert(p, &d1));
-        // // dbg!([ p0.clone(), p1.clone() ]);
-        // println!("projected_intersections");
+        let projected = d1.project(&d0);
+        let unit_intersections = projected.unit_intersections();
+        let invert = |p: R2<D>, od: &Circle<D>| od.invert(p);
+        let [ p0, p1 ] = unit_intersections.map(|p| invert(p, &d0));
+        // println!("intersections_projected1:");
         // println!("{}", p0);
         // println!("{}", p1);
         // println!();
-        let projected = d1.project(&d0);
-        println!("projected: {}", projected);
-        println!();
-        let unit_intersections = projected.unit_intersections();
-        println!("unit_intersections:");
-        println!("{}", unit_intersections[0]);
-        println!("{}", unit_intersections[1]);
-        println!();
-        let invert = |p: R2<D>, od: &Circle<D>| od.invert(p);
-        let [ p0, p1 ] = unit_intersections.map(|p| invert(p, &d0));
-        // dbg!([ p0.clone(), p1.clone() ]);
-        println!("inverted:");
-        println!("{}", p0);
-        println!("{}", p1);
-        println!();
 
         assert_relative_eq!(p0, r2(0.5, vec![ 0.500,  0.866, 1.000, 0.500, -0.866, -1.000],  0.866, vec![ 0.289, 0.500,  0.577, -0.289, 0.500,  0.577]), epsilon = 1e-3);
         assert_relative_eq!(p1, r2(0.5, vec![ 0.500, -0.866, 1.000, 0.500,  0.866, -1.000], -0.866, vec![-0.289, 0.500, -0.577,  0.289, 0.500, -0.577]), epsilon = 1e-3);
@@ -350,32 +271,36 @@ mod tests {
         let d0 = c0.dual(0, 3);
         let d1 = c1.dual(3, 0);
 
-        // let projected = d0.project(&d1);
-        // let unit_intersections = projected.unit_intersections(&d1.r);
-        // let invert = |p: R2<D>, od: &Circle<D>| od.invert(p);
-        // let [ p0, p1 ] = unit_intersections.map(|p| invert(p, &d1));
-        // println!("projected_intersections");
+        let projected = d1.project(&d0);
+        let unit_intersections = projected.unit_intersections();
+        let invert = |p: R2<D>, od: &Circle<D>| od.invert(p);
+        let [ p0, p1 ] = unit_intersections.map(|p| invert(p, &d0));
+        // println!("intersections_projected2");
         // println!("{}", p0);
         // println!("{}", p1);
         // println!();
 
+        assert_relative_eq!(p0, r2(2., vec![ 0.500,  0.866, 1.000, 0.500, -0.866, -1.000],  2.732, vec![ 0.289, 0.500,  0.577, -0.289, 0.500,  0.577]), epsilon = 1e-3);
+        assert_relative_eq!(p1, r2(2., vec![ 0.500, -0.866, 1.000, 0.500,  0.866, -1.000], -0.732, vec![-0.289, 0.500, -0.577,  0.289, 0.500, -0.577]), epsilon = 1e-3);
+    }
+
+    #[test]
+    fn intersections_projected01() {
+        let c0 = Circle { c: R2 { x: 0., y: 0. }, r: 1. };
+        let c1 = Circle { c: R2 { x: 0., y: 1. }, r: 1. };
+        let d0 = c0.dual(0, 3);
+        let d1 = c1.dual(3, 0);
+
         let projected = d1.project(&d0);
-        let s = format!("{}", projected);
-        println!("s: {}", s);
         let unit_intersections = projected.unit_intersections();
-        println!("unit_intersections");
-        println!("{}", unit_intersections[0]);
-        println!("{}", unit_intersections[1]);
-        println!();
         let invert = |p: R2<D>, od: &Circle<D>| od.invert(p);
         let [ p0, p1 ] = unit_intersections.map(|p| invert(p, &d0));
-        // dbg!([ p0.clone(), p1.clone() ]);
-        println!("projected_intersections 2");
-        println!("{}", p0);
-        println!("{}", p1);
-        println!();
+        // println!("intersections_projected2");
+        // println!("{}", p0);
+        // println!("{}", p1);
+        // println!();
 
-        assert_relative_eq!(p0, r2(2., vec![ 0.500, -0.866, 1.000, 0.500,  0.866, -1.000], -0.732, vec![-0.289, 0.500, -0.577,  0.289, 0.500, -0.577]), epsilon = 1e-3);
-        assert_relative_eq!(p1, r2(2., vec![ 0.500,  0.866, 1.000, 0.500, -0.866, -1.000],  2.732, vec![ 0.289, 0.500,  0.577, -0.289, 0.500,  0.577]), epsilon = 1e-3);
+        assert_relative_eq!(p0, r2( 0.866, vec![ 0.500,  0.289,  0.577, 0.500, -0.289,  0.577], 0.500, vec![ 0.866, 0.500, 1.000, -0.866, 0.500, -1.000]), epsilon = 1e-3);
+        assert_relative_eq!(p1, r2(-0.866, vec![ 0.500, -0.289, -0.577, 0.500,  0.289, -0.577], 0.500, vec![-0.866, 0.500, 1.000,  0.866, 0.500, -1.000]), epsilon = 1e-3);
     }
 }
