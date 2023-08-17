@@ -152,44 +152,15 @@ mod tests {
     }
 
     #[test]
-    fn intersections_projected1() {
-        let c0 = Circle { c: R2 { x: 0., y: 0. }, r: 1. };
-        let c1 = Circle { c: R2 { x: 1., y: 0. }, r: 1. };
-        let d0 = c0.dual(0, 3);
-        let d1 = c1.dual(3, 0);
-
-        let projected = d1.project(&d0);
-        let unit_intersections = projected.unit_intersections();
-        let invert = |p: R2<D>, od: &Circle<D>| od.invert(p);
-        let [ p0, p1 ] = unit_intersections.map(|p| invert(p, &d0));
-        // println!("intersections_projected1:");
-        // println!("{}", p0);
-        // println!("{}", p1);
-        // println!();
-
-        assert_relative_eq!(p0, r2(0.5, vec![ 0.500,  0.866, 1.000, 0.500, -0.866, -1.000],  0.866, vec![ 0.289, 0.500,  0.577, -0.289, 0.500,  0.577]), epsilon = 1e-3);
-        assert_relative_eq!(p1, r2(0.5, vec![ 0.500, -0.866, 1.000, 0.500,  0.866, -1.000], -0.866, vec![-0.289, 0.500, -0.577,  0.289, 0.500, -0.577]), epsilon = 1e-3);
+    fn region1() {
+        test(
+            Circle { c: R2 { x: 0., y: 0. }, r: 1. },
+            Circle { c: R2 { x: 1., y: 0. }, r: 1. },
+            r2(0.5, vec![ 0.500,  0.866, 1.000, 0.500, -0.866, -1.000],  0.866, vec![ 0.289, 0.500,  0.577, -0.289, 0.500,  0.577]),
+            r2(0.5, vec![ 0.500, -0.866, 1.000, 0.500,  0.866, -1.000], -0.866, vec![-0.289, 0.500, -0.577,  0.289, 0.500, -0.577]),
+        );
     }
 
-    #[test]
-    fn intersections_projected2() {
-        let c0 = Circle { c: R2 { x: 1., y: 1. }, r: 2. };
-        let c1 = Circle { c: R2 { x: 3., y: 1. }, r: 2. };
-        let d0 = c0.dual(0, 3);
-        let d1 = c1.dual(3, 0);
-
-        let projected = d1.project(&d0);
-        let unit_intersections = projected.unit_intersections();
-        let invert = |p: R2<D>, od: &Circle<D>| od.invert(p);
-        let [ p0, p1 ] = unit_intersections.map(|p| invert(p, &d0));
-        println!("intersections_projected2:");
-        println!("{}", p0);
-        println!("{}", p1);
-        println!();
-
-        assert_relative_eq!(p0, r2(2., vec![ 0.500,  0.866, 1.000, 0.500, -0.866, -1.000],  2.732, vec![ 0.289, 0.500,  0.577, -0.289, 0.500,  0.577]), epsilon = 1e-3);
-        assert_relative_eq!(p1, r2(2., vec![ 0.500, -0.866, 1.000, 0.500,  0.866, -1.000], -0.732, vec![-0.289, 0.500, -0.577,  0.289, 0.500, -0.577]), epsilon = 1e-3);
-    }
     #[test]
     fn region2() {
         test(
@@ -201,22 +172,12 @@ mod tests {
     }
 
     #[test]
-    fn intersections_projected01() {
-        let c0 = Circle { c: R2 { x: 0., y: 0. }, r: 1. };
-        let c1 = Circle { c: R2 { x: 0., y: 1. }, r: 1. };
-        let d0 = c0.dual(0, 3);
-        let d1 = c1.dual(3, 0);
-
-        let projected = d1.project(&d0);
-        let unit_intersections = projected.unit_intersections();
-        let invert = |p: R2<D>, od: &Circle<D>| od.invert(p);
-        let [ p0, p1 ] = unit_intersections.map(|p| invert(p, &d0));
-        // println!("intersections_projected01");
-        // println!("{}", p0);
-        // println!("{}", p1);
-        // println!();
-
-        assert_relative_eq!(p0, r2( 0.866, vec![ 0.500,  0.289,  0.577, 0.500, -0.289,  0.577], 0.500, vec![ 0.866, 0.500, 1.000, -0.866, 0.500, -1.000]), epsilon = 1e-3);
-        assert_relative_eq!(p1, r2(-0.866, vec![ 0.500, -0.289, -0.577, 0.500,  0.289, -0.577], 0.500, vec![-0.866, 0.500, 1.000,  0.866, 0.500, -1.000]), epsilon = 1e-3);
+    fn region3() {
+        test(
+            Circle { c: R2 { x: 0., y: 0. }, r: 1. },
+            Circle { c: R2 { x: 0., y: 1. }, r: 1. },
+            r2( 0.866, vec![ 0.500,  0.289,  0.577, 0.500, -0.289,  0.577], 0.500, vec![ 0.866, 0.500, 1.000, -0.866, 0.500, -1.000]),
+            r2(-0.866, vec![ 0.500, -0.289, -0.577, 0.500,  0.289, -0.577], 0.500, vec![-0.866, 0.500, 1.000,  0.866, 0.500, -1.000]),
+        );
     }
 }
