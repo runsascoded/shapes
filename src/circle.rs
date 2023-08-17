@@ -1,8 +1,5 @@
-use std::{f64::consts::PI, fmt::Display};
-// use derive_more::{Clone};
+use std::fmt::Display;
 
-use nalgebra::{Const, SMatrix, SVector, RowDVector, Dyn, Matrix};
-use num_dual::{DualNum, jacobian, DualVec, Derivative, DualVec64, DualDVec64};
 use serde::{Deserialize, Serialize};
 use crate::{
     r2::R2,
@@ -130,25 +127,26 @@ fn r2(x: f64, dx: Vec<f64>, y: f64, dy: Vec<f64>) -> R2<D> {
 mod tests {
     use super::*;
 
-    use nalgebra::{Const, Matrix3x1};
-    use num_dual::DualVec64;
+    fn swap_v(v: Vec<f64>) -> Vec<f64> {
+        [&v[3..], &v[..3]].concat()
+    }
+    fn swap(p: R2<Dual>) -> R2<Dual> {
+        R2 { x: Dual::new(p.x.v(), swap_v(p.x.d())), y: Dual::new(p.y.v(), swap_v(p.y.d())) }
+    }
 
-    fn test(c0: Circle<f64>, c1: Circle<f64>, expected0: R2<D>, expected1: R2<D>) {
+    fn check(c0: Circle<f64>, c1: Circle<f64>, expected0: R2<D>, expected1: R2<D>) {
         let region = c0.intersect(&c1);
         assert_eq!(region.n(), 2);
         let [ p0, p1 ] = [region.intersections[0].clone(), region.intersections[1].clone()].map(|p| R2 { x: p.x, y: p.y });
+
         assert_relative_eq!(p0, expected0, epsilon = 1e-3);
         assert_relative_eq!(p1, expected1, epsilon = 1e-3);
+    }
 
-        let swap = |v: Vec<f64>| [&v[3..], &v[..3]].concat();
-        let expected0 = R2 { x: Dual::new(expected0.x.v(), swap(expected0.x.d())), y: Dual::new(expected0.y.v(), swap(expected0.y.d())) };
-        let expected1 = R2 { x: Dual::new(expected1.x.v(), swap(expected1.x.d())), y: Dual::new(expected1.y.v(), swap(expected1.y.d())) };
-
-        let region = c1.intersect(&c0);
-        assert_eq!(region.n(), 2);
-        let [ p0, p1 ] = [region.intersections[0].clone(), region.intersections[1].clone()].map(|p| R2 { x: p.x, y: p.y });
-        assert_relative_eq!(p0, expected0, epsilon = 1e-3);
-        assert_relative_eq!(p1, expected1, epsilon = 1e-3);
+    fn test(c0: Circle<f64>, c1: Circle<f64>, expected0: R2<D>, expected1: R2<D>) {
+        check(c0, c1, expected0.clone(), expected1.clone());
+        // The "dual" circles were created in the opposite order, swap the first and last 3 derivative components.
+        check(c1, c0, swap(expected0), swap(expected1));
     }
 
     #[test]
