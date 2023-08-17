@@ -8,13 +8,11 @@ pub struct Region<D> {
     pub intersections: Vec<Intersection<D>>,
 }
 
-impl<D: Clone + Sum + Add<Output = D> + Mul<Output = D> + Sub<Output = D> + Div<f64, Output = D>> Region<D>
-where
-//     &'a D: Mul<&'a D, Output = &'a D>,
-//     &'a D: Sub<&'a D, Output = &'a D>,
-    // &'a D: Div<f64, Output = &'a D>,
-    // &'a D: Sum<D>
-{
+impl<D: Clone + Sum + Add<Output = D> + Mul<Output = D> + Sub<Output = D> + Div<f64, Output = D>> Region<D> {
+    pub fn n(self: &Region<D>) -> usize {
+        assert_eq!(self.edges.len(), self.intersections.len());
+        self.edges.len()
+    }
     pub fn polygon_area(&self) -> D {
         let n = self.intersections.len();
         let iter = self.intersections.iter().enumerate();

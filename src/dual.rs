@@ -1,4 +1,4 @@
-use std::{ops::{Deref, Mul, Sub, Neg, Div, AddAssign, SubAssign, Add}, fmt::{Display, Debug}};
+use std::{ops::{Deref, Mul, Sub, Neg, Div, AddAssign, SubAssign, Add}, fmt::{Display, Debug}, iter::Sum};
 
 use approx::{RelativeEq, AbsDiffEq};
 use nalgebra::{Dyn, U1, allocator::Allocator, DefaultAllocator, Matrix, OMatrix, ComplexField};
@@ -39,6 +39,13 @@ impl Dual {
     pub fn abs(&self) -> Self {
         Dual(self.0.clone().abs(), self.1)
     }
+    #[inline]
+    pub fn atan(self) -> Self {
+        Dual(self.0.clone().atan(), self.1)
+    }
+    // pub fn is_zero(&self) -> bool {
+    //     self.v() == 0. && self.d().iter().all(|x| x == &0.)
+    // }
 }
 
 impl Deref for Dual {
@@ -192,6 +199,12 @@ impl AddAssign for Dual {
     fn add_assign(&mut self, rhs: Self) {
         assert_eq!(self.1, rhs.1);
         self.0 += rhs.0;
+    }
+}
+
+impl Sum for Dual {
+    fn sum<I: Iterator<Item = Self>>(mut iter: I) -> Self {
+        iter.fold(Dual::new(0., vec![]), |a, b| a + b)
     }
 }
 
