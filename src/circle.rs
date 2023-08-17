@@ -33,9 +33,9 @@ impl Circle<f64> {
         Circle { c, r }
     }
     pub fn intersect(&self, o: &Circle<f64>) -> Region<D> {
-        let sd = self.dual(0, 3);
-        let od = o.dual(3, 0);
-        let projected = sd.project(&od);
+        let c0 = self.dual(0, 3);
+        let c1 = o.dual(3, 0);
+        let projected = c0.project(&c1);
         // println!("projected: {}", projected);
         // println!();
 
@@ -45,17 +45,24 @@ impl Circle<f64> {
         // println!("{}", unit_intersections[1]);
         // println!();
 
-        let invert = |p: R2<D>, od: &Circle<D>| od.invert(p);
-        let points = unit_intersections.map(|p| invert(p, &od));
+        let invert = |p: R2<D>, c: &Circle<D>| c.invert(p);
+        let points = unit_intersections.map(|p| invert(p, &c1));
         let [ p0, p1 ] = points.clone();
         // println!("pre-ints points:");
         // println!("{}", p0);
         // println!("{}", p1);
         // println!();
 
-        let intersections = points.map(|p| Intersection { x: p.x.clone(), y: p.y.clone(), c1: sd.clone(), c2: od.clone() });
-        let edge0 = Edge { c: sd, intersections: intersections.clone() };
-        let edge1 = Edge { c: od, intersections: intersections.clone() };
+        let intersections = points.map(|p| {
+            let x = p.x.clone();
+            let y = p.y.clone();
+            let p = R2 { x: x.clone(), y: y.clone() };
+            let t0 = c0.theta(p.clone());
+            let t1 = c1.theta(p.clone());
+            Intersection { x, y, c0: c0.clone(), c1: c1.clone(), t0, t1 }
+        });
+        let edge0 = Edge { c: c0, intersections: intersections.clone() };
+        let edge1 = Edge { c: c1, intersections: intersections.clone() };
         let region = Region { edges: vec![ edge0, edge1 ], intersections: intersections.into() };
         region
     }
