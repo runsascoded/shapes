@@ -133,15 +133,7 @@ mod tests {
     use nalgebra::{Const, Matrix3x1};
     use num_dual::DualVec64;
 
-struct Case {
-    pub circles: [Circle<f64>; 2],
-    pub expected: [R2<D>; 2],
-}
-
-    fn test(case: Case) {
-        let Case { circles, expected } = case;
-        let [ c0, c1 ] = circles;
-        let [ expected0, expected1 ] = expected;
+    fn test(c0: Circle<f64>, c1: Circle<f64>, expected0: R2<D>, expected1: R2<D>) {
         let region = c0.intersect(&c1);
         assert_eq!(region.n(), 2);
         let [ p0, p1 ] = [region.intersections[0].clone(), region.intersections[1].clone()].map(|p| R2 { x: p.x, y: p.y });
@@ -201,34 +193,11 @@ struct Case {
     #[test]
     fn region2() {
         test(
-            Case {
-                circles: [
-                    Circle { c: R2 { x: 1., y: 1. }, r: 2. },
-                    Circle { c: R2 { x: 3., y: 1. }, r: 2. },
-                ],
-                expected: [
-                    r2(2., vec![ 0.500,  0.866, 1.000, 0.500, -0.866, -1.000],  2.732, vec![ 0.289, 0.500,  0.577, -0.289, 0.500,  0.577]),
-                    r2(2., vec![ 0.500, -0.866, 1.000, 0.500,  0.866, -1.000], -0.732, vec![-0.289, 0.500, -0.577,  0.289, 0.500, -0.577]),
-                ],
-            }
+            Circle { c: R2 { x: 1., y: 1. }, r: 2. },
+            Circle { c: R2 { x: 3., y: 1. }, r: 2. },
+            r2(2., vec![ 0.500,  0.866, 1.000, 0.500, -0.866, -1.000],  2.732, vec![ 0.289, 0.500,  0.577, -0.289, 0.500,  0.577]),
+            r2(2., vec![ 0.500, -0.866, 1.000, 0.500,  0.866, -1.000], -0.732, vec![-0.289, 0.500, -0.577,  0.289, 0.500, -0.577]),
         );
-        // let c0 = Circle { c: R2 { x: 1., y: 1. }, r: 2. };
-        // let c1 = Circle { c: R2 { x: 3., y: 1. }, r: 2. };
-
-        // let expected0 = r2(2., vec![ 0.500,  0.866, 1.000, 0.500, -0.866, -1.000],  2.732, vec![ 0.289, 0.500,  0.577, -0.289, 0.500,  0.577]);
-        // let expected1 = r2(2., vec![ 0.500, -0.866, 1.000, 0.500,  0.866, -1.000], -0.732, vec![-0.289, 0.500, -0.577,  0.289, 0.500, -0.577]);
-
-        // let region = c0.intersect(&c1);
-        // assert_eq!(region.n(), 2);
-        // let [ p0, p1 ] = [region.intersections[0].clone(), region.intersections[1].clone()].map(|p| R2 { x: p.x, y: p.y });
-        // assert_relative_eq!(p0, expected0, epsilon = 1e-3);
-        // assert_relative_eq!(p1, expected1, epsilon = 1e-3);
-
-        // let region = c1.intersect(&c0);
-        // assert_eq!(region.n(), 2);
-        // let [ p0, p1 ] = [region.intersections[0].clone(), region.intersections[1].clone()].map(|p| R2 { x: p.x, y: p.y });
-        // assert_relative_eq!(p0, expected0, epsilon = 1e-3);
-        // assert_relative_eq!(p1, expected1, epsilon = 1e-3);
     }
 
     #[test]
