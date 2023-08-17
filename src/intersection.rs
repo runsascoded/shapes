@@ -18,6 +18,6 @@ pub struct Intersection<D> {
 
 impl<D: Display + Clone + Mul<f64, Output = D> + Div<f64, Output = D>> Display for Intersection<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "I({:.3}, {:.3}, C{}({:.0}), C{}({:.0}))", self.x, self.y, self.c0idx, self.c1idx, self.t0.clone() * 180. / PI, self.t1.clone() * 180. / PI)
+        write!(f, "I({:.3}, {:.3}, C{}/C{}", self.x, self.y, self.c0idx, self.c1idx)
     }
 }

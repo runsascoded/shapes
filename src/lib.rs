@@ -7,6 +7,7 @@ mod edge;
 mod intersection;
 mod r2;
 mod region;
+mod shapes;
 
 use dual::Dual;
 use wasm_bindgen::prelude::*;
