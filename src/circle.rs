@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, ops::{Mul, Add}};
 
 use serde::{Deserialize, Serialize};
 use crate::{
@@ -118,6 +118,34 @@ impl<D: Display> Display for Circle<D> {
     }
 }
 
+impl Mul<f64> for Circle<f64> {
+    type Output = Circle<f64>;
+    fn mul(self, rhs: f64) -> Self::Output {
+        Circle { c: self.c * rhs, r: self.r * rhs }
+    }
+}
+
+impl Mul<i64> for Circle<f64> {
+    type Output = Circle<f64>;
+    fn mul(self, rhs: i64) -> Self::Output {
+        Circle { c: self.c * (rhs as f64), r: self.r * (rhs as f64) }
+    }
+}
+
+impl Add<R2<f64>> for Circle<f64> {
+    type Output = Circle<f64>;
+    fn add(self, rhs: R2<f64>) -> Self::Output {
+        Circle { c: self.c + rhs, r: self.r }
+    }
+}
+
+impl Add<R2<i64>> for Circle<f64> {
+    type Output = Circle<f64>;
+    fn add(self, rhs: R2<i64>) -> Self::Output {
+        Circle { c: self.c + R2 { x: rhs.x as f64, y: rhs.y as f64 }, r: self.r }
+    }
+}
+
 fn r2(x: f64, dx: Vec<f64>, y: f64, dy: Vec<f64>) -> R2<D> {
     R2 { x: Dual::new(x, dx), y: Dual::new(y, dy) }
 }
@@ -139,43 +167,62 @@ mod tests {
         assert_eq!(region.n(), 2);
         let [ p0, p1 ] = [region.intersections[0].clone(), region.intersections[1].clone()].map(|p| R2 { x: p.x, y: p.y });
 
+        // println!("c0: {}", c0);
+        // println!("c1: {}", c1);
+        // println!("expected0: {}", expected0);
+        // println!("expected1: {}", expected1);
+        // println!();
         assert_relative_eq!(p0, expected0, epsilon = 1e-3);
         assert_relative_eq!(p1, expected1, epsilon = 1e-3);
     }
 
     fn test(c0: Circle<f64>, c1: Circle<f64>, expected0: R2<D>, expected1: R2<D>) {
-        check(c0, c1, expected0.clone(), expected1.clone());
-        // The "dual" circles were created in the opposite order, swap the first and last 3 derivative components.
-        check(c1, c0, swap(expected0), swap(expected1));
+        for dx in -1..2 {
+            for dy in -1..2 {
+                for scale in 1..3 {
+                    // println!("check: dx: {}, dy: {}, scale: {}", dx, dy, scale);
+                    let c0 = c0 * scale + R2 { x: dx, y: dy };
+                    let c1 = c1 * scale + R2 { x: dx, y: dy };
+                    let R2 { x: e0x, y: e0y } = expected0.clone();
+                    let R2 { x: e1x, y: e1y } = expected1.clone();
+                    let transform = |d: Dual, o: i64| Dual::new(d.v() * (scale as f64) + (o as f64), d.d().clone());
+                    let e0 = R2 { x: transform(e0x, dx), y: transform(e0y, dy) };
+                    let e1 = R2 { x: transform(e1x, dx), y: transform(e1y, dy) };
+                    check(c0, c1, e0.clone(), e1.clone());
+                    // The "dual" circles were created in the opposite order, swap the first and last 3 derivative components.
+                    check(c1, c0, swap(e0), swap(e1));
+                }
+            }
+        }
     }
 
     #[test]
-    fn region1() {
+    fn region_r() {
         test(
             Circle { c: R2 { x: 0., y: 0. }, r: 1. },
             Circle { c: R2 { x: 1., y: 0. }, r: 1. },
-            r2(0.5, vec![ 0.500,  0.866, 1.000, 0.500, -0.866, -1.000],  0.866, vec![ 0.289, 0.500,  0.577, -0.289, 0.500,  0.577]),
-            r2(0.5, vec![ 0.500, -0.866, 1.000, 0.500,  0.866, -1.000], -0.866, vec![-0.289, 0.500, -0.577,  0.289, 0.500, -0.577]),
+            r2(0.5, vec![ 0.500,  0.866, 1.000, 0.500, -0.866, -1.000 ],  0.866, vec![  0.289, 0.500,  0.577, -0.289, 0.500,  0.577 ]),
+            r2(0.5, vec![ 0.500, -0.866, 1.000, 0.500,  0.866, -1.000 ], -0.866, vec![ -0.289, 0.500, -0.577,  0.289, 0.500, -0.577 ]),
         );
     }
 
     #[test]
-    fn region2() {
-        test(
-            Circle { c: R2 { x: 1., y: 1. }, r: 2. },
-            Circle { c: R2 { x: 3., y: 1. }, r: 2. },
-            r2(2., vec![ 0.500,  0.866, 1.000, 0.500, -0.866, -1.000],  2.732, vec![ 0.289, 0.500,  0.577, -0.289, 0.500,  0.577]),
-            r2(2., vec![ 0.500, -0.866, 1.000, 0.500,  0.866, -1.000], -0.732, vec![-0.289, 0.500, -0.577,  0.289, 0.500, -0.577]),
-        );
-    }
-
-    #[test]
-    fn region3() {
+    fn region_u() {
         test(
             Circle { c: R2 { x: 0., y: 0. }, r: 1. },
             Circle { c: R2 { x: 0., y: 1. }, r: 1. },
-            r2( 0.866, vec![ 0.500,  0.289,  0.577, 0.500, -0.289,  0.577], 0.500, vec![ 0.866, 0.500, 1.000, -0.866, 0.500, -1.000]),
-            r2(-0.866, vec![ 0.500, -0.289, -0.577, 0.500,  0.289, -0.577], 0.500, vec![-0.866, 0.500, 1.000,  0.866, 0.500, -1.000]),
+            r2( 0.866, vec![ 0.500,  0.289,  0.577, 0.500, -0.289,  0.577], 0.500, vec![ 0.866, 0.500, 1.000, -0.866, 0.500, -1.000 ]),
+            r2(-0.866, vec![ 0.500, -0.289, -0.577, 0.500,  0.289, -0.577], 0.500, vec![-0.866, 0.500, 1.000,  0.866, 0.500, -1.000 ]),
+        );
+    }
+
+    #[test]
+    fn region_ur() {
+        test(
+            Circle { c: R2 { x: 0., y: 0. }, r: 1. },
+            Circle { c: R2 { x: 1., y: 1. }, r: 1. },
+            r2( 0., vec![ 0., 0., 0., 1., 0., -1. ], 1., vec![ 0., 1., 1., 0., 0.,  0. ]),
+            r2( 1., vec![ 1., 0., 1., 0., 0.,  0. ], 0., vec![ 0., 0., 0., 0., 1., -1. ]),
         );
     }
 }
