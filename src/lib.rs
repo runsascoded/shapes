@@ -21,6 +21,7 @@ extern {
 #[wasm_bindgen]
 pub fn circle(cx: f64, cy: f64, r: f64) -> JsValue {
     let circle = Circle {
+        idx: 0,
         c: R2 { x: cx, y: cy },
         r,
     };

@@ -1,21 +1,23 @@
+use std::f64::consts::PI;
 use std::fmt::Display;
+use std::ops::{Mul, Div};
 
 use crate::circle::Circle;
 use crate::edge::Edge;
 
 #[derive(Clone, Debug)]
-pub struct Intersection<'a, D> {
+pub struct Intersection<D> {
     pub x: D,
     pub y: D,
-    pub c0: Circle<D>,
-    pub c1: Circle<D>,
+    pub c0idx: usize,
+    pub c1idx: usize,
     pub t0: D,
     pub t1: D,
-    pub edges: Option<[ [&'a Edge<'a, D>; 2]; 2]>,
+    // pub edges: [ [usize; 2]; 2],
 }
 
-impl<'a, D: Display> Display for Intersection<'a, D> {
+impl<D: Display + Clone + Mul<f64, Output = D> + Div<f64, Output = D>> Display for Intersection<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "I({:.3}, {:.3}, {}, {})", self.x, self.y, self.c0, self.c1)
+        write!(f, "I({:.3}, {:.3}, C{}({:.0}), C{}({:.0}))", self.x, self.y, self.c0idx, self.c1idx, self.t0.clone() * 180. / PI, self.t1.clone() * 180. / PI)
     }
 }

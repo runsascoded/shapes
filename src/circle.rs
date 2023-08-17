@@ -1,5 +1,6 @@
 use std::{fmt::Display, ops::{Mul, Add}};
 
+use derive_more::From;
 use serde::{Deserialize, Serialize};
 use crate::{
     r2::R2,
@@ -7,8 +8,9 @@ use crate::{
     intersection::Intersection, edge::Edge, dual::Dual
 };
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, From, Serialize, Deserialize)]
 pub struct Circle<D> {
+    pub idx: usize,
     pub c: R2<D>,
     pub r: D,
 }
@@ -16,7 +18,7 @@ pub struct Circle<D> {
 type D = Dual;
 
 impl Circle<f64> {
-    pub fn dual(&self, pre_zeros: usize, post_zeros: usize) -> Circle<D> {
+    pub fn dual<'a>(&self, pre_zeros: usize, post_zeros: usize) -> Circle<D> {
         let n = 3;
         let mut idx = pre_zeros;
         let zeros = vec![0.; pre_zeros + n + post_zeros];
@@ -30,37 +32,31 @@ impl Circle<f64> {
         let y = Dual::new(self.c.y, dv());
         let r = Dual::new(self.r  , dv());
         let c = R2 { x, y };
-        Circle { c, r }
+        Circle::from((self.idx, c, r))
+        // &Circle { c, r }
     }
     pub fn intersect(&self, o: &Circle<f64>) -> [ Intersection<D>; 2 ] {
-        let c0 = self.dual(0, 3);
-        let c1 = o.dual(3, 0);
+        // let c0 = self.dual(0, 3);
+        // let c1 = o.dual(3, 0);
+        // c0.intersect(&c1)
+        self.dual(0, 3).intersect(&o.dual(3, 0))
+    }
+}
+
+impl Circle<D> {
+    pub fn intersect(&self, c1: &Circle<D>) -> [ Intersection<D>; 2 ] {
+        let c0 = self;
         let projected = c0.project(&c1);
-        // println!("projected: {}", projected);
-        // println!();
-
         let unit_intersections = projected.unit_intersections();
-        // println!("unit_intersections:");
-        // println!("{}", unit_intersections[0]);
-        // println!("{}", unit_intersections[1]);
-        // println!();
-
         let invert = |p: R2<D>, c: &Circle<D>| c.invert(p);
         let points = unit_intersections.map(|p| invert(p, &c1));
-
-        // let [ p0, p1 ] = points.clone();
-        // println!("pre-ints points:");
-        // println!("{}", p0);
-        // println!("{}", p1);
-        // println!();
-
         let intersections = points.map(|p| {
             let x = p.x.clone();
             let y = p.y.clone();
             let p = R2 { x: x.clone(), y: y.clone() };
             let t0 = c0.theta(p.clone());
             let t1 = c1.theta(p.clone());
-            Intersection { x, y, c0: c0.clone(), c1: c1.clone(), t0, t1, edges: None }
+            Intersection { x, y, c0idx: c0.idx, c1idx: c1.idx, t0, t1 }
         });
         intersections
         // let edge0 = Edge { c: c0, intersections: &intersections };
@@ -75,9 +71,6 @@ impl Circle<f64> {
         // let region = Region { edges, intersections: intersections.into() };
         // region
     }
-}
-
-impl Circle<D> {
     pub fn unit_intersections(&self) -> [R2<D>; 2] {
         let cx = self.c.x.clone();
         let cy = self.c.y.clone();
@@ -115,7 +108,7 @@ impl Circle<D> {
     pub fn project(&self, o: &Circle<D>) -> Self {
         let c = (self.c.clone() - o.c.clone()) / o.r.clone();
         let r = self.r.clone() / o.r.clone();
-        Circle { c, r, }
+        Circle { idx: self.idx, c, r, }
     }
     pub fn invert(&self, p: R2<D>) -> R2<D> {
         p * self.r.clone() + self.c.clone()
@@ -137,28 +130,28 @@ impl<D: Display> Display for Circle<D> {
 impl Mul<f64> for Circle<f64> {
     type Output = Circle<f64>;
     fn mul(self, rhs: f64) -> Self::Output {
-        Circle { c: self.c * rhs, r: self.r * rhs }
+        Circle { idx: self.idx, c: self.c * rhs, r: self.r * rhs }
     }
 }
 
 impl Mul<i64> for Circle<f64> {
     type Output = Circle<f64>;
     fn mul(self, rhs: i64) -> Self::Output {
-        Circle { c: self.c * (rhs as f64), r: self.r * (rhs as f64) }
+        Circle { idx: self.idx, c: self.c * (rhs as f64), r: self.r * (rhs as f64) }
     }
 }
 
 impl Add<R2<f64>> for Circle<f64> {
     type Output = Circle<f64>;
     fn add(self, rhs: R2<f64>) -> Self::Output {
-        Circle { c: self.c + rhs, r: self.r }
+        Circle { idx: self.idx, c: self.c + rhs, r: self.r }
     }
 }
 
 impl Add<R2<i64>> for Circle<f64> {
     type Output = Circle<f64>;
     fn add(self, rhs: R2<i64>) -> Self::Output {
-        Circle { c: self.c + R2 { x: rhs.x as f64, y: rhs.y as f64 }, r: self.r }
+        Circle { idx: self.idx, c: self.c + R2 { x: rhs.x as f64, y: rhs.y as f64 }, r: self.r }
     }
 }
 
@@ -215,8 +208,8 @@ mod tests {
     #[test]
     fn region_r() {
         test(
-            Circle { c: R2 { x: 0., y: 0. }, r: 1. },
-            Circle { c: R2 { x: 1., y: 0. }, r: 1. },
+            Circle { idx: 0, c: R2 { x: 0., y: 0. }, r: 1. },
+            Circle { idx: 1, c: R2 { x: 1., y: 0. }, r: 1. },
             r2(0.5, vec![ 0.500,  0.866, 1.000, 0.500, -0.866, -1.000 ],  0.866, vec![  0.289, 0.500,  0.577, -0.289, 0.500,  0.577 ]),
             r2(0.5, vec![ 0.500, -0.866, 1.000, 0.500,  0.866, -1.000 ], -0.866, vec![ -0.289, 0.500, -0.577,  0.289, 0.500, -0.577 ]),
         );
@@ -225,8 +218,8 @@ mod tests {
     #[test]
     fn region_u() {
         test(
-            Circle { c: R2 { x: 0., y: 0. }, r: 1. },
-            Circle { c: R2 { x: 0., y: 1. }, r: 1. },
+            Circle { idx: 0, c: R2 { x: 0., y: 0. }, r: 1. },
+            Circle { idx: 1, c: R2 { x: 0., y: 1. }, r: 1. },
             r2( 0.866, vec![ 0.500,  0.289,  0.577, 0.500, -0.289,  0.577], 0.500, vec![ 0.866, 0.500, 1.000, -0.866, 0.500, -1.000 ]),
             r2(-0.866, vec![ 0.500, -0.289, -0.577, 0.500,  0.289, -0.577], 0.500, vec![-0.866, 0.500, 1.000,  0.866, 0.500, -1.000 ]),
         );
@@ -235,8 +228,8 @@ mod tests {
     #[test]
     fn region_ur() {
         test(
-            Circle { c: R2 { x: 0., y: 0. }, r: 1. },
-            Circle { c: R2 { x: 1., y: 1. }, r: 1. },
+            Circle { idx: 0, c: R2 { x: 0., y: 0. }, r: 1. },
+            Circle { idx: 1, c: R2 { x: 1., y: 1. }, r: 1. },
             r2( 0., vec![ 0., 0., 0., 1., 0., -1. ], 1., vec![ 0., 1., 1., 0., 0.,  0. ]),
             r2( 1., vec![ 1., 0., 1., 0., 0.,  0. ], 0., vec![ 0., 0., 0., 0., 1., -1. ]),
         );
