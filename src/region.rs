@@ -3,13 +3,13 @@ use std::{iter::Sum, ops::{Div, Mul, Sub, Add}, fmt::{Formatter, Display, self}}
 use crate::{edge::Edge, intersection::Intersection};
 
 #[derive(Debug, Clone)]
-pub struct Region<D> {
-    pub edges: Vec<Edge<D>>,
-    pub intersections: Vec<Intersection<D>>,
+pub struct Region<'a, D> {
+    pub edges: Vec<&'a Edge<'a, D>>,
+    pub intersections: Vec<&'a Intersection<'a, D>>,
 }
 
-impl<D: Clone + Sum + Add<Output = D> + Mul<Output = D> + Sub<Output = D> + Div<f64, Output = D>> Region<D> {
-    pub fn n(self: &Region<D>) -> usize {
+impl<'a, D: Clone + Sum + Add<Output = D> + Mul<Output = D> + Sub<Output = D> + Div<f64, Output = D>> Region<'a, D> {
+    pub fn n(self: &'a Region<'a, D>) -> usize {
         assert_eq!(self.edges.len(), self.intersections.len());
         self.edges.len()
     }
@@ -31,7 +31,7 @@ impl<D: Clone + Sum + Add<Output = D> + Mul<Output = D> + Sub<Output = D> + Div<
     }
 }
 
-impl<D: Display> Display for Region<D> {
+impl<'a, D: Display> Display for Region<'a, D> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         // let mut s: String = "Region(".to_owned();
         write!(f, "R(").unwrap();

@@ -32,7 +32,7 @@ impl Circle<f64> {
         let c = R2 { x, y };
         Circle { c, r }
     }
-    pub fn intersect(&self, o: &Circle<f64>) -> Region<D> {
+    pub fn intersect(&self, o: &Circle<f64>) -> [ Intersection<D>; 2 ] {
         let c0 = self.dual(0, 3);
         let c1 = o.dual(3, 0);
         let projected = c0.project(&c1);
@@ -47,7 +47,8 @@ impl Circle<f64> {
 
         let invert = |p: R2<D>, c: &Circle<D>| c.invert(p);
         let points = unit_intersections.map(|p| invert(p, &c1));
-        let [ p0, p1 ] = points.clone();
+
+        // let [ p0, p1 ] = points.clone();
         // println!("pre-ints points:");
         // println!("{}", p0);
         // println!("{}", p1);
@@ -59,12 +60,20 @@ impl Circle<f64> {
             let p = R2 { x: x.clone(), y: y.clone() };
             let t0 = c0.theta(p.clone());
             let t1 = c1.theta(p.clone());
-            Intersection { x, y, c0: c0.clone(), c1: c1.clone(), t0, t1 }
+            Intersection { x, y, c0: c0.clone(), c1: c1.clone(), t0, t1, edges: None }
         });
-        let edge0 = Edge { c: c0, intersections: intersections.clone() };
-        let edge1 = Edge { c: c1, intersections: intersections.clone() };
-        let region = Region { edges: vec![ edge0, edge1 ], intersections: intersections.into() };
-        region
+        intersections
+        // let edge0 = Edge { c: c0, intersections: &intersections };
+        // let edge1 = Edge { c: c1, intersections: &intersections };
+        // let edges = vec![ edge0, edge1 ];
+        // for edge in edges {
+        //     let e = edge.clone();
+        //     let [ i0, i1 ] = e.intersections;
+        //     i0.add_edge(e);
+        //     i1.add_edge(e);
+        // }
+        // let region = Region { edges, intersections: intersections.into() };
+        // region
     }
 }
 
@@ -170,9 +179,9 @@ mod tests {
     }
 
     fn check(c0: Circle<f64>, c1: Circle<f64>, expected0: R2<D>, expected1: R2<D>) {
-        let region = c0.intersect(&c1);
-        assert_eq!(region.n(), 2);
-        let [ p0, p1 ] = [region.intersections[0].clone(), region.intersections[1].clone()].map(|p| R2 { x: p.x, y: p.y });
+        let intersections = c0.intersect(&c1);
+        // assert_eq!(region.n(), 2);
+        let [ p0, p1 ] = intersections.map(|p| R2 { x: p.x, y: p.y });
 
         // println!("c0: {}", c0);
         // println!("c1: {}", c1);
