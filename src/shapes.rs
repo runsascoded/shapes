@@ -2,23 +2,23 @@ use std::{borrow::BorrowMut, cell::RefCell, rc::Rc};
 
 use crate::{dual::Dual, circle::Circle, intersection::{Intersection, Node}, edge::Edge, region::Region};
 
-
 type D = Dual;
+type C = Rc<RefCell<Circle<D>>>;
 
 struct Shapes {
     shapes: Vec<Circle<f64>>,
-    duals: Vec<Circle<D>>,
+    duals: Vec<C>,
     nodes: Vec<Node>,
     nodes_by_shape: Vec<Vec<Node>>,
     nodes_by_shapes: Vec<Vec<Vec<Node>>>,
-    // edges: Vec<Edge<D>>,
+    edges: Vec<Edge>,
     // regions: Vec<Region>,
 }
 
 impl Shapes {
     pub fn new(shapes: Vec<Circle<f64>>) -> Shapes {
         let n = shapes.len();
-        let duals: Vec<Circle<D>> = shapes.iter().enumerate().map(|(idx, c)| c.dual(idx * 3, 3 * (n - 1 - idx))).collect();
+        let duals: Vec<C> = shapes.iter().enumerate().map(|(idx, c)| Rc::new(RefCell::new(c.dual(idx * 3, 3 * (n - 1 - idx))))).collect();
         let mut nodes: Vec<Node> = Vec::new();
         let mut nodes_by_shape: Vec<Vec<Node>> = Vec::new();
         let mut nodes_by_shapes: Vec<Vec<Vec<Node>>> = Vec::new();
@@ -32,7 +32,7 @@ impl Shapes {
         }
         for (idx, dual) in duals.iter().enumerate() {
             for jdx in (idx + 1)..n {
-                let intersections = dual.intersect(&duals[jdx]);
+                let intersections = dual.borrow().intersect(&duals[jdx].borrow());
                 let ns = intersections.map(|i| Rc::new(RefCell::new(i)));
                 for n in ns {
                     nodes.push(n.clone());
@@ -48,7 +48,21 @@ impl Shapes {
         for (idx, mut nodes) in nodes_by_shape.iter_mut().enumerate() {
             nodes.sort_by_cached_key(|n| n.borrow().theta(idx))
         }
-        Shapes { shapes, duals, nodes, nodes_by_shape, nodes_by_shapes }
+
+        let mut edges: Vec<Edge> = Vec::new();
+        for idx in 0..n {
+            let nodes = &nodes_by_shape[idx];
+            let m = n;
+            let n = nodes.len();
+            for jdx in 0..n {
+                let i0 = nodes[jdx].clone();
+                let i1 = nodes[(jdx + 1) % n].clone();
+                let edge = Edge { c: duals[idx].clone(), i0, i1 };
+                edges.push(edge);
+            }
+        }
+
+        Shapes { shapes, duals, nodes, nodes_by_shape, nodes_by_shapes, edges, }
     }
 }
 
@@ -68,7 +82,7 @@ mod tests {
         let shapes = Shapes::new(circles);
 
         fn round(f: &f64) -> i64 {
-            if (f >= &0.) {
+            if f >= &0. {
                 (f + 0.5) as i64
             } else {
                 (f - 0.5) as i64

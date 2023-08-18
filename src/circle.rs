@@ -59,17 +59,6 @@ impl Circle<D> {
             Intersection { x, y, c0idx: c0.idx, c1idx: c1.idx, t0, t1 }
         });
         intersections
-        // let edge0 = Edge { c: c0, intersections: &intersections };
-        // let edge1 = Edge { c: c1, intersections: &intersections };
-        // let edges = vec![ edge0, edge1 ];
-        // for edge in edges {
-        //     let e = edge.clone();
-        //     let [ i0, i1 ] = e.intersections;
-        //     i0.add_edge(e);
-        //     i1.add_edge(e);
-        // }
-        // let region = Region { edges, intersections: intersections.into() };
-        // region
     }
     pub fn unit_intersections(&self) -> [R2<D>; 2] {
         let cx = self.c.x.clone();
