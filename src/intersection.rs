@@ -1,6 +1,8 @@
+use std::cell::RefCell;
 use std::f64::consts::PI;
 use std::fmt::Display;
 use std::ops::{Mul, Div};
+use std::rc::Rc;
 
 use crate::circle::Circle;
 use crate::deg::Deg;
@@ -8,6 +10,7 @@ use crate::dual::Dual;
 use crate::edge::Edge;
 
 type D = Dual;
+pub type Node = Rc<RefCell<Intersection>>;
 
 #[derive(Clone, Debug)]
 pub struct Intersection {

@@ -1,10 +1,9 @@
 use std::{borrow::BorrowMut, cell::RefCell, rc::Rc};
 
-use crate::{dual::Dual, circle::Circle, intersection::Intersection, edge::Edge, region::Region};
+use crate::{dual::Dual, circle::Circle, intersection::{Intersection, Node}, edge::Edge, region::Region};
 
 
 type D = Dual;
-type Node = Rc<RefCell<Intersection>>;
 
 struct Shapes {
     shapes: Vec<Circle<f64>>,
@@ -45,6 +44,7 @@ impl Shapes {
             }
         }
 
+        // Sort each circle's nodes in order of where they appear on the circle (from -PI to PI)
         for (idx, mut nodes) in nodes_by_shape.iter_mut().enumerate() {
             nodes.sort_by_cached_key(|n| n.borrow().theta(idx))
         }
