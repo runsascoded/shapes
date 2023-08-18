@@ -11,6 +11,4 @@ jobs:
     steps:
       - run: cargo --version
       - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo --version
       - run: cargo test -- --nocapture
