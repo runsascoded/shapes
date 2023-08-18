@@ -1,7 +1,7 @@
 use std::{ops::{Deref, Mul, Sub, Neg, Div, AddAssign, SubAssign, Add}, fmt::{Display, Debug}, iter::Sum};
 
 use approx::{RelativeEq, AbsDiffEq};
-use nalgebra::{Dyn, U1, allocator::Allocator, DefaultAllocator, Matrix, OMatrix, ComplexField};
+use nalgebra::{Dyn, RealField, U1, allocator::Allocator, DefaultAllocator, Matrix, OMatrix, ComplexField};
 use num_dual::{DualVec64, DualDVec64, DualNum, Derivative, DualVec};
 use serde::{Deserialize, Serialize};
 
@@ -12,9 +12,13 @@ pub struct Dual(
 );
 
 impl Dual {
-    pub fn fmt(f: &f64) -> String {
-        format!("{}{:.3}", if f < &0. {""} else {" "}, f)
+    pub fn fmt(f: &f64, n: usize) -> String {
+        format!("{}{}", if f < &0. {""} else {" "}, format!("{:.1$}", f, n))
     }
+    pub fn s(&self, n: usize) -> String {
+        format!("{} + [{}]ε", Dual::fmt(&self.v(), n), self.d().iter().map(|d| Dual::fmt(d, n)).collect::<Vec<String>>().join(" "))
+    }
+
 
     pub fn new(v: f64, d: Vec<f64>) -> Self {
         let n = d.len();
@@ -43,9 +47,10 @@ impl Dual {
     pub fn atan(self) -> Self {
         Dual(self.0.clone().atan(), self.1)
     }
-    // pub fn is_zero(&self) -> bool {
-    //     self.v() == 0. && self.d().iter().all(|x| x == &0.)
-    // }
+    pub fn atan2(self, o: Self) -> Self {
+        assert_eq!(self.1, o.1);
+        Dual(self.0.clone().atan2(o.0), self.1)
+    }
 }
 
 impl Deref for Dual {
@@ -57,13 +62,23 @@ impl Deref for Dual {
 
 impl Display for Dual {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} + [{}]ε", Dual::fmt(&self.v()), self.d().iter().map(Dual::fmt).collect::<Vec<String>>().join(" "))
+        write!(f, "{}", self.s(3))
     }
 }
 
 impl Debug for Dual {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} + [{}]ε", self.v(), self.d().iter().map(|x| format!("{}", x)).collect::<Vec<String>>().join(", "))
+    }
+}
+
+impl Eq for Dual {
+
+}
+
+impl Ord for Dual {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.v().partial_cmp(&other.v()).unwrap()
     }
 }
 
@@ -81,10 +96,6 @@ impl RelativeEq for Dual {
     fn default_max_relative() -> Self::Epsilon {
         1e-3
     }
-
-    // fn default_max_ulps() -> u32 {
-    //     10u32
-    // }
 
     fn relative_eq(&self, other: &Self, epsilon: Self::Epsilon, max_relative: Self::Epsilon) -> bool {
         self.v().relative_eq(&other.v(), epsilon, max_relative) && self.d().relative_eq(&other.d(), epsilon, max_relative)
@@ -111,6 +122,13 @@ impl Mul<f64> for Dual {
     type Output = Self;
     fn mul(self, rhs: f64) -> Self::Output {
         Dual(self.0 * rhs, self.1)
+    }
+}
+
+impl Mul<f64> for &Dual {
+    type Output = Dual;
+    fn mul(self, rhs: f64) -> Self::Output {
+        Dual(self.0.clone() * rhs, self.1)
     }
 }
 
@@ -207,29 +225,3 @@ impl Sum for Dual {
         iter.fold(Dual::new(0., vec![]), |a, b| a + b)
     }
 }
-
-// impl Sqrt for Dual {
-//     type Output = Self;
-//     fn sqrt(self) -> Self::Output {
-//         Dual(self.0.sqrt(), self.1)
-//     }
-// }
-
-// fn dual(re: f64, eps: Vec<f64>) -> DualDVec64 {
-//     DualDVec64::new(re, Derivative::new(Some(Matrix::from(eps))))
-// }
-
-
-
-// impl From<DualDVec64> for Dual
-// where
-//     DefaultAllocator: Allocator<DualNum<f64>, Dyn>,
-// {
-//     fn from(dv: DualDVec64) -> Self {
-//         let eps = dv.eps
-//         Dual {
-//             v: dv.re,
-//             d: dv.eps.unwrap_generic(Dyn(6), U1).as_slice().to_vec()
-//         }
-//     }
-// }

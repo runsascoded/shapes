@@ -1,4 +1,4 @@
-use std::{fmt::Display, ops::{Mul, Add}};
+use std::{fmt::Display, ops::{Mul, Add}, f64::consts::PI};
 
 use derive_more::From;
 use serde::{Deserialize, Serialize};
@@ -35,7 +35,7 @@ impl Circle<f64> {
         Circle::from((self.idx, c, r))
         // &Circle { c, r }
     }
-    pub fn intersect(&self, o: &Circle<f64>) -> [ Intersection<D>; 2 ] {
+    pub fn intersect(&self, o: &Circle<f64>) -> [ Intersection; 2 ] {
         // let c0 = self.dual(0, 3);
         // let c1 = o.dual(3, 0);
         // c0.intersect(&c1)
@@ -44,7 +44,7 @@ impl Circle<f64> {
 }
 
 impl Circle<D> {
-    pub fn intersect(&self, c1: &Circle<D>) -> [ Intersection<D>; 2 ] {
+    pub fn intersect(&self, c1: &Circle<D>) -> [ Intersection; 2 ] {
         let c0 = self;
         let projected = c0.project(&c1);
         let unit_intersections = projected.unit_intersections();
@@ -116,8 +116,7 @@ impl Circle<D> {
     pub fn theta(&self, p: R2<D>) -> D {
         let x = p.x.clone() - self.c.x.clone();
         let y = p.y.clone() - self.c.y.clone();
-        let theta = (y.clone() / x.clone()).atan();
-        theta
+        y.clone().atan2(x.clone())
     }
 }
 

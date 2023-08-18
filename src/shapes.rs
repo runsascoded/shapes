@@ -4,7 +4,7 @@ use crate::{dual::Dual, circle::Circle, intersection::Intersection, edge::Edge, 
 
 
 type D = Dual;
-type Node = Rc<RefCell<Intersection<D>>>;
+type Node = Rc<RefCell<Intersection>>;
 
 struct Shapes {
     shapes: Vec<Circle<f64>>,
@@ -45,6 +45,9 @@ impl Shapes {
             }
         }
 
+        for (idx, mut nodes) in nodes_by_shape.iter_mut().enumerate() {
+            nodes.sort_by_cached_key(|n| n.borrow().theta(idx))
+        }
         Shapes { shapes, duals, nodes, nodes_by_shape, nodes_by_shapes }
     }
 }
@@ -63,6 +66,14 @@ mod tests {
         let circles = vec![c0, c1, c2];
         let shapes = Shapes::new(circles);
         assert_eq!(shapes.nodes.len(), 6);
+
+        assert_eq!(format!("{}", shapes.nodes[0].borrow()), "I( 0.500 + [ 0.500  0.866  1.000  0.500 -0.866 -1.000  0.000  0.000  0.000]ε,  0.866 + [ 0.289  0.500  0.577 -0.289  0.500  0.577  0.000  0.000  0.000]ε, C0( 60 + [ 33 -57 -33 -33  57  66  0  0  0]ε)/C1( 120 + [-33 -57 -66  33  57  33  -0  -0  -0]ε)");
+        assert_eq!(format!("{}", shapes.nodes[1].borrow()), "I( 0.500 + [ 0.500 -0.866  1.000  0.500  0.866 -1.000  0.000  0.000  0.000]ε, -0.866 + [-0.289  0.500 -0.577  0.289  0.500 -0.577  0.000  0.000  0.000]ε, C0(-60 + [-33 -57  33  33  57 -66  0  0  0]ε)/C1(-120 + [ 33 -57  66 -33  57 -33  0  0  0]ε)");
+        assert_eq!(format!("{}", shapes.nodes[2].borrow()), "I( 0.866 + [ 0.500  0.289  0.577  0.000  0.000  0.000  0.500 -0.289  0.577]ε,  0.500 + [ 0.866  0.500  1.000  0.000  0.000  0.000 -0.866  0.500 -1.000]ε, C0( 30 + [ 57 -33  33  0  0  0 -57  33 -66]ε)/C2(-30 + [ 57  33  66  0  0  0 -57 -33 -33]ε)");
+        assert_eq!(format!("{}", shapes.nodes[3].borrow()), "I(-0.866 + [ 0.500 -0.289 -0.577  0.000  0.000  0.000  0.500  0.289 -0.577]ε,  0.500 + [-0.866  0.500  1.000  0.000  0.000  0.000  0.866  0.500 -1.000]ε, C0( 150 + [ 57  33 -33  -0  -0  -0 -57 -33  66]ε)/C2(-150 + [ 57 -33 -66  0  0  0 -57  33  33]ε)");
+        assert_eq!(format!("{}", shapes.nodes[4].borrow()), "I( 1.000 + [ 0.000  0.000  0.000  0.000  0.000  0.000  1.000  0.000  1.000]ε,  1.000 + [ 0.000  0.000  0.000  0.000  1.000  1.000  0.000  0.000  0.000]ε, C1( 90 + [ 0  0  0  57  0  0 -57  0 -57]ε)/C2( 0 + [ 0  0  0  0  57  57  0 -57  0]ε)");
+        assert_eq!(format!("{}", shapes.nodes[5].borrow()), "I( 0.000 + [ 0.000  0.000  0.000  1.000  0.000 -1.000  0.000  0.000  0.000]ε,  0.000 + [ 0.000  0.000  0.000  0.000  0.000  0.000  0.000  1.000 -1.000]ε, C1( 180 + [ -0  -0  -0  -0  57  0  -0 -57  57]ε)/C2(-90 + [ 0  0  0  57  0 -57 -57  0  0]ε)");
+
         for node in shapes.nodes.iter() {
             println!("{}", node.borrow());
         }

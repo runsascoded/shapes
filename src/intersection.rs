@@ -3,10 +3,14 @@ use std::fmt::Display;
 use std::ops::{Mul, Div};
 
 use crate::circle::Circle;
+use crate::deg::Deg;
+use crate::dual::Dual;
 use crate::edge::Edge;
 
+type D = Dual;
+
 #[derive(Clone, Debug)]
-pub struct Intersection<D> {
+pub struct Intersection {
     pub x: D,
     pub y: D,
     pub c0idx: usize,
@@ -16,8 +20,20 @@ pub struct Intersection<D> {
     // pub edges: [ [usize; 2]; 2],
 }
 
-impl<D: Display + Clone + Mul<f64, Output = D> + Div<f64, Output = D>> Display for Intersection<D> {
+impl Intersection {
+    pub fn theta(&self, idx: usize) -> D {
+        if idx == self.c0idx {
+            self.t0.clone()
+        } else if idx == self.c1idx {
+            self.t1.clone()
+        } else {
+            panic!("Invalid circle index {} ({}, {})", idx, self.c0idx, self.c1idx);
+        }
+    }
+}
+
+impl Display for Intersection {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "I({:.3}, {:.3}, C{}/C{}", self.x, self.y, self.c0idx, self.c1idx)
+        write!(f, "I({:.3}, {:.3}, C{}({})/C{}({})", self.x, self.y, self.c0idx, self.t0.deg().s(0), self.c1idx, self.t1.deg().s(0))
     }
 }

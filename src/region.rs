@@ -19,7 +19,7 @@ impl Region {
     pub fn len(&self) -> usize {
         self.segments.len()
     }
-    pub fn polygon_area(&self, intersections: &Vec<Intersection<D>>) -> D {
+    pub fn polygon_area(&self, intersections: &Vec<Intersection>) -> D {
         let n = self.len();
         let iter = self.segments.iter().enumerate();
         let pcs = iter.map(|(idx, cur_s)| {
@@ -34,7 +34,7 @@ impl Region {
     pub fn secant_area(&self) -> D {
         todo!();
     }
-    pub fn area(&self, intersections: &Vec<Intersection<D>>) -> D {
+    pub fn area(&self, intersections: &Vec<Intersection>) -> D {
         self.polygon_area(intersections) + self.secant_area()
     }
 }
