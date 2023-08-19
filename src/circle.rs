@@ -107,6 +107,14 @@ impl Circle<D> {
         let y = p.y.clone() - self.c.y.clone();
         y.clone().atan2(x.clone())
     }
+    pub fn contains(&self, p: &R2<D>) -> bool {
+        let x = p.x.clone() - self.c.x.clone();
+        let y = p.y.clone() - self.c.y.clone();
+        let r2 = self.r.clone() * self.r.clone();
+        let x2 = x.clone() * x.clone();
+        let y2 = y.clone() * y.clone();
+        x2.clone() + y2.clone() <= r2.clone()
+    }
 }
 
 impl<D: Display> Display for Circle<D> {

@@ -213,6 +213,14 @@ impl Add<&Dual> for Dual {
     }
 }
 
+impl<'a> Add<&Dual> for &'a Dual {
+    type Output = Dual;
+    fn add(self, rhs: &Dual) -> Self::Output {
+        assert_eq!(self.1, rhs.1);
+        Dual(self.0.clone() + rhs.0.clone(), self.1)
+    }
+}
+
 impl AddAssign for Dual {
     fn add_assign(&mut self, rhs: Self) {
         assert_eq!(self.1, rhs.1);

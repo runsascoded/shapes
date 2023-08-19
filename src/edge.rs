@@ -2,13 +2,16 @@ use std::{fmt::Display, ops::{Div, Mul}, rc::Rc, cell::RefCell};
 
 use crate::{circle::Circle, intersection::{Intersection, Node}, dual::Dual};
 
+type C = Rc<RefCell<Circle<D>>>;
 type D = Dual;
 
 #[derive(Debug, Clone)]
 pub struct Edge {
-    pub c: Rc<RefCell<Circle<D>>>,
+    pub c: C,
     pub i0: Node,
     pub i1: Node,
+    pub containers: Vec<C>,
+    pub containments: Vec<bool>,
 }
 
 impl Edge {
@@ -17,6 +20,9 @@ impl Edge {
     }
     pub fn t1(&self) -> D {
         self.i1.borrow().theta(self.c.borrow().idx)
+    }
+    pub fn midpoint(&self) -> D {
+        (self.t0() + self.t1()) / 2.
     }
 }
 

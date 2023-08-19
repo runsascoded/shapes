@@ -1,9 +1,10 @@
 use std::{borrow::BorrowMut, cell::RefCell, rc::Rc};
 
-use crate::{dual::Dual, circle::Circle, intersection::{Intersection, Node}, edge::Edge, region::Region};
+use crate::{dual::Dual, circle::Circle, intersection::{Intersection, Node}, edge, region::Region, r2::R2};
 
-type D = Dual;
 type C = Rc<RefCell<Circle<D>>>;
+type D = Dual;
+type Edge = Rc<RefCell<edge::Edge>>;
 
 struct Shapes {
     shapes: Vec<Circle<f64>>,
@@ -50,16 +51,38 @@ impl Shapes {
         }
 
         let mut edges: Vec<Edge> = Vec::new();
+        let mut edges_by_shape: Vec<Vec<Edge>> = Vec::new();
         for idx in 0..n {
             let nodes = &nodes_by_shape[idx];
+            let mut shape_edges: Vec<Edge> = Vec::new();
             let m = n;
             let n = nodes.len();
+            let c = duals[idx].clone();
             for jdx in 0..n {
                 let i0 = nodes[jdx].clone();
                 let i1 = nodes[(jdx + 1) % n].clone();
-                let edge = Edge { c: duals[idx].clone(), i0, i1 };
-                edges.push(edge);
+                let midpoint = R2 {
+                    x: (&i0.borrow().x + &i1.borrow().x) / 2.,
+                    y: (&i0.borrow().y + &i1.borrow().y) / 2.,
+                 };
+                 let mut containers: Vec<C> = Vec::new();
+                 let mut containments: Vec<bool> = Vec::new();
+                 for cdx in 0..m {
+                    if cdx == idx {
+                        continue;
+                    }
+                    let container = duals[cdx].clone();
+                    let contained = container.borrow().contains(&midpoint);
+                    if contained {
+                        containers.push(container);
+                    }
+                    containments.push(contained);
+                 }
+                let edge = Rc::new(RefCell::new(edge::Edge { c: c.clone(), i0, i1, containers, containments }));
+                edges.push(edge.clone());
+                shape_edges.push(edge.clone());
             }
+            edges_by_shape.push(shape_edges);
         }
 
         Shapes { shapes, duals, nodes, nodes_by_shape, nodes_by_shapes, edges, }
