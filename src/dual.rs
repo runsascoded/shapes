@@ -5,6 +5,8 @@ use nalgebra::{Dyn, RealField, U1, allocator::Allocator, DefaultAllocator, Matri
 use num_dual::{DualVec64, DualDVec64, DualNum, Derivative, DualVec};
 use serde::{Deserialize, Serialize};
 
+pub type D = Dual;
+
 #[derive(Clone, PartialEq, PartialOrd)]
 pub struct Dual(
     DualDVec64,

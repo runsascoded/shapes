@@ -1,18 +1,14 @@
-use std::{borrow::BorrowMut, cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
-use crate::{dual::Dual, circle::Circle, intersection::{Intersection, Node}, edge, region::Region, r2::R2};
+use crate::{circle::{Circle, C}, intersection::Node, edge::{self, E}, r2::R2};
 
-type C = Rc<RefCell<Circle<D>>>;
-type D = Dual;
-type Edge = Rc<RefCell<edge::Edge>>;
-
-struct Shapes {
+pub struct Shapes {
     shapes: Vec<Circle<f64>>,
     duals: Vec<C>,
     nodes: Vec<Node>,
     nodes_by_shape: Vec<Vec<Node>>,
     nodes_by_shapes: Vec<Vec<Vec<Node>>>,
-    edges: Vec<Edge>,
+    edges: Vec<E>,
     // regions: Vec<Region>,
 }
 
@@ -46,15 +42,15 @@ impl Shapes {
         }
 
         // Sort each circle's nodes in order of where they appear on the circle (from -PI to PI)
-        for (idx, mut nodes) in nodes_by_shape.iter_mut().enumerate() {
+        for (idx, nodes) in nodes_by_shape.iter_mut().enumerate() {
             nodes.sort_by_cached_key(|n| n.borrow().theta(idx))
         }
 
-        let mut edges: Vec<Edge> = Vec::new();
-        let mut edges_by_shape: Vec<Vec<Edge>> = Vec::new();
+        let mut edges: Vec<E> = Vec::new();
+        let mut edges_by_shape: Vec<Vec<E>> = Vec::new();
         for idx in 0..n {
             let nodes = &nodes_by_shape[idx];
-            let mut shape_edges: Vec<Edge> = Vec::new();
+            let mut shape_edges: Vec<E> = Vec::new();
             let m = n;
             let n = nodes.len();
             let c = duals[idx].clone();
@@ -64,23 +60,35 @@ impl Shapes {
                 let midpoint = R2 {
                     x: (&i0.borrow().x + &i1.borrow().x) / 2.,
                     y: (&i0.borrow().y + &i1.borrow().y) / 2.,
-                 };
-                 let mut containers: Vec<C> = Vec::new();
-                 let mut containments: Vec<bool> = Vec::new();
-                 for cdx in 0..m {
-                    if cdx == idx {
-                        continue;
-                    }
-                    let container = duals[cdx].clone();
-                    let contained = container.borrow().contains(&midpoint);
-                    if contained {
-                        containers.push(container);
-                    }
-                    containments.push(contained);
-                 }
-                let edge = Rc::new(RefCell::new(edge::Edge { c: c.clone(), i0, i1, containers, containments }));
+                };
+                let mut containers: Vec<C> = Vec::new();
+                let mut containments: Vec<bool> = Vec::new();
+                for cdx in 0..m {
+                   if cdx == idx {
+                       continue;
+                   }
+                   let container = duals[cdx].clone();
+                   let contained = container.borrow().contains(&midpoint);
+                   if contained {
+                       containers.push(container);
+                   }
+                   containments.push(contained);
+                }
+                let c0idx = i0.borrow().other(idx);
+                let c1idx = i1.borrow().other(idx);
+                let edge = Rc::new(RefCell::new(edge::Edge {
+                    c: c.clone(),
+                    c0: duals[c0idx].clone(),
+                    c1: duals[c1idx].clone(),
+                    i0,
+                    i1,
+                    containers,
+                    containments,
+                 }));
                 edges.push(edge.clone());
                 shape_edges.push(edge.clone());
+                edge.borrow_mut().i0.borrow_mut().add_edge(edge.clone());
+                edge.borrow_mut().i1.borrow_mut().add_edge(edge.clone());
             }
             edges_by_shape.push(shape_edges);
         }
@@ -92,6 +100,8 @@ impl Shapes {
 #[cfg(test)]
 mod tests {
     use crate::deg::Deg;
+    use crate::dual::Dual;
+    use crate::math::round;
     use crate::r2::R2;
 
     use super::*;
@@ -103,14 +113,6 @@ mod tests {
         let c2 = Circle { idx: 2, c: R2 { x: 0., y: 1. }, r: 1. };
         let circles = vec![c0, c1, c2];
         let shapes = Shapes::new(circles);
-
-        fn round(f: &f64) -> i64 {
-            if f >= &0. {
-                (f + 0.5) as i64
-            } else {
-                (f - 0.5) as i64
-            }
-        }
 
         let check = |idx: usize, x: Dual, y: Dual, c0idx: usize, deg0v: i64, deg0d: [i64; 9], c1idx: usize, deg1v: i64, deg1d: [i64; 9]| {
             let n = shapes.nodes[idx].borrow();
@@ -142,25 +144,33 @@ mod tests {
             check(idx, x, y, *c0idx, *deg0v, *deg0d, *c1idx, *deg1v, *deg1d);
         }
 
-        for node in shapes.nodes.iter() {
-            println!("{}", node.borrow());
+        // for node in shapes.nodes.iter() {
+        //     println!("{}", node.borrow());
+        // }
+        // println!();
+        // for (idx, nodes) in shapes.nodes_by_shape.iter().enumerate() {
+        //     println!("nodes_by_shape[{}]: {}", idx, nodes.len());
+        //     for node in nodes.iter() {
+        //         println!("  {}", node.borrow());
+        //     }
+        // }
+        // println!();
+        // for (idx, shapes_nodes) in shapes.nodes_by_shapes.iter().enumerate() {
+        //     println!("nodes_by_shapes[{}]:", idx);
+        //     for (jdx, nodes) in shapes_nodes.iter().enumerate() {
+        //         println!("  nodes_by_shapes[{}][{}]: {}", idx, jdx, nodes.len());
+        //         for node in nodes.iter() {
+        //             println!("    {}", node.borrow());
+        //         }
+        //     }
+        // }
+
+        assert_eq!(shapes.edges.len(), 12);
+        println!("edges:");
+        for edge in shapes.edges.iter() {
+            let edge = edge.borrow();
+            println!("C{}: {}({}) → {}({})", edge.c.borrow().idx, edge.t0().v().deg_str(), edge.c0.borrow().idx, edge.t1().v().deg_str(), edge.c1.borrow().idx);
         }
         println!();
-        for (idx, nodes) in shapes.nodes_by_shape.iter().enumerate() {
-            println!("nodes_by_shape[{}]: {}", idx, nodes.len());
-            for node in nodes.iter() {
-                println!("  {}", node.borrow());
-            }
-        }
-        println!();
-        for (idx, shapes_nodes) in shapes.nodes_by_shapes.iter().enumerate() {
-            println!("nodes_by_shapes[{}]:", idx);
-            for (jdx, nodes) in shapes_nodes.iter().enumerate() {
-                println!("  nodes_by_shapes[{}][{}]: {}", idx, jdx, nodes.len());
-                for node in nodes.iter() {
-                    println!("    {}", node.borrow());
-                }
-            }
-        }
     }
 }

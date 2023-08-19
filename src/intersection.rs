@@ -1,13 +1,11 @@
 use std::cell::RefCell;
-use std::f64::consts::PI;
 use std::fmt::Display;
-use std::ops::{Mul, Div};
 use std::rc::Rc;
 
-use crate::circle::Circle;
 use crate::deg::Deg;
 use crate::dual::Dual;
-use crate::edge::Edge;
+use crate::edge::E;
+use crate::r2::R2;
 
 type D = Dual;
 pub type Node = Rc<RefCell<Intersection>>;
@@ -20,7 +18,7 @@ pub struct Intersection {
     pub c1idx: usize,
     pub t0: D,
     pub t1: D,
-    // pub edges: [ [usize; 2]; 2],
+    pub edges: Vec<E>,
 }
 
 impl Intersection {
@@ -31,6 +29,21 @@ impl Intersection {
             self.t1.clone()
         } else {
             panic!("Invalid circle index {} ({}, {})", idx, self.c0idx, self.c1idx);
+        }
+    }
+    pub fn add_edge(&mut self, edge: E) {
+        self.edges.push(edge);
+    }
+    pub fn p(&self) -> R2<D> {
+        R2 { x: self.x.clone(), y: self.y.clone() }
+    }
+    pub fn other(&self, cidx: usize) -> usize {
+        if cidx == self.c0idx {
+            self.c1idx
+        } else if cidx == self.c1idx {
+            self.c0idx
+        } else {
+            panic!("Invalid circle index {} ({}, {})", cidx, self.c0idx, self.c1idx);
         }
     }
 }

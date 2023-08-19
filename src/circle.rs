@@ -1,11 +1,10 @@
-use std::{fmt::Display, ops::{Mul, Add}, f64::consts::PI};
+use std::{fmt::Display, ops::{Mul, Add}, rc::Rc, cell::RefCell};
 
 use derive_more::From;
 use serde::{Deserialize, Serialize};
 use crate::{
     r2::R2,
-    region::Region,
-    intersection::Intersection, edge::Edge, dual::Dual
+    intersection::Intersection, dual::{D, Dual},
 };
 
 #[derive(Debug, Clone, Copy, From, Serialize, Deserialize)]
@@ -15,7 +14,7 @@ pub struct Circle<D> {
     pub r: D,
 }
 
-type D = Dual;
+pub type C = Rc<RefCell<Circle<D>>>;
 
 impl Circle<f64> {
     pub fn dual<'a>(&self, pre_zeros: usize, post_zeros: usize) -> Circle<D> {
@@ -56,7 +55,7 @@ impl Circle<D> {
             let p = R2 { x: x.clone(), y: y.clone() };
             let t0 = c0.theta(p.clone());
             let t1 = c1.theta(p.clone());
-            Intersection { x, y, c0idx: c0.idx, c1idx: c1.idx, t0, t1 }
+            Intersection { x, y, c0idx: c0.idx, c1idx: c1.idx, t0, t1, edges: Vec::new(), }
         });
         intersections
     }

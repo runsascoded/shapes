@@ -6,6 +6,7 @@ mod deg;
 mod dual;
 mod edge;
 mod intersection;
+mod math;
 mod r2;
 mod region;
 mod shapes;

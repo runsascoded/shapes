@@ -1,13 +1,14 @@
-use std::{fmt::Display, ops::{Div, Mul}, rc::Rc, cell::RefCell};
+use std::{fmt::Display, rc::Rc, cell::RefCell};
 
-use crate::{circle::Circle, intersection::{Intersection, Node}, dual::Dual};
+use crate::{circle::C, intersection::Node, dual::D};
 
-type C = Rc<RefCell<Circle<D>>>;
-type D = Dual;
+pub type E = Rc<RefCell<Edge>>;
 
 #[derive(Debug, Clone)]
 pub struct Edge {
     pub c: C,
+    pub c0: C,
+    pub c1: C,
     pub i0: Node,
     pub i1: Node,
     pub containers: Vec<C>,
