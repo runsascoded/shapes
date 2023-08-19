@@ -1,6 +1,7 @@
-use std::{fmt::Display, ops::{Mul, Add}, rc::Rc, cell::RefCell};
+use std::{fmt::Display, ops::{Mul, Add}, rc::Rc, cell::RefCell, f64::consts::PI};
 
 use derive_more::From;
+use num_traits::Float;
 use serde::{Deserialize, Serialize};
 use crate::{
     r2::R2,
@@ -15,6 +16,14 @@ pub struct Circle<D> {
 }
 
 pub type C = Rc<RefCell<Circle<D>>>;
+
+impl<D: Clone + Float> Circle<D> {
+    pub fn point(&self, t: D) -> R2<D> {
+        let x = self.c.x.clone() + self.r.clone() * t.clone().cos();
+        let y = self.c.y.clone() + self.r.clone() * t.clone().sin();
+        R2 { x, y }
+    }
+}
 
 impl Circle<f64> {
     pub fn dual<'a>(&self, pre_zeros: usize, post_zeros: usize) -> Circle<D> {
@@ -32,17 +41,37 @@ impl Circle<f64> {
         let r = Dual::new(self.r  , dv());
         let c = R2 { x, y };
         Circle::from((self.idx, c, r))
-        // &Circle { c, r }
     }
     pub fn intersect(&self, o: &Circle<f64>) -> [ Intersection; 2 ] {
-        // let c0 = self.dual(0, 3);
-        // let c1 = o.dual(3, 0);
-        // c0.intersect(&c1)
-        self.dual(0, 3).intersect(&o.dual(3, 0))
+        let c0 = self.dual(0, 3);
+        let c1 = o.dual(3, 0);
+        c0.intersect(&c1)
+    }
+    pub fn arc_midpoint(&self, t0: f64, t1: f64) -> R2<f64> {
+        let mut t = (t0 + t1) / 2.;
+        if (t1 < t0) {
+            if t > 0. {
+                t -= PI;
+            } else {
+                t += PI;
+            }
+        }
+        self.point(t)
+    }
+    pub fn contains(&self, p: &R2<f64>) -> bool {
+        let x = p.x - self.c.x;
+        let y = p.y - self.c.y;
+        let r2 = self.r * self.r;
+        let x2 = x * x;
+        let y2 = y * y;
+        x2 + y2 <= r2
     }
 }
 
 impl Circle<D> {
+    pub fn v(&self) -> Circle<f64> {
+        Circle { idx: self.idx, c: self.c.v(), r: self.r.v() }
+    }
     pub fn intersect(&self, c1: &Circle<D>) -> [ Intersection; 2 ] {
         let c0 = self;
         let projected = c0.project(&c1);
@@ -105,14 +134,6 @@ impl Circle<D> {
         let x = p.x.clone() - self.c.x.clone();
         let y = p.y.clone() - self.c.y.clone();
         y.clone().atan2(x.clone())
-    }
-    pub fn contains(&self, p: &R2<D>) -> bool {
-        let x = p.x.clone() - self.c.x.clone();
-        let y = p.y.clone() - self.c.y.clone();
-        let r2 = self.r.clone() * self.r.clone();
-        let x2 = x.clone() * x.clone();
-        let y2 = y.clone() * y.clone();
-        x2.clone() + y2.clone() <= r2.clone()
     }
 }
 

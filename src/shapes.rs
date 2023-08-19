@@ -57,10 +57,9 @@ impl Shapes {
             for jdx in 0..n {
                 let i0 = nodes[jdx].clone();
                 let i1 = nodes[(jdx + 1) % n].clone();
-                let midpoint = R2 {
-                    x: (&i0.borrow().x + &i1.borrow().x) / 2.,
-                    y: (&i0.borrow().y + &i1.borrow().y) / 2.,
-                };
+                let t0 = i0.borrow().theta(idx).v();
+                let t1 = i1.borrow().theta(idx).v();
+                let arc_midpoint = shapes[idx].arc_midpoint(t0, t1);
                 let mut containers: Vec<C> = Vec::new();
                 let mut containments: Vec<bool> = Vec::new();
                 for cdx in 0..m {
@@ -68,7 +67,7 @@ impl Shapes {
                        continue;
                    }
                    let container = duals[cdx].clone();
-                   let contained = container.borrow().contains(&midpoint);
+                   let contained = container.borrow().v().contains(&arc_midpoint);
                    if contained {
                        containers.push(container);
                    }
@@ -169,7 +168,8 @@ mod tests {
         println!("edges:");
         for edge in shapes.edges.iter() {
             let edge = edge.borrow();
-            println!("C{}: {}({}) → {}({})", edge.c.borrow().idx, edge.t0().v().deg_str(), edge.c0.borrow().idx, edge.t1().v().deg_str(), edge.c1.borrow().idx);
+            let containers: Vec<String> = edge.containers.iter().map(|c| format!("{}", c.borrow().idx)).collect();
+            println!("C{}: {}({}) → {}({}), containers: [{}]", edge.c.borrow().idx, edge.t0().v().deg_str(), edge.c0.borrow().idx, edge.t1().v().deg_str(), edge.c1.borrow().idx, containers.join(","));
         }
         println!();
     }

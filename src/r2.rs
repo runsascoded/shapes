@@ -1,9 +1,6 @@
 use std::{ops::{Sub, Mul, Add, Div}, fmt::{Display, Formatter, self}};
 use approx::{AbsDiffEq, RelativeEq};
-use derive_more::{From};
 
-use nalgebra::Const;
-use num_dual::DualVec64;
 use serde::{Deserialize, Serialize};
 
 use crate::dual::Dual;
@@ -20,14 +17,11 @@ impl<D: Display> Display for R2<D> {
     }
 }
 
-// impl<'a> From<R2<DualVec64<Const<3>>>> for R2<Dual> {
-//     fn from(dv: R2<DualVec64<Const<3>>>) -> Self {
-//         R2 {
-//             x: dv.x.into(),
-//             y: dv.y.into(),
-//         }
-//     }
-// }
+impl R2<Dual> {
+    pub fn v(&self) -> R2<f64> {
+        R2 { x: self.x.v(), y: self.y.v() }
+    }
+}
 
 impl AbsDiffEq for R2<Dual> {
     type Epsilon = f64;

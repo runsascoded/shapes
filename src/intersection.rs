@@ -37,6 +37,9 @@ impl Intersection {
     pub fn p(&self) -> R2<D> {
         R2 { x: self.x.clone(), y: self.y.clone() }
     }
+    pub fn v(&self) -> R2<f64> {
+        R2 { x: self.x.v(), y: self.y.v() }
+    }
     pub fn other(&self, cidx: usize) -> usize {
         if cidx == self.c0idx {
             self.c1idx
