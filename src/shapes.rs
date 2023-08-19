@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc, f64::consts::PI};
 
-use crate::{circle::{Circle, C}, intersection::Node, edge::{self, E}, r2::R2};
+use crate::{circle::{Circle, C}, intersection::Node, edge::{self, E}, r2::R2, region::Region};
 
 pub struct Shapes {
     shapes: Vec<Circle<f64>>,
@@ -47,6 +47,7 @@ impl Shapes {
             nodes.sort_by_cached_key(|n| n.borrow().theta(idx))
         }
 
+        // Compute connected components (shape -> shape -> bool)
         let mut is_connected: Vec<Vec<bool>> = Vec::new();
         for idx in 0..n {
             let mut connected: Vec<bool> = Vec::new();
@@ -89,22 +90,27 @@ impl Shapes {
                     t1 += 2. * PI;
                 }
                 let arc_midpoint = shapes[idx].arc_midpoint(t0.v(), t1.v());
+                let mut is_component_boundary = true;
                 let mut containers: Vec<C> = Vec::new();
                 let mut containments: Vec<bool> = Vec::new();
                 for cdx in 0..m {
-                   if cdx == idx {
-                       continue;
-                   }
-                   let container = duals[cdx].clone();
-                   let contained = container.borrow().v().contains(&arc_midpoint);
-                   if contained {
-                       containers.push(container);
-                   }
-                   containments.push(contained);
+                    if cdx == idx {
+                        continue;
+                    }
+                    let container = duals[cdx].clone();
+                    let contained = container.borrow().v().contains(&arc_midpoint);
+                    if contained {
+                        // Shape cdx contains this edge
+                        containers.push(container);
+                        if is_connected[idx][cdx] {
+                            is_component_boundary = false;
+                        }
+                    }
+                    containments.push(contained);
                 }
                 let c0idx = i0.borrow().other(idx);
                 let c1idx = i1.borrow().other(idx);
-                let expected_visits = 2; // TODO
+                let expected_visits = if is_component_boundary { 1 } else { 2 };
                 let edge = Rc::new(RefCell::new(edge::Edge {
                     c: c.clone(),
                     c0: duals[c0idx].clone(),
@@ -122,6 +128,11 @@ impl Shapes {
                 edge.borrow_mut().i1.borrow_mut().add_edge(edge.clone());
             }
             edges_by_shape.push(shape_edges);
+        }
+
+        let mut regions: Vec<Region> = Vec::new();
+        fn traverse() {
+
         }
 
         Shapes { shapes, duals, nodes, nodes_by_shape, nodes_by_shapes, edges, is_connected }
@@ -202,7 +213,14 @@ mod tests {
         for edge in shapes.edges.iter() {
             let edge = edge.borrow();
             let containers: Vec<String> = edge.containers.iter().map(|c| format!("{}", c.borrow().idx)).collect();
-            println!("C{}: {}({}) → {}({}), containers: [{}]", edge.c.borrow().idx, edge.t0.v().deg_str(), edge.c0.borrow().idx, edge.t1.v().deg_str(), edge.c1.borrow().idx, containers.join(","));
+            println!(
+                "C{}: {}({}) → {}({}), containers: [{}], expected_visits: {}",
+                edge.c.borrow().idx,
+                edge.t0.v().deg_str(), edge.c0.borrow().idx,
+                edge.t1.v().deg_str(), edge.c1.borrow().idx,
+                containers.join(","),
+                edge.expected_visits,
+            );
         }
         println!();
 
