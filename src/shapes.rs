@@ -141,10 +141,15 @@ impl Shapes {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Ref;
+    use std::fmt::{Formatter, Display};
+
     use crate::deg::Deg;
     use crate::dual::Dual;
+    use crate::edge::Edge;
     use crate::math::round;
     use crate::r2::R2;
+    use crate::region::Segment;
 
     use super::*;
 
@@ -208,19 +213,22 @@ mod tests {
         //     }
         // }
 
-        assert_eq!(shapes.edges.len(), 12);
-        println!("edges:");
-        for edge in shapes.edges.iter() {
-            let edge = edge.borrow();
+        fn edge_str(edge: Ref<Edge>) -> String {
             let containers: Vec<String> = edge.containers.iter().map(|c| format!("{}", c.borrow().idx)).collect();
-            println!(
+            format!(
                 "C{}: {}({}) → {}({}), containers: [{}], expected_visits: {}",
                 edge.c.borrow().idx,
                 edge.t0.v().deg_str(), edge.c0.borrow().idx,
                 edge.t1.v().deg_str(), edge.c1.borrow().idx,
                 containers.join(","),
                 edge.expected_visits,
-            );
+            )
+        }
+
+        assert_eq!(shapes.edges.len(), 12);
+        println!("edges:");
+        for edge in shapes.edges.iter() {
+            println!("{}", edge_str(edge.borrow()));
         }
         println!();
 
@@ -231,6 +239,14 @@ mod tests {
                 print!("{}", if col { "1" } else { "0" });
             }
             println!();
+        }
+        println!();
+
+        let segment = Segment { edge: shapes.edges[0].clone(), fwd: true };
+        let successors = segment.successor_candidates();
+        println!("successors:");
+        for successor in successors {
+            println!("  {} (fwd: {})", edge_str(successor.edge.borrow()), successor.fwd);
         }
         println!();
     }

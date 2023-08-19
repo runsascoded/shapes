@@ -1,6 +1,6 @@
-use std::{iter::Sum, ops::{Div, Mul, Sub, Add}, fmt::{Formatter, Display, self}};
+use std::fmt::{Formatter, Display, self};
 
-use crate::{edge::{Edge, E}, intersection::Intersection, dual::Dual, r2::R2};
+use crate::{edge::E, intersection::Node, dual::Dual};
 
 #[derive(Debug, Clone)]
 pub struct Segment {
@@ -15,28 +15,32 @@ impl Segment {
     pub fn secant_area(&self) -> D {
         self.edge.borrow().secant_area() * self.sgn()
     }
-    pub fn start(&self) -> R2<D> {
+    pub fn start(&self) -> Node {
         let e = self.edge.borrow();
         let i = if self.fwd { &e.i0 } else { &e.i1 };
-        i.clone().borrow().p()
+        i.clone()
     }
-    pub fn end(&self) -> R2<D> {
+    pub fn end(&self) -> Node {
         let e = self.edge.borrow();
         let i = if self.fwd { &e.i1 } else { &e.i0 };
-        i.clone().borrow().p()
+        i.clone()
     }
-    // pub fn sector_area(&self) -> D {
-    //     let e = self.edge.borrow();
-    //     let r = e.c.borrow().r.clone();
-    //     let theta = e.theta();
-    //     r * r * theta / 2.
-    // }
-    // pub fn triangle_area(&self) -> D {
-    //     let e = self.edge.borrow();
-    //     let r = e.c.borrow().r.clone();
-    //     let theta = e.theta();
-    //     r * r * theta.sin() / 2.
-    // }
+    pub fn successor_candidates(&self) -> Vec<Segment> {
+        let end = self.end();
+        let end_p = end.borrow().p();
+        // println!("end: {}", end_p);
+        let edge = self.edge.clone();
+        let idx = edge.borrow().c.borrow().idx;
+        let successors = end.borrow().edges.iter().filter(|e| {
+            e.borrow().c.borrow().idx != idx
+        }).map(|e| {
+            let p = e.borrow().i0.borrow().p();
+            let fwd = p == end_p;
+            // println!("chk: {}: {}", p, fwd);
+            Segment { edge: e.clone(), fwd }
+        }).collect();
+        successors
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -50,18 +54,18 @@ impl Region {
     pub fn len(&self) -> usize {
         self.segments.len()
     }
-    pub fn polygon_area(&self, intersections: &Vec<Intersection>) -> D {
+    pub fn polygon_area(&self) -> D {
         self.segments.iter().map(|s| {
-            let cur = s.start();
-            let nxt = s.end();
+            let cur = s.start().borrow().p();
+            let nxt = s.end().borrow().p();
             cur.x * nxt.y - cur.y * nxt.x
         }).sum::<D>() / 2.
     }
     pub fn secant_area(&self) -> D {
         self.segments.iter().map(|s| s.secant_area()).sum::<D>()
     }
-    pub fn area(&self, intersections: &Vec<Intersection>) -> D {
-        self.polygon_area(intersections) + self.secant_area()
+    pub fn area(&self) -> D {
+        self.polygon_area() + self.secant_area()
     }
 }
 
