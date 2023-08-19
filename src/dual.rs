@@ -3,6 +3,7 @@ use std::{ops::{Deref, Mul, Sub, Neg, Div, AddAssign, SubAssign, Add}, fmt::{Dis
 use approx::{RelativeEq, AbsDiffEq};
 use nalgebra::{Dyn, RealField, U1, Matrix, ComplexField};
 use num_dual::{DualDVec64, Derivative};
+use num_traits::Zero;
 
 pub type D = Dual;
 
@@ -20,6 +21,10 @@ impl Dual {
         format!("{} + [{}]ε", Dual::fmt(&self.v(), n), self.d().iter().map(|d| Dual::fmt(d, n)).collect::<Vec<String>>().join(" "))
     }
 
+    pub fn is_normal(&self) -> bool {
+        let v = self.v();
+        (v.is_normal() || v.is_zero()) && self.d().iter().all(|d| d.is_normal() || d.is_zero())
+    }
 
     pub fn new(v: f64, d: Vec<f64>) -> Self {
         let n = d.len();

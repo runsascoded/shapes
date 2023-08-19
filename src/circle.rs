@@ -42,13 +42,13 @@ impl Circle<f64> {
         let c = R2 { x, y };
         Circle::from((self.idx, c, r))
     }
-    pub fn intersect(&self, o: &Circle<f64>) -> [ Intersection; 2 ] {
+    pub fn intersect(&self, o: &Circle<f64>) -> Vec<Intersection> {
         let c0 = self.dual(0, 3);
         let c1 = o.dual(3, 0);
         c0.intersect(&c1)
     }
     pub fn arc_midpoint(&self, t0: f64, mut t1: f64) -> R2<f64> {
-        if (t1 < t0) {
+        if t1 < t0 {
             t1 += 2. * PI;
         }
         let t = (t0 + t1) / 2.;
@@ -68,12 +68,12 @@ impl Circle<D> {
     pub fn v(&self) -> Circle<f64> {
         Circle { idx: self.idx, c: self.c.v(), r: self.r.v() }
     }
-    pub fn intersect(&self, c1: &Circle<D>) -> [ Intersection; 2 ] {
+    pub fn intersect(&self, c1: &Circle<D>) -> Vec<Intersection> {
         let c0 = self;
         let projected = c0.project(&c1);
         let unit_intersections = projected.unit_intersections();
-        let invert = |p: R2<D>, c: &Circle<D>| c.invert(p);
-        let points = unit_intersections.map(|p| invert(p, &c1));
+        let invert = |p: &R2<D>, c: &Circle<D>| c.invert(p);
+        let points = unit_intersections.iter().map(|p| invert(p, &c1));
         let intersections = points.map(|p| {
             let x = p.x.clone();
             let y = p.y.clone();
@@ -82,9 +82,9 @@ impl Circle<D> {
             let t1 = c1.theta(p.clone());
             Intersection { x, y, c0idx: c0.idx, c1idx: c1.idx, t0, t1, edges: Vec::new(), }
         });
-        intersections
+        intersections.collect()
     }
-    pub fn unit_intersections(&self) -> [R2<D>; 2] {
+    pub fn unit_intersections(&self) -> Vec<R2<D>> {
         let cx = self.c.x.clone();
         let cy = self.c.y.clone();
         let r = self.r.clone();
@@ -116,15 +116,22 @@ impl Circle<D> {
             let x1 = u.clone() * y1.clone() + v.clone();
             [ x0, y0, x1, y1 ]
         };
-        [ R2 { x: x0, y: y0 }, R2 { x: x1, y: y1 } ]
+        let mut intersections: Vec<R2<D>> = Vec::new();
+        if x0.is_normal() && y0.is_normal() {
+            intersections.push(R2 { x: x0, y: y0 });
+        }
+        if x1.is_normal() && y1.is_normal() {
+            intersections.push(R2 { x: x1, y: y1 });
+        }
+        intersections
     }
     pub fn project(&self, o: &Circle<D>) -> Self {
         let c = (self.c.clone() - o.c.clone()) / o.r.clone();
         let r = self.r.clone() / o.r.clone();
         Circle { idx: self.idx, c, r, }
     }
-    pub fn invert(&self, p: R2<D>) -> R2<D> {
-        p * self.r.clone() + self.c.clone()
+    pub fn invert(&self, p: &R2<D>) -> R2<D> {
+        self.c.clone() + p * self.r.clone()
     }
     pub fn theta(&self, p: R2<D>) -> D {
         let x = p.x.clone() - self.c.x.clone();
@@ -142,14 +149,14 @@ impl<D: Display> Display for Circle<D> {
 impl Mul<f64> for Circle<f64> {
     type Output = Circle<f64>;
     fn mul(self, rhs: f64) -> Self::Output {
-        Circle { idx: self.idx, c: self.c * rhs, r: self.r * rhs }
+        Circle { idx: self.idx, c: self.c * &rhs, r: self.r * rhs }
     }
 }
 
 impl Mul<i64> for Circle<f64> {
     type Output = Circle<f64>;
     fn mul(self, rhs: i64) -> Self::Output {
-        Circle { idx: self.idx, c: self.c * (rhs as f64), r: self.r * (rhs as f64) }
+        Circle { idx: self.idx, c: self.c * &(rhs as f64), r: self.r * (rhs as f64) }
     }
 }
 
@@ -186,7 +193,8 @@ mod tests {
     fn check(c0: Circle<f64>, c1: Circle<f64>, expected0: R2<D>, expected1: R2<D>) {
         let intersections = c0.intersect(&c1);
         // assert_eq!(region.n(), 2);
-        let [ p0, p1 ] = intersections.map(|p| R2 { x: p.x, y: p.y });
+        let p0 = intersections[0].p();
+        let p1 = intersections[1].p();
 
         // println!("c0: {}", c0);
         // println!("c1: {}", c1);

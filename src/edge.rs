@@ -15,6 +15,8 @@ pub struct Edge {
     pub t1: D,
     pub containers: Vec<C>,
     pub containments: Vec<bool>,
+    pub expected_visits: usize,
+    pub visits: usize,
 }
 
 impl Edge {

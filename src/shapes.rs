@@ -9,6 +9,7 @@ pub struct Shapes {
     nodes_by_shape: Vec<Vec<Node>>,
     nodes_by_shapes: Vec<Vec<Vec<Node>>>,
     edges: Vec<E>,
+    is_connected: Vec<Vec<bool>>,
     // regions: Vec<Region>,
 }
 
@@ -30,7 +31,7 @@ impl Shapes {
         for (idx, dual) in duals.iter().enumerate() {
             for jdx in (idx + 1)..n {
                 let intersections = dual.borrow().intersect(&duals[jdx].borrow());
-                let ns = intersections.map(|i| Rc::new(RefCell::new(i)));
+                let ns = intersections.iter().map(|i| Rc::new(RefCell::new(i.clone())));
                 for n in ns {
                     nodes.push(n.clone());
                     nodes_by_shape[idx].push(n.clone());
@@ -44,6 +45,31 @@ impl Shapes {
         // Sort each circle's nodes in order of where they appear on the circle (from -PI to PI)
         for (idx, nodes) in nodes_by_shape.iter_mut().enumerate() {
             nodes.sort_by_cached_key(|n| n.borrow().theta(idx))
+        }
+
+        let mut is_connected: Vec<Vec<bool>> = Vec::new();
+        for idx in 0..n {
+            let mut connected: Vec<bool> = Vec::new();
+            for jdx in 0..n {
+                connected.push(idx == jdx);
+            }
+            is_connected.push(connected);
+        }
+        for node in &nodes {
+            let i0 = node.borrow().c0idx;
+            let i1 = node.borrow().c1idx;
+            if !is_connected[i0][i1] {
+                for i2 in 0..n {
+                    if is_connected[i0][i2] && !is_connected[i1][i2] {
+                        for i3 in 0..n {
+                            if is_connected[i1][i3] && !is_connected[i2][i3] {
+                                is_connected[i2][i3] = true;
+                                is_connected[i3][i2] = true;
+                            }
+                        };
+                    }
+                };
+            }
         }
 
         let mut edges: Vec<E> = Vec::new();
@@ -78,6 +104,7 @@ impl Shapes {
                 }
                 let c0idx = i0.borrow().other(idx);
                 let c1idx = i1.borrow().other(idx);
+                let expected_visits = 2; // TODO
                 let edge = Rc::new(RefCell::new(edge::Edge {
                     c: c.clone(),
                     c0: duals[c0idx].clone(),
@@ -86,6 +113,8 @@ impl Shapes {
                     t0, t1,
                     containers,
                     containments,
+                    expected_visits,
+                    visits: 0,
                  }));
                 edges.push(edge.clone());
                 shape_edges.push(edge.clone());
@@ -95,7 +124,7 @@ impl Shapes {
             edges_by_shape.push(shape_edges);
         }
 
-        Shapes { shapes, duals, nodes, nodes_by_shape, nodes_by_shapes, edges, }
+        Shapes { shapes, duals, nodes, nodes_by_shape, nodes_by_shapes, edges, is_connected }
     }
 }
 
@@ -115,6 +144,10 @@ mod tests {
         let c2 = Circle { idx: 2, c: R2 { x: 0., y: 1. }, r: 1. };
         let circles = vec![c0, c1, c2];
         let shapes = Shapes::new(circles);
+
+        for node in shapes.nodes.iter() {
+            println!("{}", node.borrow());
+        }
 
         let check = |idx: usize, x: Dual, y: Dual, c0idx: usize, deg0v: i64, deg0d: [i64; 9], c1idx: usize, deg1v: i64, deg1d: [i64; 9]| {
             let n = shapes.nodes[idx].borrow();
@@ -146,9 +179,6 @@ mod tests {
             check(idx, x, y, *c0idx, *deg0v, *deg0d, *c1idx, *deg1v, *deg1d);
         }
 
-        // for node in shapes.nodes.iter() {
-        //     println!("{}", node.borrow());
-        // }
         // println!();
         // for (idx, nodes) in shapes.nodes_by_shape.iter().enumerate() {
         //     println!("nodes_by_shape[{}]: {}", idx, nodes.len());
@@ -173,6 +203,40 @@ mod tests {
             let edge = edge.borrow();
             let containers: Vec<String> = edge.containers.iter().map(|c| format!("{}", c.borrow().idx)).collect();
             println!("C{}: {}({}) → {}({}), containers: [{}]", edge.c.borrow().idx, edge.t0.v().deg_str(), edge.c0.borrow().idx, edge.t1.v().deg_str(), edge.c1.borrow().idx, containers.join(","));
+        }
+        println!();
+
+        let is_connected = shapes.is_connected;
+        println!("is_connected:");
+        for row in is_connected {
+            for col in row {
+                print!("{}", if col { "1" } else { "0" });
+            }
+            println!();
+        }
+        println!();
+    }
+    #[test]
+    fn test_components() {
+        let c0 = Circle { idx: 0, c: R2 { x: 0., y: 0. }, r: 1. };
+        let c1 = Circle { idx: 1, c: R2 { x: 1., y: 0. }, r: 1. };
+        let c2 = Circle { idx: 2, c: R2 { x: 0.5, y: 0. }, r: 3. };
+        let c3 = Circle { idx: 3, c: R2 { x: 0., y: 3. }, r: 1. };
+        let circles = vec![c0, c1, c2, c3];
+        let shapes = Shapes::new(circles);
+
+        for node in shapes.nodes.iter() {
+            println!("{}", node.borrow());
+        }
+        println!();
+
+        let is_connected = shapes.is_connected;
+        println!("is_connected:");
+        for row in is_connected {
+            for col in row {
+                print!("{}", if col { "1" } else { "0" });
+            }
+            println!();
         }
         println!();
     }

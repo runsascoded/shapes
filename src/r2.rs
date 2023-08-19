@@ -72,12 +72,22 @@ impl<D: Mul<Output = D>> Mul for R2<D> {
     }
 }
 
-impl<D: Mul<D, Output = D> + Clone> Mul<D> for R2<D> {
+impl<D: Mul<D, Output = D> + Clone> Mul<&D> for R2<D> {
     type Output = Self;
-    fn mul(self, rhs: D) -> Self::Output {
+    fn mul(self, rhs: &D) -> Self::Output {
         R2 {
             x: self.x * rhs.clone(),
             y: self.y * rhs.clone(),
+        }
+    }
+}
+
+impl<D: Mul<D, Output = D> + Clone> Mul<D> for &R2<D> {
+    type Output = R2<D>;
+    fn mul(self, rhs: D) -> Self::Output {
+        R2 {
+            x: self.x.clone() * rhs.clone(),
+            y: self.y.clone() * rhs.clone(),
         }
     }
 }
