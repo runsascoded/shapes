@@ -47,15 +47,11 @@ impl Circle<f64> {
         let c1 = o.dual(3, 0);
         c0.intersect(&c1)
     }
-    pub fn arc_midpoint(&self, t0: f64, t1: f64) -> R2<f64> {
-        let mut t = (t0 + t1) / 2.;
+    pub fn arc_midpoint(&self, t0: f64, mut t1: f64) -> R2<f64> {
         if (t1 < t0) {
-            if t > 0. {
-                t -= PI;
-            } else {
-                t += PI;
-            }
+            t1 += 2. * PI;
         }
+        let t = (t0 + t1) / 2.;
         self.point(t)
     }
     pub fn contains(&self, p: &R2<f64>) -> bool {

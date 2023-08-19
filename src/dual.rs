@@ -1,9 +1,8 @@
 use std::{ops::{Deref, Mul, Sub, Neg, Div, AddAssign, SubAssign, Add}, fmt::{Display, Debug}, iter::Sum};
 
 use approx::{RelativeEq, AbsDiffEq};
-use nalgebra::{Dyn, RealField, U1, allocator::Allocator, DefaultAllocator, Matrix, OMatrix, ComplexField};
-use num_dual::{DualVec64, DualDVec64, DualNum, Derivative, DualVec};
-use serde::{Deserialize, Serialize};
+use nalgebra::{Dyn, RealField, U1, Matrix, ComplexField};
+use num_dual::{DualDVec64, Derivative};
 
 pub type D = Dual;
 
@@ -44,6 +43,10 @@ impl Dual {
     }
     pub fn abs(&self) -> Self {
         Dual(self.0.clone().abs(), self.1)
+    }
+    #[inline]
+    pub fn sin(self) -> Self {
+        Dual(self.0.clone().sin(), self.1)
     }
     #[inline]
     pub fn atan(self) -> Self {
@@ -120,6 +123,14 @@ impl Mul<&Dual> for Dual {
     }
 }
 
+impl Mul for &Dual {
+    type Output = Dual;
+    fn mul(self, rhs: Self) -> Self::Output {
+        assert_eq!(self.1, rhs.1);
+        Dual(self.0.clone() * &rhs.0, self.1)
+    }
+}
+
 impl Mul<f64> for Dual {
     type Output = Self;
     fn mul(self, rhs: f64) -> Self::Output {
@@ -139,6 +150,22 @@ impl Sub for Dual {
     fn sub(self, rhs: Self) -> Self::Output {
         assert_eq!(self.1, rhs.1);
         Dual(self.0 - rhs.0, self.1)
+    }
+}
+
+impl Sub<&Dual> for Dual {
+    type Output = Self;
+    fn sub(self, rhs: &Self) -> Self::Output {
+        assert_eq!(self.1, rhs.1);
+        Dual(self.0 - &rhs.0, self.1)
+    }
+}
+
+impl Sub<Dual> for &Dual {
+    type Output = Dual;
+    fn sub(self, rhs: Dual) -> Self::Output {
+        assert_eq!(self.1, rhs.1);
+        Dual(self.0.clone() - rhs.0, self.1)
     }
 }
 
@@ -227,6 +254,12 @@ impl AddAssign for Dual {
     fn add_assign(&mut self, rhs: Self) {
         assert_eq!(self.1, rhs.1);
         self.0 += rhs.0;
+    }
+}
+
+impl AddAssign<f64> for Dual {
+    fn add_assign(&mut self, rhs: f64) {
+        self.0 += rhs;
     }
 }
 

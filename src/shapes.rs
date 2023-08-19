@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc, f64::consts::PI};
 
 use crate::{circle::{Circle, C}, intersection::Node, edge::{self, E}, r2::R2};
 
@@ -57,9 +57,12 @@ impl Shapes {
             for jdx in 0..n {
                 let i0 = nodes[jdx].clone();
                 let i1 = nodes[(jdx + 1) % n].clone();
-                let t0 = i0.borrow().theta(idx).v();
-                let t1 = i1.borrow().theta(idx).v();
-                let arc_midpoint = shapes[idx].arc_midpoint(t0, t1);
+                let t0 = i0.borrow().theta(idx);
+                let mut t1 = i1.borrow().theta(idx);
+                if t1 < t0 {
+                    t1 += 2. * PI;
+                }
+                let arc_midpoint = shapes[idx].arc_midpoint(t0.v(), t1.v());
                 let mut containers: Vec<C> = Vec::new();
                 let mut containments: Vec<bool> = Vec::new();
                 for cdx in 0..m {
@@ -79,8 +82,8 @@ impl Shapes {
                     c: c.clone(),
                     c0: duals[c0idx].clone(),
                     c1: duals[c1idx].clone(),
-                    i0,
-                    i1,
+                    i0, i1,
+                    t0, t1,
                     containers,
                     containments,
                  }));
@@ -169,7 +172,7 @@ mod tests {
         for edge in shapes.edges.iter() {
             let edge = edge.borrow();
             let containers: Vec<String> = edge.containers.iter().map(|c| format!("{}", c.borrow().idx)).collect();
-            println!("C{}: {}({}) → {}({}), containers: [{}]", edge.c.borrow().idx, edge.t0().v().deg_str(), edge.c0.borrow().idx, edge.t1().v().deg_str(), edge.c1.borrow().idx, containers.join(","));
+            println!("C{}: {}({}) → {}({}), containers: [{}]", edge.c.borrow().idx, edge.t0.v().deg_str(), edge.c0.borrow().idx, edge.t1.v().deg_str(), edge.c1.borrow().idx, containers.join(","));
         }
         println!();
     }

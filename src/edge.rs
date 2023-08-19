@@ -11,19 +11,25 @@ pub struct Edge {
     pub c1: C,
     pub i0: Node,
     pub i1: Node,
+    pub t0: D,
+    pub t1: D,
     pub containers: Vec<C>,
     pub containments: Vec<bool>,
 }
 
 impl Edge {
-    pub fn t0(&self) -> D {
-        self.i0.borrow().theta(self.c.borrow().idx)
+    pub fn secant_area(&self) -> D {
+        let r = &self.c.borrow().r.clone();
+        let theta = self.theta();
+        r * r / 2. * (theta.clone() - theta.sin())
     }
-    pub fn t1(&self) -> D {
-        self.i1.borrow().theta(self.c.borrow().idx)
-    }
-    pub fn midpoint(&self) -> D {
-        (self.t0() + self.t1()) / 2.
+
+    pub fn theta(&self) -> D {
+        let theta = self.t1.clone() - &self.t0;
+        if theta.re < 0. {
+            panic!("Invalid edge {}, negative theta: {}", self, theta)
+        }
+        theta
     }
 }
 
