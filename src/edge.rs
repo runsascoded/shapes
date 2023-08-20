@@ -1,4 +1,4 @@
-use std::{fmt::Display, rc::Rc, cell::RefCell};
+use std::{fmt::Display, rc::Rc, cell::RefCell, collections::HashSet};
 
 use crate::{circle::C, intersection::Node, dual::D};
 
@@ -25,13 +25,20 @@ impl Edge {
         let theta = self.theta();
         r * r / 2. * (theta.clone() - theta.sin())
     }
-
     pub fn theta(&self) -> D {
         let theta = self.t1.clone() - &self.t0;
         if theta.re < 0. {
             panic!("Invalid edge {}, negative theta: {}", self, theta)
         }
         theta
+    }
+    pub fn container_idxs(&self) -> HashSet<usize> {
+        self.containers.iter().map(|c| c.borrow().idx).collect()
+    }
+    pub fn all_idxs(&self) -> HashSet<usize> {
+        let mut idxs = self.container_idxs();
+        idxs.insert(self.c.borrow().idx);
+        idxs
     }
 }
 

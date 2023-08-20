@@ -25,14 +25,14 @@ impl Segment {
         let i = if self.fwd { &e.i1 } else { &e.i0 };
         i.clone()
     }
-    pub fn successor_candidates(&self) -> Vec<Segment> {
+    pub fn successors(&self) -> Vec<Segment> {
         let end = self.end();
         let end_p = end.borrow().p();
         // println!("end: {}", end_p);
         let edge = self.edge.clone();
         let idx = edge.borrow().c.borrow().idx;
         let successors = end.borrow().edges.iter().filter(|e| {
-            e.borrow().c.borrow().idx != idx
+            e.borrow().c.borrow().idx != idx && e.borrow().visits < e.borrow().expected_visits
         }).map(|e| {
             let p = e.borrow().i0.borrow().p();
             let fwd = p == end_p;
