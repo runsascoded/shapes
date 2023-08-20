@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc, f64::consts::PI, collections::HashSet};
 
-use crate::{circle::{Circle, C}, intersection::Node, edge::{self, E}, region::{Region, Segment}, dual::D};
+use crate::{circle::{Circle, C, Split}, intersection::Node, edge::{self, E}, region::{Region, Segment}, dual::D};
 
 pub struct Shapes {
     pub shapes: Vec<Circle<f64>>,
@@ -16,9 +16,10 @@ pub struct Shapes {
 }
 
 impl Shapes {
-    pub fn new(shapes: Vec<Circle<f64>>) -> Shapes {
-        let n = shapes.len();
-        let duals: Vec<C> = shapes.iter().enumerate().map(|(idx, c)| Rc::new(RefCell::new(c.dual(idx * 3, 3 * (n - 1 - idx))))).collect();
+    pub fn new(inputs: &Vec<Split>) -> Shapes {
+        let n = inputs.len();
+        let shapes: Vec<Circle<f64>> = inputs.iter().map(|(c, _duals)| c.clone()).collect();
+        let duals: Vec<C> = inputs.iter().map(|(c, duals)| Rc::new(RefCell::new(c.dual(duals)))).collect();
         let mut nodes: Vec<Node> = Vec::new();
         let mut nodes_by_shape: Vec<Vec<Node>> = Vec::new();
         let mut nodes_by_shapes: Vec<Vec<Vec<Node>>> = Vec::new();
@@ -277,13 +278,25 @@ mod tests {
 
     use super::*;
 
+    fn duals(idx: usize, n: usize) -> [Vec<f64>; 3 ] {
+        let mut duals = [ vec![ 0.; 3 * n ], vec![ 0.; 3 * n ], vec![ 0.; 3 * n ] ];
+        duals[0][3 * idx + 0] = 1.;
+        duals[1][3 * idx + 1] = 1.;
+        duals[2][3 * idx + 2] = 1.;
+        duals
+    }
+
     #[test]
     fn test_00_10_01() {
         let c0 = Circle { idx: 0, c: R2 { x: 0., y: 0. }, r: 1. };
         let c1 = Circle { idx: 1, c: R2 { x: 1., y: 0. }, r: 1. };
         let c2 = Circle { idx: 2, c: R2 { x: 0., y: 1. }, r: 1. };
-        let circles = vec![c0, c1, c2];
-        let shapes = Shapes::new(circles);
+        let inputs = vec![
+            (c0, duals(0, 3)),
+            (c1, duals(1, 3)),
+            (c2, duals(2, 3)),
+        ];
+        let shapes = Shapes::new(&inputs);
 
         for node in shapes.nodes.iter() {
             println!("{}", node.borrow());
@@ -378,13 +391,13 @@ mod tests {
         assert_eq!(shapes.total_expected_visits, 21);
         assert_eq!(shapes.total_visits, 21);
         let expected = [
-            "01- 0( -60) 2( -30) 1( 180): 0.500 + 0.285 =  0.785 + [ 1.366 -0.366  1.571 -0.866 -0.500  1.047 -0.500  0.866 -1.047]ε",
-            "-1- 0( -60) 2( -30) 1(  90): 0.000 + 1.785 =  1.785 + [-1.366  0.366 -1.571  1.866 -0.500  3.665 -0.500  0.134 -0.524]ε",
-            "-12 0(  30) 1( 120) 2(   0): 0.116 + 0.012 =  0.128 + [-0.366 -0.366 -0.524 -0.134  0.500  0.524  0.500 -0.134  0.524]ε",
-            "012 0(  30) 1( 120) 2( -90): 0.250 + 0.193 =  0.443 + [ 0.366  0.366  0.524 -0.866  0.500  1.047  0.500 -0.866  1.047]ε",
-            "0-2 0(  60) 2(-150) 1( 180): 0.500 + 0.285 =  0.785 + [-0.366  1.366  1.571  0.866 -0.500 -1.047 -0.500 -0.866  1.047]ε",
-            "--2 0(  60) 2(-150) 1(  90): 0.000 + 1.785 =  1.785 + [ 0.366 -1.366 -1.571  0.134 -0.500 -0.524 -0.500  1.866  3.665]ε",
-            "0-- 0( 150) 1(-120) 2( -90): 0.250 + 0.878 =  1.128 + [-1.366 -1.366  2.618  0.866  0.500 -1.047  0.500  0.866 -1.047]ε",
+            "01- 0( -60) 2( -30) 1( 180): 0.500 + 0.285 =  0.785, vec![ 1.366, -0.366,  1.571, -0.866, -0.500,  1.047, -0.500,  0.866, -1.047]",
+            "-1- 0( -60) 2( -30) 1(  90): 0.000 + 1.785 =  1.785, vec![-1.366,  0.366, -1.571,  1.866, -0.500,  3.665, -0.500,  0.134, -0.524]",
+            "-12 0(  30) 1( 120) 2(   0): 0.116 + 0.012 =  0.128, vec![-0.366, -0.366, -0.524, -0.134,  0.500,  0.524,  0.500, -0.134,  0.524]",
+            "012 0(  30) 1( 120) 2( -90): 0.250 + 0.193 =  0.443, vec![ 0.366,  0.366,  0.524, -0.866,  0.500,  1.047,  0.500, -0.866,  1.047]",
+            "0-2 0(  60) 2(-150) 1( 180): 0.500 + 0.285 =  0.785, vec![-0.366,  1.366,  1.571,  0.866, -0.500, -1.047, -0.500, -0.866,  1.047]",
+            "--2 0(  60) 2(-150) 1(  90): 0.000 + 1.785 =  1.785, vec![ 0.366, -1.366, -1.571,  0.134, -0.500, -0.524, -0.500,  1.866,  3.665]",
+            "0-- 0( 150) 1(-120) 2( -90): 0.250 + 0.878 =  1.128, vec![-1.366, -1.366,  2.618,  0.866,  0.500, -1.047,  0.500,  0.866, -1.047]",
         ];
         let actual = shapes.regions.iter().map(|region| {
             let segments = &region.segments;
@@ -409,8 +422,13 @@ mod tests {
         let c1 = Circle { idx: 1, c: R2 { x: 1. , y: 0. }, r: 1. };
         let c2 = Circle { idx: 2, c: R2 { x: 0.5, y: 0. }, r: 3. };
         let c3 = Circle { idx: 3, c: R2 { x: 0. , y: 3. }, r: 1. };
-        let circles = vec![c0, c1, c2, c3];
-        let shapes = Shapes::new(circles);
+        let circles = vec![
+            (c0, duals(0, 4)),
+            (c1, duals(1, 4)),
+            (c2, duals(2, 4)),
+            (c3, duals(3, 4)),
+        ];
+        let shapes = Shapes::new(&circles);
 
         for node in shapes.nodes.iter() {
             println!("{}", node.borrow());

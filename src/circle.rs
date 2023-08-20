@@ -16,6 +16,8 @@ pub struct Circle<D> {
 }
 
 pub type C = Rc<RefCell<Circle<D>>>;
+pub type Duals = [Vec<f64>; 3];
+pub type Split = (Circle<f64>, Duals);
 
 impl<D: Clone + Float> Circle<D> {
     pub fn point(&self, t: D) -> R2<D> {
@@ -26,25 +28,16 @@ impl<D: Clone + Float> Circle<D> {
 }
 
 impl Circle<f64> {
-    pub fn dual<'a>(&self, pre_zeros: usize, post_zeros: usize) -> Circle<D> {
-        let n = 3;
-        let mut idx = pre_zeros;
-        let zeros = vec![0.; pre_zeros + n + post_zeros];
-        let mut dv = || {
-            let mut v = zeros.clone();
-            v[idx] = 1.;
-            idx += 1;
-            v
-        };
-        let x = Dual::new(self.c.x, dv());
-        let y = Dual::new(self.c.y, dv());
-        let r = Dual::new(self.r  , dv());
+    pub fn dual<'a>(&self, duals: &Duals) -> Circle<D> {
+        let x = Dual::new(self.c.x, duals[0].clone());
+        let y = Dual::new(self.c.y, duals[1].clone());
+        let r = Dual::new(self.r  , duals[2].clone());
         let c = R2 { x, y };
         Circle::from((self.idx, c, r))
     }
     pub fn intersect(&self, o: &Circle<f64>) -> Vec<Intersection> {
-        let c0 = self.dual(0, 3);
-        let c1 = o.dual(3, 0);
+        let c0 = self.dual(&[ vec![ 1., 0., 0., 0., 0., 0., ], vec![ 0., 1., 0., 0., 0., 0., ], vec![ 0., 0., 1., 0., 0., 0., ] ]);
+        let c1 = o.dual(&[ vec![ 0., 0., 0., 1., 0., 0., ], vec![ 0., 0., 0., 0., 1., 0., ], vec![ 0., 0., 0., 0., 0., 1., ] ]);
         c0.intersect(&c1)
     }
     pub fn arc_midpoint(&self, t0: f64, mut t1: f64) -> R2<f64> {
@@ -67,6 +60,9 @@ impl Circle<f64> {
 impl Circle<D> {
     pub fn v(&self) -> Circle<f64> {
         Circle { idx: self.idx, c: self.c.v(), r: self.r.v() }
+    }
+    pub fn split(&self) -> Split {
+        ( self.v(), [ self.c.x.d().clone(), self.c.y.d().clone(), self.r.d().clone() ] )
     }
     pub fn intersect(&self, c1: &Circle<D>) -> Vec<Intersection> {
         let c0 = self;

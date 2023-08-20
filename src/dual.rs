@@ -277,7 +277,7 @@ impl AddAssign<f64> for Dual {
 }
 
 impl Sum for Dual {
-    fn sum<I: Iterator<Item = Self>>(mut iter: I) -> Self {
+    fn sum<I: Iterator<Item = Dual>>(mut iter: I) -> Self {
         let first = iter.next().unwrap();
         iter.fold(first, |a, b| a + b)
     }
