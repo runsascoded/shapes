@@ -28,7 +28,7 @@ impl Intersection {
         } else if idx == self.c1idx {
             self.t1.clone()
         } else {
-            panic!("Invalid circle index {} ({}, {})", idx, self.c0idx, self.c1idx);
+            panic!("Invalid circle index {} ({}, {}): {}", idx, self.c0idx, self.c1idx, self);
         }
     }
     pub fn add_edge(&mut self, edge: E) {

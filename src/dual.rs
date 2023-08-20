@@ -18,7 +18,7 @@ impl Dual {
         format!("{}{}", if f < &0. {""} else {" "}, format!("{:.1$}", f, n))
     }
     pub fn s(&self, n: usize) -> String {
-        format!("{} + [{}]ε", Dual::fmt(&self.v(), n), self.d().iter().map(|d| Dual::fmt(d, n)).collect::<Vec<String>>().join(" "))
+        format!("{}, vec![{}]", Dual::fmt(&self.v(), n), self.d().iter().map(|d| Dual::fmt(d, n)).collect::<Vec<String>>().join(", "))
     }
 
     pub fn is_normal(&self) -> bool {
@@ -207,6 +207,14 @@ impl Div for Dual {
     fn div(self, rhs: Self) -> Self::Output {
         assert_eq!(self.1, rhs.1);
         Dual(self.0 / rhs.0, self.1)
+    }
+}
+
+impl Div<&Dual> for Dual {
+    type Output = Self;
+    fn div(self, rhs: &Self) -> Self::Output {
+        assert_eq!(self.1, rhs.1);
+        Dual(self.0 / &rhs.0, self.1)
     }
 }
 

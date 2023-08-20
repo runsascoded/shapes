@@ -1,18 +1,18 @@
 use std::{cell::RefCell, rc::Rc, f64::consts::PI, collections::HashSet};
 
-use crate::{circle::{Circle, C}, intersection::Node, edge::{self, E}, region::{Region, Segment}};
+use crate::{circle::{Circle, C}, intersection::Node, edge::{self, E}, region::{Region, Segment}, dual::D};
 
 pub struct Shapes {
-    shapes: Vec<Circle<f64>>,
-    duals: Vec<C>,
-    nodes: Vec<Node>,
-    nodes_by_shape: Vec<Vec<Node>>,
-    nodes_by_shapes: Vec<Vec<Vec<Node>>>,
-    edges: Vec<E>,
-    is_connected: Vec<Vec<bool>>,
-    regions: Vec<Region>,
-    total_visits: usize,
-    total_expected_visits: usize,
+    pub shapes: Vec<Circle<f64>>,
+    pub duals: Vec<C>,
+    pub nodes: Vec<Node>,
+    pub nodes_by_shape: Vec<Vec<Node>>,
+    pub nodes_by_shapes: Vec<Vec<Vec<Node>>>,
+    pub edges: Vec<E>,
+    pub is_connected: Vec<Vec<bool>>,
+    pub regions: Vec<Region>,
+    pub total_visits: usize,
+    pub total_expected_visits: usize,
 }
 
 impl Shapes {
@@ -170,7 +170,12 @@ impl Shapes {
                             key += "-";
                         }
                     }
-                    let region = Region { key, segments: segments.clone(), container_idxs: container_idxs.iter().cloned().collect() };
+                    let region = Region {
+                        key,
+                        segments: segments.clone(),
+                        container_idxs: container_idxs.iter().cloned().collect(),
+                        container_bmp,
+                     };
                     regions.push(region);
                 }
             } else {
@@ -244,6 +249,18 @@ impl Shapes {
         }
 
         Shapes { shapes, duals, nodes, nodes_by_shape, nodes_by_shapes, edges, is_connected, regions, total_visits, total_expected_visits, }
+    }
+
+    pub fn area(&self, key: &String) -> D {
+        self.regions.iter().filter(|r| r.matches(key)).map(|r| r.area()).sum()
+    }
+
+    pub fn len(&self) -> usize {
+        self.shapes.len()
+    }
+
+    pub fn num_vars(&self) -> usize {
+        self.duals[0].borrow().r.d().len()
     }
 }
 
@@ -388,10 +405,10 @@ mod tests {
     }
     #[test]
     fn test_components() {
-        let c0 = Circle { idx: 0, c: R2 { x: 0., y: 0. }, r: 1. };
-        let c1 = Circle { idx: 1, c: R2 { x: 1., y: 0. }, r: 1. };
+        let c0 = Circle { idx: 0, c: R2 { x: 0. , y: 0. }, r: 1. };
+        let c1 = Circle { idx: 1, c: R2 { x: 1. , y: 0. }, r: 1. };
         let c2 = Circle { idx: 2, c: R2 { x: 0.5, y: 0. }, r: 3. };
-        let c3 = Circle { idx: 3, c: R2 { x: 0., y: 3. }, r: 1. };
+        let c3 = Circle { idx: 3, c: R2 { x: 0. , y: 3. }, r: 1. };
         let circles = vec![c0, c1, c2, c3];
         let shapes = Shapes::new(circles);
 

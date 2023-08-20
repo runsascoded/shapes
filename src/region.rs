@@ -43,6 +43,7 @@ pub struct Region {
     pub key: String,
     pub segments: Vec<Segment>,
     pub container_idxs: Vec<usize>,
+    pub container_bmp: Vec<bool>,
 }
 
 impl Region {
@@ -65,6 +66,17 @@ impl Region {
     }
     pub fn area(&self) -> D {
         self.polygon_area() + self.secant_area()
+    }
+    pub fn matches(&self, key: &String) -> bool {
+        for (idx, ch) in (&key).chars().enumerate() {
+            if ch == '-' && self.container_bmp[idx] {
+                return false;
+            }
+            if ch != '*' && !self.container_bmp[idx] {
+                return false
+            }
+        }
+        true
     }
 }
 

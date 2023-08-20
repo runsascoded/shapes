@@ -2,6 +2,7 @@
 extern crate approx;
 
 mod circle;
+mod diagram;
 mod deg;
 mod dual;
 mod edge;
