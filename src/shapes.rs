@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc, f64::consts::PI, collections::HashSet};
 
-use crate::{circle::{Circle, C}, intersection::Node, edge::{self, E}, r2::R2, region::{Region, Segment}};
+use crate::{circle::{Circle, C}, intersection::Node, edge::{self, E}, region::{Region, Segment}};
 
 pub struct Shapes {
     shapes: Vec<Circle<f64>>,
@@ -22,10 +22,10 @@ impl Shapes {
         let mut nodes: Vec<Node> = Vec::new();
         let mut nodes_by_shape: Vec<Vec<Node>> = Vec::new();
         let mut nodes_by_shapes: Vec<Vec<Vec<Node>>> = Vec::new();
-        for idx in 0..n {
+        for _idx in 0..n {
             nodes_by_shape.push(Vec::new());
             let mut shapes_nodes: Vec<Vec<Node>> = Vec::new();
-            for jdx in 0..n {
+            for _jdx in 0..n {
                 shapes_nodes.push(Vec::new());
             }
             nodes_by_shapes.push(shapes_nodes);
@@ -137,7 +137,7 @@ impl Shapes {
         fn traverse(start: &Node, edges: &mut Vec<E>, regions: &mut Vec<Region>, segments: &mut Vec<Segment>, container_idxs: &mut HashSet<usize>) {
             let last_segment = segments.last().unwrap();
             let end = last_segment.end();
-            if (start.borrow().p() == end.borrow().p()) {
+            if start.borrow().p() == end.borrow().p() {
                 let first_segment = segments.first().unwrap();
                 let first_edge = first_segment.edge.clone();
                 let cidx0 = first_edge.borrow().c.borrow().idx;
@@ -150,18 +150,16 @@ impl Shapes {
                         let mut edge = segment.edge.borrow_mut();
                         edge.visits += 1;
                     }
-                    let region = Region { segments: segments.clone() };
+                    let region = Region { segments: segments.clone(), container_idxs: container_idxs.iter().cloned().collect() };
                     regions.push(region);
                 }
             } else {
                 let successors = last_segment.successors();
                 for successor in successors {
                     let nxt = successor.edge.clone();
-                    let mut nxt_idxs = nxt.borrow().all_idxs();
+                    let nxt_idxs = nxt.borrow().all_idxs();
                     let mut both = container_idxs.intersection(&nxt_idxs).cloned().collect::<HashSet<usize>>();
                     if both.len() < container_idxs.len() {
-                    // let missing = container_idxs.difference(&nxt_idxs).cloned().collect::<HashSet<usize>>();
-                    // if !missing.is_empty() {
                         // This edge candidate isn't contained by (or on the border of) all the shapes that the previous segments are.
                         continue;
                     }
@@ -189,7 +187,7 @@ impl Shapes {
 
         let mut regions: Vec<Region> = Vec::new();
         let mut segments: Vec<Segment> = Vec::new();
-        for mut edge in edges.clone() {
+        for edge in edges.clone() {
             if edge.borrow().visits == edge.borrow().expected_visits {
                 continue;
             }
@@ -197,11 +195,11 @@ impl Shapes {
             let start = &segment.start();
             let successors = segment.successors();
             segments.push(segment);
-            let mut container_idxs = &mut edge.borrow().all_idxs().clone();
+            let container_idxs = &mut edge.borrow().all_idxs().clone();
             for successor in successors {
                 segments.push(successor.clone());
                 let nxt = successor.edge.clone();
-                let mut nxt_idxs = nxt.borrow().all_idxs();
+                let nxt_idxs = nxt.borrow().all_idxs();
                 let mut both = container_idxs.intersection(&nxt_idxs).cloned().collect::<HashSet<usize>>();
                 traverse(&start, &mut edges, &mut regions, &mut segments, &mut both);
                 assert_eq!(segments.len(), 2);
@@ -222,7 +220,6 @@ impl Shapes {
 #[cfg(test)]
 mod tests {
     use std::cell::Ref;
-    use std::fmt::{Formatter, Display};
 
     use crate::deg::Deg;
     use crate::dual::Dual;
@@ -333,38 +330,31 @@ mod tests {
         assert_eq!(shapes.regions.len(), 7);
         assert_eq!(shapes.total_expected_visits, 21);
         assert_eq!(shapes.total_visits, 21);
-        println!("regions:");
-        for region in &shapes.regions {
-            let segments = &region.segments;
-            println!(
-                "{}",
-                segments.iter().map(|segment| {
-                    let start = segment.start();
-                    let edge = segment.edge.clone();
-                    let cidx = edge.borrow().c.borrow().idx;
-                    format!("{}({})", cidx, start.borrow().theta(cidx).v().deg_str())
-                }).collect::<Vec<String>>().join(" ")
-            );
-        }
-        println!();
         let expected = [
-            "0( -60) 2( -30) 1( 180)",
-            "0( -60) 2( -30) 1(  90)",
-            "0(  30) 1( 120) 2(   0)",
-            "0(  30) 1( 120) 2( -90)",
-            "0(  60) 2(-150) 1( 180)",
-            "0(  60) 2(-150) 1(  90)",
-            "0( 150) 1(-120) 2( -90)",
+            "#1 0( -60) 2( -30) 1( 180): 0.500 + 0.285 =  0.785 + [ 1.366 -0.366  1.571 -0.866 -0.500  1.047 -0.500  0.866 -1.047]ε",
+            "#2 0( -60) 2( -30) 1(  90): 0.000 + 1.785 =  1.785 + [-1.366  0.366 -1.571  1.866 -0.500  3.665 -0.500  0.134 -0.524]ε",
+            "#3 0(  30) 1( 120) 2(   0): 0.116 + 0.012 =  0.128 + [-0.366 -0.366 -0.524 -0.134  0.500  0.524  0.500 -0.134  0.524]ε",
+            "#4 0(  30) 1( 120) 2( -90): 0.250 + 0.193 =  0.443 + [ 0.366  0.366  0.524 -0.866  0.500  1.047  0.500 -0.866  1.047]ε",
+            "#5 0(  60) 2(-150) 1( 180): 0.500 + 0.285 =  0.785 + [-0.366  1.366  1.571  0.866 -0.500 -1.047 -0.500 -0.866  1.047]ε",
+            "#6 0(  60) 2(-150) 1(  90): 0.000 + 1.785 =  1.785 + [ 0.366 -1.366 -1.571  0.134 -0.500 -0.524 -0.500  1.866  3.665]ε",
+            "#7 0( 150) 1(-120) 2( -90): 0.250 + 0.878 =  1.128 + [-1.366 -1.366  2.618  0.866  0.500 -1.047  0.500  0.866 -1.047]ε",
         ];
-        shapes.regions.iter().map(|region| {
+        let actual = shapes.regions.iter().enumerate().map(|(idx, region)| {
             let segments = &region.segments;
-            segments.iter().map(|segment| {
+            let path_str = segments.iter().map(|segment| {
                 let start = segment.start();
                 let edge = segment.edge.clone();
                 let cidx = edge.borrow().c.borrow().idx;
                 format!("{}({})", cidx, start.borrow().theta(cidx).v().deg_str())
-            }).collect::<Vec<String>>().join(" ")
-        }).zip(expected.iter()).enumerate().for_each(|(idx, (a, b))| assert_eq!(&a, b, "idx: {}, {} != {}", idx, a, b));
+            }).collect::<Vec<String>>().join(" ");
+            format!("#{} {}: {:.3} + {:.3} = {}", idx+1, path_str, region.polygon_area().v(), region.secant_area().v(), region.area().s(3))
+        }).collect::<Vec<String>>();
+        println!("regions:");
+        for a in actual.iter() {
+            println!("{}", a);
+        }
+        println!();
+        actual.iter().zip(expected.iter()).enumerate().for_each(|(idx, (a, b))| assert_eq!(&a, b, "idx: {}, {} != {}", idx, a, b));
     }
     #[test]
     fn test_components() {

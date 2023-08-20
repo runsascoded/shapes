@@ -1,6 +1,6 @@
 use std::fmt::{Formatter, Display, self};
 
-use crate::{edge::E, intersection::Node, dual::Dual};
+use crate::{edge::E, intersection::Node, dual::{Dual, D}};
 
 #[derive(Debug, Clone)]
 pub struct Segment {
@@ -9,11 +9,8 @@ pub struct Segment {
 }
 
 impl Segment {
-    pub fn sgn(&self) -> f64 {
-        if self.fwd { 1. } else { -1. }
-    }
     pub fn secant_area(&self) -> D {
-        self.edge.borrow().secant_area() * self.sgn()
+        self.edge.borrow().secant_area()
     }
     pub fn start(&self) -> Node {
         let e = self.edge.borrow();
@@ -28,7 +25,6 @@ impl Segment {
     pub fn successors(&self) -> Vec<Segment> {
         let end = self.end();
         let end_p = end.borrow().p();
-        // println!("end: {}", end_p);
         let edge = self.edge.clone();
         let idx = edge.borrow().c.borrow().idx;
         let successors = end.borrow().edges.iter().filter(|e| {
@@ -36,7 +32,6 @@ impl Segment {
         }).map(|e| {
             let p = e.borrow().i0.borrow().p();
             let fwd = p == end_p;
-            // println!("chk: {}: {}", p, fwd);
             Segment { edge: e.clone(), fwd }
         }).collect();
         successors
@@ -46,23 +41,26 @@ impl Segment {
 #[derive(Debug, Clone)]
 pub struct Region {
     pub segments: Vec<Segment>,
+    pub container_idxs: Vec<usize>,
 }
-
-type D = Dual;
 
 impl Region {
     pub fn len(&self) -> usize {
         self.segments.len()
     }
     pub fn polygon_area(&self) -> D {
-        self.segments.iter().map(|s| {
+        (self.segments.iter().map(|s| {
             let cur = s.start().borrow().p();
             let nxt = s.end().borrow().p();
             cur.x * nxt.y - cur.y * nxt.x
-        }).sum::<D>() / 2.
+        }).sum::<D>() / 2.).abs()
     }
     pub fn secant_area(&self) -> D {
-        self.segments.iter().map(|s| s.secant_area()).sum::<D>()
+        self.segments.iter().map(|s| {
+            let area = s.secant_area();
+            let idx = s.edge.borrow().c.borrow().idx;
+            if self.container_idxs.contains(&idx) { area } else { -area }
+        }).sum::<D>()
     }
     pub fn area(&self) -> D {
         self.polygon_area() + self.secant_area()
@@ -71,7 +69,6 @@ impl Region {
 
 impl Display for Region {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        // let mut s: String = "Region(".to_owned();
         write!(
             f, "R({})",
             self.segments.iter().map(|s| {
