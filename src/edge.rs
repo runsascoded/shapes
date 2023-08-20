@@ -25,6 +25,8 @@ impl Edge {
         let theta = self.theta();
         r * r / 2. * (theta.clone() - theta.sin())
     }
+
+    /// Angle span of this Edge, in terms of the shape whose border it is part of
     pub fn theta(&self) -> D {
         let theta = self.t1.clone() - &self.t0;
         if theta.re < 0. {
@@ -32,9 +34,13 @@ impl Edge {
         }
         theta
     }
+
+    /// Return all shape indices that either contain this Edge
     pub fn container_idxs(&self) -> HashSet<usize> {
         self.containers.iter().map(|c| c.borrow().idx).collect()
     }
+
+    /// Return all shape indices that either contain this Edge, or which this Edge runs along the border of
     pub fn all_idxs(&self) -> HashSet<usize> {
         let mut idxs = self.container_idxs();
         idxs.insert(self.c.borrow().idx);

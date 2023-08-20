@@ -40,6 +40,7 @@ impl Segment {
 
 #[derive(Debug, Clone)]
 pub struct Region {
+    pub key: String,
     pub segments: Vec<Segment>,
     pub container_idxs: Vec<usize>,
 }

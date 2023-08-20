@@ -134,10 +134,17 @@ impl Shapes {
             edges_by_shape.push(shape_edges);
         }
 
-        fn traverse(start: &Node, edges: &mut Vec<E>, regions: &mut Vec<Region>, segments: &mut Vec<Segment>, container_idxs: &mut HashSet<usize>) {
+        fn traverse(
+            start: &Node,
+            num_shapes: usize,
+            regions: &mut Vec<Region>,
+            segments: &mut Vec<Segment>,
+            container_idxs: &mut HashSet<usize>,
+        ) {
             let last_segment = segments.last().unwrap();
             let end = last_segment.end();
             if start.borrow().p() == end.borrow().p() {
+                // Back where we started; check whether this is a valid region, push it if so, and return
                 let first_segment = segments.first().unwrap();
                 let first_edge = first_segment.edge.clone();
                 let cidx0 = first_edge.borrow().c.borrow().idx;
@@ -146,68 +153,91 @@ impl Shapes {
                     // Can't start and end on same shape. Adjacent segments are checked for this as each segment is pushed, but "closing the loop" requires this extra check of the first and last segments.
                     return
                 } else {
+                    // We've found a valid Region; increment each Edge's visit count, and save the Region
                     for segment in segments.clone() {
                         let mut edge = segment.edge.borrow_mut();
                         edge.visits += 1;
                     }
-                    let region = Region { segments: segments.clone(), container_idxs: container_idxs.iter().cloned().collect() };
+                    let mut container_bmp: Vec<bool> = vec![false; num_shapes];
+                    for idx in container_idxs.iter() {
+                        container_bmp[*idx] = true;
+                    }
+                    let mut key = String::new();
+                    for (idx, b) in container_bmp.iter().enumerate() {
+                        if *b {
+                            key += &idx.to_string();
+                        } else {
+                            key += "-";
+                        }
+                    }
+                    let region = Region { key, segments: segments.clone(), container_idxs: container_idxs.iter().cloned().collect() };
                     regions.push(region);
                 }
             } else {
+                // Attempt to add another Segment to this Region (from among eligible successors of the last Segment)
                 let successors = last_segment.successors();
                 for successor in successors {
+                    // The new Segment should be contained by (or run along the border of) the same shapes as the previous segments, with one exception: the new Segment can run along the border of a shape that doesn't contain the in-progress Region.
                     let nxt = successor.edge.clone();
                     let nxt_idxs = nxt.borrow().all_idxs();
+                    // First, verify existing containers are preserved by the new Segment:
                     let mut both = container_idxs.intersection(&nxt_idxs).cloned().collect::<HashSet<usize>>();
                     if both.len() < container_idxs.len() {
                         // This edge candidate isn't contained by (or on the border of) all the shapes that the previous segments are.
                         continue;
                     }
+                    // Next, verify that the only additional container, if any, is the Segment's border shape:
                     let num_extra = nxt_idxs.len() - both.len();
-                    if num_extra == 1 {
+                    if num_extra > 1 {
+                        // This Segment can't join a Region with the existing Segments, as it is contained by at least one shape that doesn't contain the existing edges.
+                        continue;
+                    } else if num_extra == 1 {
                         let extra = nxt_idxs.difference(&container_idxs).cloned().collect::<HashSet<usize>>();
                         let extra_idx = extra.iter().next().unwrap();
                         let nxt_edge_idx = successor.edge.borrow().c.borrow().idx;
                         if nxt_edge_idx != *extra_idx {
-                            // The only admissible extra shape is the one the new edge traverses
+                            // The only admissible extra containing shape is the one the new edge traverses
                             continue;
                         } else {
                             // OK to proceed with this edge; it is contained by all the shapes that the previous segments are (and outer-borders one additional shape that's not included in the bounded region)
                         }
-                    } else if num_extra > 0 {
-                        // This new edge candidate can't be part of a region with the existing edges, as it is contained by at least one shape that doesn't contain the existing edges.
-                        continue;
                     }
                     segments.push(successor.clone());
-                    traverse(&start, edges, regions, segments, &mut both);
+                    traverse(&start, num_shapes, regions, segments, &mut both);
                     segments.pop();
                 }
             }
         }
 
+        // Graph-traversal will accumulate Regions here
         let mut regions: Vec<Region> = Vec::new();
+        // Working list o Segments comprising partial Regions, as they are built up and verified by `traverse`
         let mut segments: Vec<Segment> = Vec::new();
+        // The first two Segments for each Region uniquely determine various properties of the Region, so we loop over and construct them explicitly below, before kicking off a recursive `traverse` process to complete each Region.
         for edge in edges.clone() {
             if edge.borrow().visits == edge.borrow().expected_visits {
+                // All of the Regions we expect this Edge to be a part of have already been computed and saved, nothing further to do with this Edge.
                 continue;
             }
-            let segment = Segment { edge: edge.clone(), fwd: true };
+            let segment = Segment { edge: edge.clone(), fwd: true };  // Each Region's first edge can be traversed in the forward direction, WLOG
             let start = &segment.start();
             let successors = segment.successors();
             segments.push(segment);
-            let container_idxs = &mut edge.borrow().all_idxs().clone();
+            let container_idxs = &mut edge.borrow().all_idxs().clone();  // Shape indices that contain the first Edge, will be intersected with the second Edge below to obtain the set of shapes for the Region under construction.
             for successor in successors {
                 segments.push(successor.clone());
                 let nxt = successor.edge.clone();
                 let nxt_idxs = nxt.borrow().all_idxs();
                 let mut both = container_idxs.intersection(&nxt_idxs).cloned().collect::<HashSet<usize>>();
-                traverse(&start, &mut edges, &mut regions, &mut segments, &mut both);
+                // Recursively traverse the graph, trying to add each eligible Segment to the list we've seeded here, accumulating valid Regions in `regions` along the way.
+                traverse(&start, n, &mut regions, &mut segments, &mut both);
                 assert_eq!(segments.len(), 2);
                 segments.pop();
             }
             segments.pop();
         }
 
+        // Verify that all Edges have been visited the expected number of times
         let total_visits = edges.iter().map(|e| e.borrow().visits).sum::<usize>();
         if total_visits != total_expected_visits {
             panic!("total_visits ({}) != total_expected_visits ({})", total_visits, total_expected_visits);
@@ -331,15 +361,15 @@ mod tests {
         assert_eq!(shapes.total_expected_visits, 21);
         assert_eq!(shapes.total_visits, 21);
         let expected = [
-            "#1 0( -60) 2( -30) 1( 180): 0.500 + 0.285 =  0.785 + [ 1.366 -0.366  1.571 -0.866 -0.500  1.047 -0.500  0.866 -1.047]ε",
-            "#2 0( -60) 2( -30) 1(  90): 0.000 + 1.785 =  1.785 + [-1.366  0.366 -1.571  1.866 -0.500  3.665 -0.500  0.134 -0.524]ε",
-            "#3 0(  30) 1( 120) 2(   0): 0.116 + 0.012 =  0.128 + [-0.366 -0.366 -0.524 -0.134  0.500  0.524  0.500 -0.134  0.524]ε",
-            "#4 0(  30) 1( 120) 2( -90): 0.250 + 0.193 =  0.443 + [ 0.366  0.366  0.524 -0.866  0.500  1.047  0.500 -0.866  1.047]ε",
-            "#5 0(  60) 2(-150) 1( 180): 0.500 + 0.285 =  0.785 + [-0.366  1.366  1.571  0.866 -0.500 -1.047 -0.500 -0.866  1.047]ε",
-            "#6 0(  60) 2(-150) 1(  90): 0.000 + 1.785 =  1.785 + [ 0.366 -1.366 -1.571  0.134 -0.500 -0.524 -0.500  1.866  3.665]ε",
-            "#7 0( 150) 1(-120) 2( -90): 0.250 + 0.878 =  1.128 + [-1.366 -1.366  2.618  0.866  0.500 -1.047  0.500  0.866 -1.047]ε",
+            "01- 0( -60) 2( -30) 1( 180): 0.500 + 0.285 =  0.785 + [ 1.366 -0.366  1.571 -0.866 -0.500  1.047 -0.500  0.866 -1.047]ε",
+            "-1- 0( -60) 2( -30) 1(  90): 0.000 + 1.785 =  1.785 + [-1.366  0.366 -1.571  1.866 -0.500  3.665 -0.500  0.134 -0.524]ε",
+            "-12 0(  30) 1( 120) 2(   0): 0.116 + 0.012 =  0.128 + [-0.366 -0.366 -0.524 -0.134  0.500  0.524  0.500 -0.134  0.524]ε",
+            "012 0(  30) 1( 120) 2( -90): 0.250 + 0.193 =  0.443 + [ 0.366  0.366  0.524 -0.866  0.500  1.047  0.500 -0.866  1.047]ε",
+            "0-2 0(  60) 2(-150) 1( 180): 0.500 + 0.285 =  0.785 + [-0.366  1.366  1.571  0.866 -0.500 -1.047 -0.500 -0.866  1.047]ε",
+            "--2 0(  60) 2(-150) 1(  90): 0.000 + 1.785 =  1.785 + [ 0.366 -1.366 -1.571  0.134 -0.500 -0.524 -0.500  1.866  3.665]ε",
+            "0-- 0( 150) 1(-120) 2( -90): 0.250 + 0.878 =  1.128 + [-1.366 -1.366  2.618  0.866  0.500 -1.047  0.500  0.866 -1.047]ε",
         ];
-        let actual = shapes.regions.iter().enumerate().map(|(idx, region)| {
+        let actual = shapes.regions.iter().map(|region| {
             let segments = &region.segments;
             let path_str = segments.iter().map(|segment| {
                 let start = segment.start();
@@ -347,7 +377,7 @@ mod tests {
                 let cidx = edge.borrow().c.borrow().idx;
                 format!("{}({})", cidx, start.borrow().theta(cidx).v().deg_str())
             }).collect::<Vec<String>>().join(" ");
-            format!("#{} {}: {:.3} + {:.3} = {}", idx+1, path_str, region.polygon_area().v(), region.secant_area().v(), region.area().s(3))
+            format!("{} {}: {:.3} + {:.3} = {}", region.key, path_str, region.polygon_area().v(), region.secant_area().v(), region.area().s(3))
         }).collect::<Vec<String>>();
         println!("regions:");
         for a in actual.iter() {
