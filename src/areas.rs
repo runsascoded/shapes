@@ -1,5 +1,5 @@
 use core::panic;
-use std::{collections::{HashMap, HashSet, hash_map::Entry}, iter::Sum, ops::{Sub, Add}, rc::Rc, cell::RefCell, fmt::Display};
+use std::{collections::{HashMap, HashSet}, ops::{Sub, Add}, fmt::Display};
 
 use num_traits::pow;
 
@@ -49,9 +49,9 @@ impl<D: Clone + Zero<D> + Display + Add<Output = D> + Sub<Output = D>> Areas<D>
             let k0 = queue.clone().into_iter().next().unwrap();
             queue.remove(&k0);
             remaining -= 1;
-            println!("popped: {}, {} remaining, {} overall", k0, remaining, map.len());
+            // println!("popped: {}, {} remaining, {} overall", k0, remaining, map.len());
             let neighbors = Areas::<D>::neighbors(&k0);
-            println!("neighbors: {:?}", neighbors);
+            // println!("neighbors: {:?}", neighbors);
             for (_, (((ch1, k1), (ch2, k2)), ch0)) in neighbors.iter().zip(k0.chars()).enumerate() {
                 let k0 = k0.clone();
                 let v0 = map.get( &k0);
@@ -91,7 +91,7 @@ impl<D: Clone + Zero<D> + Display + Add<Output = D> + Sub<Output = D>> Areas<D>
                     map.insert(none_key.clone(), v.clone());
                     queue.insert(none_key.to_string());
                     remaining += 1;
-                    println!("inserted {} = {}, remaining {}", none_key, v, remaining);
+                    // println!("inserted {} = {}, remaining {}", none_key, v, remaining);
                 } else if num_somes == 3 {
                     // TODO: fsck
                 }
@@ -104,8 +104,13 @@ impl<D: Clone + Zero<D> + Display + Add<Output = D> + Sub<Output = D>> Areas<D>
     }
 
     pub fn idx(idx: usize) -> char {
-        assert!(idx < 10);
-        format!("{}", idx).chars().next().unwrap()
+        if idx < 10 {
+            char::from_digit(idx as u32, 10).unwrap()
+        } else if idx < 36 {
+            char::from_u32('a' as u32 + (idx - 11) as u32).unwrap()
+        } else {
+            panic!("idx {} out of range, maximum 36 sets supported", idx);
+        }
     }
 }
 
@@ -113,14 +118,81 @@ impl<D: Clone + Zero<D> + Display + Add<Output = D> + Sub<Output = D>> Areas<D>
 mod tests {
     use std::collections::HashMap;
 
-    #[test]
-    fn expand() {
-        let mut map: HashMap<String, i64> = HashMap::from([
-            ("0*".to_string(), 9),
-            ("*1".to_string(), 3),
-            ("01".to_string(), 1),
-        ]);
+    fn test(inputs: Vec<(&str, i64)>, expected: Vec<(&str, i64)>) {
+        let inputs: Vec<(String, i64)> = inputs.into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+        let mut map: HashMap<String, i64> = inputs.into_iter().collect();
         super::Areas::<i64>::expand(&mut map);
-        assert_eq!(map.len(), 9);
+        let mut items: Vec<(String, i64)> = map.into_iter().collect();
+        items.sort_by_key(|(k, _)| k.clone());
+        items.iter().zip(expected.iter()).enumerate().for_each(|(idx, ((ak, av), (ek, ev)))| {
+            assert_eq!(ak, ek);
+            if av != ev {
+                println!("  {}: {} != {}", ak, av, ev);
+            }
+        });
+        assert_eq!(items.len(), expected.len());
+        assert_eq!(items, expected.into_iter().map(|(k, v)| (k.to_string(), v)).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn expand2() {
+        test(vec![
+            ("0*", 9),
+            ("*1", 3),
+            ("01", 1),
+        ], vec![
+            ("**", 11),
+            ("*-",  8),
+            ("*1",  3),
+            ("-*",  2),
+            ("--",  0),
+            ("-1",  2),
+            ("0*",  9),
+            ("0-",  8),
+            ("01",  1),
+        ]);
+    }
+
+    #[test]
+    fn expand3() {
+        test(vec![
+            ("0**",  9),
+            ("*1*",  9),
+            ("**2",  9),
+            ("01*",  3),
+            ("0*2",  3),
+            ("*12",  3),
+            ("012",  1),
+        ], vec![
+            ("***", 19),
+            ("**-", 10),
+            ("**2",  9),
+            ("*-*", 10),
+            ("*--",  4),
+            ("*-2",  6),
+            ("*1*",  9),
+            ("*1-",  6),
+            ("*12",  3),
+
+            ("-**", 10),
+            ("-*-",  4),
+            ("-*2",  6),
+            ("--*",  4),
+            ("---",  0),
+            ("--2",  4),
+            ("-1*",  6),
+            ("-1-",  4),
+            ("-12",  2),
+
+            ("0**",  9),
+            ("0*-",  6),
+            ("0*2",  3),
+            ("0-*",  6),
+            ("0--",  4),
+            ("0-2",  2),
+            ("01*",  3),
+            ("01-",  2),
+            ("012",  1),
+        ]);
     }
 }
