@@ -257,7 +257,7 @@ impl Shapes {
             Some((prefix, suffix)) => {
                 let k0 = format!("{}-{}", prefix, suffix);
                 let k1 = format!("{}{}{}", prefix, prefix.len(), suffix);
-                println!("Area {} delegating to {} and {}", key, k0, k1);
+                // println!("Area {} delegating to {} and {}", key, k0, k1);
                 if k0.chars().all(|ch| ch == '-') {
                     return self.area(&k1)
                 } else {
