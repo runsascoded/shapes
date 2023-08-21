@@ -1,5 +1,5 @@
 use core::panic;
-use std::{collections::{HashMap, HashSet}, iter::Sum, ops::Sub, rc::Rc, cell::RefCell};
+use std::{collections::{HashMap, HashSet, hash_map::Entry}, iter::Sum, ops::{Sub, Add}, rc::Rc, cell::RefCell, fmt::Display};
 
 use num_traits::pow;
 
@@ -13,24 +13,20 @@ pub struct Areas<D> {
 type Neighbor = (char, String);
 type Neighbors = Vec<(Neighbor, Neighbor)>;
 
-impl<D: Clone + Zero<D> + Sum + Sub<Output = D>> Areas<D>
-// where &'a D: Sub<&D>
+impl<D: Clone + Zero<D> + Display + Add<Output = D> + Sub<Output = D>> Areas<D>
 {
     pub fn neighbor(prefix: &String, ch: char, suffix: &String) -> Neighbor {
         (ch, format!("{}{}{}", prefix, ch, suffix))
     }
     pub fn neighbors(key: &str) -> Neighbors {
         key.chars().enumerate().map(|(idx, ch)| {
-            // let (prefix, suffix): (String, String) = {
             let prefix: String = key.chars().take(idx).collect();
             let suffix: String = key.chars().skip(idx + 1).collect();
-                // (prefix, suffix)
-            // };
             let i = Self::idx(idx);
             let chars = match ch {
-                '-' => [ '*', i, ],  //(format!("{}*{}", prefix, suffix), format!("{}{}{}", prefix, i, suffix)),
-                '*' => [ '-', i, ],  //(format!("{}-{}", prefix, suffix), format!("{}{}{}", prefix, i, suffix)),
-                 _  => [ '-', i, ],  //(format!("{}-{}", prefix, suffix), format!("{}*{}", prefix, suffix)),
+                '-' => [ '*',  i , ],
+                '*' => [ '-',  i , ],
+                 _  => [ '-', '*', ],
             };
             (
                 Self::neighbor(&prefix, chars[0], &suffix),
@@ -39,11 +35,9 @@ impl<D: Clone + Zero<D> + Sum + Sub<Output = D>> Areas<D>
         }).collect()
     }
     pub fn expand(map: &mut HashMap<String, D>) {
-        let map = Rc::new(RefCell::new(map.clone()));
-        let initial_size = map.borrow().len();
-        let n = map.borrow().keys().next().unwrap().len();
+        let initial_size = map.len();
+        let n = map.keys().next().unwrap().len();
         let empty_key = String::from_utf8(vec![b'-'; n]).unwrap();
-        //let mut map = map.borrow();
         if !map.contains_key(&empty_key) {
             let first = map.values().next().unwrap().clone();
             map.insert(empty_key, D::zero(first));
@@ -55,21 +49,36 @@ impl<D: Clone + Zero<D> + Sum + Sub<Output = D>> Areas<D>
             let k0 = queue.clone().into_iter().next().unwrap();
             queue.remove(&k0);
             remaining -= 1;
+            println!("popped: {}, {} remaining, {} overall", k0, remaining, map.len());
             let neighbors = Areas::<D>::neighbors(&k0);
+            println!("neighbors: {:?}", neighbors);
             for (_, (((ch1, k1), (ch2, k2)), ch0)) in neighbors.iter().zip(k0.chars()).enumerate() {
+                let k0 = k0.clone();
+                let v0 = map.get( &k0);
+                let v1 = map.get(  k1);
+                let v2 = map.get(  k2);
                 let keys = HashMap::from([
-                    ( ch0, (k0.clone(), map.get(&k0))),
-                    (*ch1, (k1.clone(), map.get( k1))),
-                    (*ch2, (k2.clone(), map.get( k2))),
+                    ( ch0, (k0.clone(), v0)),
+                    (*ch1, (k1.clone(), v1)),
+                    (*ch2, (k2.clone(), v2)),
                 ]);
-                let (somes, nones): (Vec<_>, Vec<_>) = keys.into_iter().partition(|(_, (_, v))| v.is_some());
+                // println!("keys: {} {} {}", ch0, ch1, ch2);
+                let mut somes: Vec<(char, (String, &D))> = Vec::new();
+                let mut nones: Vec<(char, String)> = Vec::new();
+                for (ch, (k, v)) in keys.iter() {
+                    match v {
+                        None => nones.push((*ch, k.clone())),
+                        Some(o) => somes.push((*ch, (k.clone(), o))),
+                    }
+                }
                 let num_somes = somes.len();
                 if num_somes == 2 {
                     let (some0, some1) = (somes[0].clone(), somes[1].clone());
-                    let (none_ch, (none_key, _)) = nones.iter().next().unwrap();
+                    let (none_ch, none_key) = nones.iter().next().unwrap();
                     let v =
-                        if none_ch == &'*' {
-                            somes.iter().map(|(_, (_, v))| v.unwrap().clone()).sum::<D>()
+                        if *none_ch == '*' {
+                            let ((_, (_, some0v)), (_, (_, some1v))) = (some0, some1);
+                            some0v.clone() + some1v.clone()
                         } else {
                             let ((_, (_, all_val)), (_, (_, other_val))) =
                                 if somes[0].0 == '*' {
@@ -77,11 +86,14 @@ impl<D: Clone + Zero<D> + Sum + Sub<Output = D>> Areas<D>
                                 } else {
                                     (some1, some0)
                                 };
-                            all_val.unwrap().clone() - other_val.unwrap().clone()
+                            all_val.clone() - other_val.clone()
                         };
-                    map.insert(none_key.clone(), v);
+                    map.insert(none_key.clone(), v.clone());
                     queue.insert(none_key.to_string());
                     remaining += 1;
+                    println!("inserted {} = {}, remaining {}", none_key, v, remaining);
+                } else if num_somes == 3 {
+                    // TODO: fsck
                 }
             }
         }
