@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate approx;
 
+mod areas;
 mod circle;
 mod diagram;
 mod deg;
@@ -11,6 +12,7 @@ mod math;
 mod r2;
 mod region;
 mod shapes;
+mod zero;
 
 use dual::Dual;
 use wasm_bindgen::prelude::*;

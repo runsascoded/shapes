@@ -253,7 +253,25 @@ impl Shapes {
     }
 
     pub fn area(&self, key: &String) -> D {
-        self.regions.iter().filter(|r| r.matches(key)).map(|r| r.area()).sum()
+        match key.split_once('*') {
+            Some((prefix, suffix)) => {
+                let k0 = format!("{}-{}", prefix, suffix);
+                let k1 = format!("{}{}{}", prefix, prefix.len(), suffix);
+                println!("Area {} delegating to {} and {}", key, k0, k1);
+                if k0.chars().all(|ch| ch == '-') {
+                    return self.area(&k1)
+                } else {
+                    self.area(&k0) + self.area(&k1)
+                }
+            }
+            None => self.regions.iter().find(|r| &r.key == key).expect(&format!("No region found with key {}", key)).area()
+        }
+        // for ch in key.chars() {
+        //     if ch == '*' {
+
+        //     }
+        // }
+        // self.regions.iter().filter(|r| r.matches(key)).map(|r| r.area()).sum()
     }
 
     pub fn len(&self) -> usize {

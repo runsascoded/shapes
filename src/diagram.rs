@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display};
+use std::{collections::{HashMap, HashSet}, fmt::Display};
 
 use crate::{circle::{Circle, Split, Duals}, shapes::Shapes, dual::D, r2::R2};
 
