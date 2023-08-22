@@ -6,6 +6,7 @@ use crate::{circle::{Circle, Split, Duals}, shapes::Shapes, dual::D, r2::R2, are
 type Targets = HashMap<String, f64>;
 type Errors = HashMap<String, Error>;
 
+#[derive(Clone, Debug)]
 pub struct Diagram {
     pub inputs: Vec<Split>,
     pub shapes: Shapes,
@@ -112,10 +113,16 @@ impl Diagram {
             let r = s.r + updates[2];
             (Circle { idx: s.idx, c, r }, duals)
         }).collect::<Vec<Split>>();
-        println!("Applying: step_size {:.3}, updates [{}]:", clamped_step_size, step_vec.iter().map(|x| format!("{:.3}", x)).collect::<Vec<String>>().join(", "));
+        println!("  step_size {:.3}, updates [{}]:", clamped_step_size, step_vec.iter().map(|x| format!("{:.3}", x)).collect::<Vec<String>>().join(", "));
         for (cur, (nxt, _)) in shapes.iter().zip(new_inputs.iter()) {
             println!("  {} -> {}", cur, nxt);
         }
+        let errors = &self.errors;
+        for (target, _) in &self.targets {
+            let err = errors.get(&target.to_string()).unwrap();
+            println!("  {}", err);
+        }
+        println!("  err {:?}", error);
         Diagram::new(new_inputs, self.targets.clone(), Some(self.total_target_area))
     }
 }

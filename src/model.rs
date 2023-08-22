@@ -14,36 +14,44 @@ struct Model {
 
 impl Model {
     fn new(inputs: Vec<Split>, targets: HashMap<String, f64>, step_size: f64, max_steps: usize) -> Model {
-        let mut diagram = Diagram::new(inputs, targets, None);
+        let mut diagram = Rc::new(RefCell::new(Diagram::new(inputs, targets, None)));
         let mut steps = Vec::<Step>::new();
         let mut min_step: Option<(usize, Step)> = None;
         let mut repeat_idx: Option<usize> = None;
         for idx in 0..max_steps {
-            let nxt = diagram.step(step_size);
-            let nxt = Rc::new(RefCell::new(nxt));
+            steps.push(diagram.clone());
+            println!("Step {}:", idx);
+            let nxt_diagram = diagram.borrow_mut().step(step_size);
+            println!();
+            let nxt = Rc::new(RefCell::new(nxt_diagram));
             let nxt_err = nxt.borrow().error.re;
             if min_step.clone().map(|(_, cur_min)| nxt_err < cur_min.borrow().error.re).unwrap_or(true) {
                 min_step = Some((idx, nxt.clone()));
             }
             for (prv_idx, prv) in steps.iter().enumerate().rev() {
-                if prv.borrow().error.re == nxt_err &&
+                let prv_err = prv.borrow().error.re;
+                if prv_err == nxt_err &&
                     prv
                     .borrow()
                     .shapes
                     .shapes
                     .iter()
                     .zip(nxt.borrow().shapes.shapes.iter())
-                    .all(|(a, b)| a == b)
+                    .all(|(a, b)| {
+                        println!("Checking {} vs {}", a, b);
+                        a == b
+                    })
                 {
-                    println!("  (repeated)");
+                    println!("  Step {} matches step {}: {}", idx + 1, prv_idx, prv_err);
                     repeat_idx = Some(prv_idx);
+                    steps.push(nxt.clone());
                     break;
                 }
             }
             if repeat_idx.is_some() {
                 break;
             }
-            steps.push(nxt);
+            diagram = nxt;
         }
         let (min_idx, min_step) = min_step.unwrap();
         let error = min_step.borrow().error.re;
@@ -60,6 +68,7 @@ mod tests {
 
     use super::*;
 
+    #[test]
     fn simple() {
         // 2 Circles, only the 2nd circle's x and r can move:
         // - 1st circle is fixed unit circle at origin
@@ -131,11 +140,7 @@ mod tests {
             (( 1.113, 0.775 ), 2.498e-16, (-0.440, -1.046 )),  // Step 46
             (( 1.113, 0.775 ), 1.388e-16, (-0.264,  1.586 )),  // Step 47
             (( 1.113, 0.775 ), 1.943e-16, (-0.440, -1.046 )),  // Step 48
-            (( 1.113, 0.775 ), 1.388e-16, (-0.264,  1.586 )),  // Step 49
-            (( 1.113, 0.775 ), 1.943e-16, (-0.440, -1.046 )),  // Step 50
-            (( 1.113, 0.775 ), 1.388e-16, (-0.264,  1.586 )),  // Step 51
-            (( 1.113, 0.775 ), 1.943e-16, (-0.440, -1.046 )),  // Step 52
-            (( 1.113, 0.775 ), 1.388e-16, (-0.264,  1.586 )),  // Step 53
+            (( 1.113, 0.775 ), 1.388e-16, (-0.264,  1.586 )),  // Step 49 repeats step 47
         ];
         let macos = vec![
             (( 1.113, 0.775 ), 7.147e-13, ( 0.704, -0.540 )),  // Step 27
@@ -152,15 +157,7 @@ mod tests {
             (( 1.113, 0.775 ), 2.220e-16, (-0.704,  0.540 )),  // Step 38
             (( 1.113, 0.775 ), 4.996e-16, ( 0.264, -1.586 )),  // Step 39
             (( 1.113, 0.775 ), 1.388e-16, ( 0.704, -0.540 )),  // Step 40
-            (( 1.113, 0.775 ), 6.106e-16, (-0.264,  1.586 )),  // Step 41
-            (( 1.113, 0.775 ), 2.220e-16, (-0.704,  0.540 )),  // Step 42
-            (( 1.113, 0.775 ), 4.996e-16, ( 0.264, -1.586 )),  // Step 43
-            (( 1.113, 0.775 ), 1.388e-16, ( 0.704, -0.540 )),  // Step 44
-            (( 1.113, 0.775 ), 6.106e-16, (-0.264,  1.586 )),  // Step 45
-            (( 1.113, 0.775 ), 2.220e-16, (-0.704,  0.540 )),  // Step 46
-            (( 1.113, 0.775 ), 4.996e-16, ( 0.264, -1.586 )),  // Step 47
-            (( 1.113, 0.775 ), 1.388e-16, ( 0.704, -0.540 )),  // Step 48
-            (( 1.113, 0.775 ), 6.106e-16, (-0.264,  1.586 )),  // Step 49
+            (( 1.113, 0.775 ), 6.106e-16, (-0.264,  1.586 )),  // Step 41 repeats step 37
         ];
         let expected_errs = [
             expected_errs,
@@ -170,14 +167,7 @@ mod tests {
         let steps = model.steps;
 
         let print_step = |diagram: &Diagram, idx: usize| {
-            println!("Step {}", idx);
-            let errors = &diagram.errors;
-            for (target, _) in tgts {
-                let err = errors.get(&target.to_string()).unwrap();
-                println!("  {}", err);
-            }
             let total_err = diagram.error.clone();
-            println!("Err: {:?}", total_err);
             let c1 = diagram.shapes.shapes[1];
             let grads = (-total_err.clone()).d();
             let err = total_err.v();
@@ -186,8 +176,7 @@ mod tests {
             } else {
                 format!("{:.5}", err)
             };
-            println!("Actual: (( {:.3}, {:.3} ), {: <9}, ({}, {} )),  // Step {}", c1.c.x, c1.r, err_str, Dual::fmt(&grads[0], 3), Dual::fmt(&grads[1], 3), idx);
-            println!();
+            println!("(( {:.3}, {:.3} ), {: <9}, ({}, {} )),  // Step {}", c1.c.x, c1.r, err_str, Dual::fmt(&grads[0], 3), Dual::fmt(&grads[1], 3), idx);
         };
 
         let generate_vals = env::var("GENERATE_VALS").map(|s| s.parse::<usize>().unwrap()).ok();
@@ -200,19 +189,11 @@ mod tests {
             None => {
                 assert_eq!(steps.len(), expected_errs.len());
                 for (idx, (step, ((e_cx, e_cr), e_err, (e_grad0, e_grad1)))) in steps.iter().zip(expected_errs.iter()).enumerate() {
-                    println!("Step {}", idx);
-                    let errors = &step.borrow().errors;
-                    for (target, _) in tgts {
-                        let err = errors.get(&target.to_string()).unwrap();
-                        println!("  {}", err);
-                    }
-                    let total_err = step.borrow().error.clone();
-                    println!("Err: {:?}", total_err);
                     let c1 = step.borrow().shapes.shapes[1];
-
                     assert_relative_eq!(c1.c.x, *e_cx, epsilon = 1e-3);
                     assert_relative_eq!(c1.r, *e_cr, epsilon = 1e-3);
 
+                    let total_err = step.borrow().error.clone();
                     let expected_err = Dual::new(*e_err, vec![-*e_grad0, -*e_grad1]);
                     assert_relative_eq!(total_err, expected_err, epsilon = 1e-3);
 
