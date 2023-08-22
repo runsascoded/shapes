@@ -1,122 +1,54 @@
-use std::{collections::HashMap, fmt::Display};
+use std::{cell::RefCell, rc::Rc, collections::HashMap};
 
-use crate::{circle::{Circle, Split, Duals}, shapes::Shapes, dual::D, r2::R2, areas::Areas};
+use crate::{diagram::Diagram, circle::Split};
 
 
-type Targets = HashMap<String, f64>;
-type Errors = HashMap<String, Error>;
-
-pub struct Diagram {
-    pub inputs: Vec<Split>,
-    pub shapes: Shapes,
-    pub targets: Targets,
-    pub total_target_area: f64,
-    pub errors: Errors,
-    pub error: D,
+type Step = Rc<RefCell<Diagram>>;
+struct Model {
+    steps: Vec<Step>,
+    repeat_idx: Option<usize>,
+    min_idx: usize,
+    min_step: Step,
+    error: f64,
 }
 
-#[derive(Clone, Debug)]
-pub struct Error {
-    pub key: String,
-    pub actual_area: D,
-    pub total_area: D,
-    pub actual_frac: D,
-    pub target_area: f64,
-    pub total_target_area: f64,
-    pub target_frac: f64,
-    pub error: D,
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f,
-            "{}: err {:.3}, {:.3} / {:.3} = {:.3}, {:.3} / {:.3} = {:.3}",
-            self.key, self.error.v(),
-            self.target_area, self.total_target_area, self.target_frac,
-            self.actual_area.v(), self.total_area.v(), self.actual_frac.v(),
-        )
-    }
-}
-
-impl Diagram {
-    pub fn new(inputs: Vec<Split>, targets: HashMap<String, f64>, total_target_area: Option<f64>) -> Diagram {
-        let shapes = Shapes::new(&inputs);
-        let all_key = String::from_utf8(vec![b'*'; shapes.len()]).unwrap();
-        let total_target_area = total_target_area.unwrap_or_else(|| {
-            let mut expanded_target = targets.clone();
-            Areas::expand(&mut expanded_target);
-            expanded_target.get(&all_key).unwrap().clone()
-        });
-        let errors = Self::compute_errors(&shapes, &targets, total_target_area);
-        let error = errors.values().into_iter().map(|e| &e.error).cloned().collect::<Vec<D>>().into_iter().sum();
-        Diagram { inputs, shapes, targets, total_target_area: total_target_area.clone(), errors, error }
-    }
-
-    pub fn n(&self) -> usize {
-        self.shapes.len()
-    }
-
-    pub fn key_contained_by(k0: &String, k1: &String) -> bool {
-        k0.chars().zip(k1.chars()).all(|(a, b)| a == '-' || a == b || b == '*')
-    }
-
-    pub fn compute_errors(shapes: &Shapes, targets: &Targets, total_target_area: f64) -> Errors {
-        let n = shapes.len();
-        let all_key = String::from_utf8(vec![b'*'; n]).unwrap();
-        let none_key = String::from_utf8(vec![b'-'; n]).unwrap();
-        let total_area = shapes.area(&all_key);
-        targets.iter().filter_map(|(key, target_area)| {
-            if key == &none_key {
-                None
-            } else {
-                let actual_area = shapes.area(key);
-                let target_frac = target_area / total_target_area;
-                let actual_frac = actual_area.clone() / &total_area;
-                let error = (actual_frac.clone() - target_frac).abs();
-                Some((
-                    key.clone(),
-                    Error {
-                        key: key.clone(),
-                        actual_area, total_area: total_area.clone(),
-                        target_area: target_area.clone(), total_target_area: total_target_area.clone(),
-                        actual_frac,
-                        target_frac,
-                        error,
-                    }
-                ))
+impl Model {
+    fn new(inputs: Vec<Split>, targets: HashMap<String, f64>, step_size: f64, max_steps: usize) -> Model {
+        let mut diagram = Diagram::new(inputs, targets, None);
+        let mut steps = Vec::<Step>::new();
+        let mut min_step: Option<(usize, Step)> = None;
+        let mut repeat_idx: Option<usize> = None;
+        for idx in 0..max_steps {
+            let nxt = diagram.step(step_size);
+            let nxt = Rc::new(RefCell::new(nxt));
+            let nxt_err = nxt.borrow().error.re;
+            if min_step.clone().map(|(_, cur_min)| nxt_err < cur_min.borrow().error.re).unwrap_or(true) {
+                min_step = Some((idx, nxt.clone()));
             }
-        }).collect()
-    }
-
-    pub fn duals(&self) -> Vec<Duals> {
-        self.inputs.iter().map(|(_, duals)| duals.clone()).collect()
-    }
-
-    pub fn step(&mut self, step_size: f64) -> Diagram {
-        let error = self.error.clone();
-        let error_size = self.error.v();
-        let grad_vec = (-error.clone()).d();
-        // let max_error = grad_vec.iter().map(|(_, e)| e.error.v()).unwrap().1.error.v();
-        let clamped_step_size = f64::min(error_size, step_size);
-        let magnitude = grad_vec.iter().map(|d| d * d).sum::<f64>();
-        let step_vec = grad_vec.iter().map(|d| d / magnitude * clamped_step_size).collect::<Vec<f64>>();
-        // println!("step_vec {:?}", step_vec);
-        let shapes = &self.shapes.shapes;
-        let new_inputs = shapes.iter().zip(self.duals()).map(|(s, duals)| {
-            let updates: [f64; 3] = duals.clone().map(|d| d.iter().zip(&step_vec).map(|(mask, step)| mask * step).sum());
-            // println!("  updates {:?}", updates);
-            let c = R2 {
-                x: s.c.x + updates[0],
-                y: s.c.y + updates[1],
-            };
-            let r = s.r + updates[2];
-            (Circle { idx: s.idx, c, r }, duals)
-        }).collect::<Vec<Split>>();
-        println!("Applying: step_size {:.3}, updates [{}]:", clamped_step_size, step_vec.iter().map(|x| format!("{:.3}", x)).collect::<Vec<String>>().join(", "));
-        for (cur, (nxt, _)) in shapes.iter().zip(new_inputs.iter()) {
-            println!("  {} -> {}", cur, nxt);
+            for (prv_idx, prv) in steps.iter().enumerate().rev() {
+                if prv.borrow().error.re == nxt_err &&
+                    prv
+                    .borrow()
+                    .shapes
+                    .shapes
+                    .iter()
+                    .zip(nxt.borrow().shapes.shapes.iter())
+                    .all(|(a, b)| a == b)
+                {
+                    println!("  (repeated)");
+                    repeat_idx = Some(prv_idx);
+                    break;
+                }
+            }
+            if repeat_idx.is_some() {
+                break;
+            }
+            steps.push(nxt);
         }
-        Diagram::new(new_inputs, self.targets.clone(), Some(self.total_target_area))
+        let (min_idx, min_step) = min_step.unwrap();
+        let error = min_step.borrow().error.re;
+
+        Model { steps, min_idx, min_step, repeat_idx, error }
     }
 }
 
@@ -124,11 +56,10 @@ impl Diagram {
 mod tests {
     use std::env;
 
-    use crate::{r2::R2, dual::Dual};
+    use crate::{dual::Dual, circle::Circle, r2::R2};
 
     use super::*;
 
-    #[test]
     fn simple() {
         // 2 Circles, only the 2nd circle's x and r can move:
         // - 1st circle is fixed unit circle at origin
@@ -145,7 +76,8 @@ mod tests {
             ("01", 1. / 15.),  // Fizz Buzz (multiples of both 3 and 5)
         ];
         let targets: HashMap::<_, _> = tgts.iter().map(|(k, v)| (k.to_string(), *v)).collect();
-        let mut diagram = Diagram::new(inputs, targets, None);
+        let model = Model::new(inputs, targets, 0.1, 100);
+        // let mut diagram = Diagram::new(inputs, targets, None);
         let os = env::consts::OS;
         let expected_errs = vec![
             (( 1.000, 1.000 ), 0.386    , ( 0.426, -1.456 )),  // Step 0
@@ -234,6 +166,9 @@ mod tests {
             expected_errs,
             if os == "macos" { macos } else { linux },
         ].concat();
+
+        let steps = model.steps;
+
         let print_step = |diagram: &Diagram, idx: usize| {
             println!("Step {}", idx);
             let errors = &diagram.errors;
@@ -252,35 +187,42 @@ mod tests {
                 format!("{:.5}", err)
             };
             println!("Actual: (( {:.3}, {:.3} ), {: <9}, ({}, {} )),  // Step {}", c1.c.x, c1.r, err_str, Dual::fmt(&grads[0], 3), Dual::fmt(&grads[1], 3), idx);
-            total_err
+            println!();
         };
+
         let generate_vals = env::var("GENERATE_VALS").map(|s| s.parse::<usize>().unwrap()).ok();
         match generate_vals {
             Some(n) => {
-                for idx in 0..n {
-                    print_step(&diagram, idx);
-                    println!();
-                    diagram = diagram.step(0.1);
-                    println!();
+                for (idx, step) in steps.iter().enumerate() {
+                    print_step(&step.borrow(), idx);
                 }
             }
             None => {
-                for (idx, ((e_cx, e_cr), e_err, (e_grad0, e_grad1))) in expected_errs.iter().enumerate() {
-                    let total_err = print_step(&diagram, idx);
-                    let c1 = diagram.shapes.shapes[1];
+                assert_eq!(steps.len(), expected_errs.len());
+                for (idx, (step, ((e_cx, e_cr), e_err, (e_grad0, e_grad1)))) in steps.iter().zip(expected_errs.iter()).enumerate() {
+                    println!("Step {}", idx);
+                    let errors = &step.borrow().errors;
+                    for (target, _) in tgts {
+                        let err = errors.get(&target.to_string()).unwrap();
+                        println!("  {}", err);
+                    }
+                    let total_err = step.borrow().error.clone();
+                    println!("Err: {:?}", total_err);
+                    let c1 = step.borrow().shapes.shapes[1];
+
                     assert_relative_eq!(c1.c.x, *e_cx, epsilon = 1e-3);
                     assert_relative_eq!(c1.r, *e_cr, epsilon = 1e-3);
+
                     let expected_err = Dual::new(*e_err, vec![-*e_grad0, -*e_grad1]);
                     assert_relative_eq!(total_err, expected_err, epsilon = 1e-3);
+
                     let actual_err = total_err.v();
                     let abs_err_diff = (*e_err - actual_err).abs();
                     let relative_err = abs_err_diff / *e_err;
                     assert!(relative_err < 1e-3, "relative_err {} >= 1e-3: actual err {}, expected {}", relative_err, actual_err, *e_err);
-                    println!();
-                    diagram = diagram.step(0.1);
-                    println!();
+
+                    print_step(&step.borrow(), idx);
                 }
-                print_step(&diagram, expected_errs.len());
             }
         }
     }

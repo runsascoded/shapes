@@ -9,6 +9,7 @@ mod dual;
 mod edge;
 mod intersection;
 mod math;
+mod model;
 mod r2;
 mod region;
 mod shapes;
