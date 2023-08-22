@@ -1,19 +1,19 @@
 use std::{cell::RefCell, rc::Rc, collections::HashMap};
 
-use crate::{diagram::Diagram, circle::Split};
+use crate::{diagram::{Diagram, Targets}, circle::Split};
 
 
 type Step = Rc<RefCell<Diagram>>;
-struct Model {
-    steps: Vec<Step>,
-    repeat_idx: Option<usize>,
-    min_idx: usize,
-    min_step: Step,
-    error: f64,
+pub struct Model {
+    pub steps: Vec<Step>,
+    pub repeat_idx: Option<usize>,
+    pub min_idx: usize,
+    pub min_step: Step,
+    pub error: f64,
 }
 
 impl Model {
-    fn new(inputs: Vec<Split>, targets: HashMap<String, f64>, step_size: f64, max_steps: usize) -> Model {
+    pub fn new(inputs: Vec<Split>, targets: Targets, step_size: f64, max_steps: usize) -> Model {
         let mut diagram = Rc::new(RefCell::new(Diagram::new(inputs, targets, None)));
         let mut steps = Vec::<Step>::new();
         let mut min_step: Option<(usize, Step)> = None;

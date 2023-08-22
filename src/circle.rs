@@ -27,15 +27,7 @@ impl<D: Clone + Float> Circle<D> {
     }
 }
 
-// impl<D: PartialEq + Eq> PartialEq for Circle<D> {
-//     fn eq(&self, o: &Circle<D>) -> bool {
-//         self.idx == o.idx && self.c == o.c && self.r == o.r
-//     }
-// }
-
-impl<D: Eq> Eq for Circle<D> {
-
-}
+impl<D: Eq> Eq for Circle<D> {}
 
 impl Circle<f64> {
     pub fn dual<'a>(&self, duals: &Duals) -> Circle<D> {

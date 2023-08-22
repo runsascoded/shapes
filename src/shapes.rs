@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc, f64::consts::PI, collections::HashSet};
 
-use crate::{circle::{Circle, C, Split}, intersection::Node, edge::{self, E}, region::{Region, Segment}, dual::D};
+use crate::{circle::{Circle, C, Split}, intersection::Node, edge::{self, E}, region::{Region, Segment}, dual::{D, Dual}, zero::Zero};
 
 #[derive(Clone, Debug)]
 pub struct Shapes {
@@ -253,7 +253,7 @@ impl Shapes {
         Shapes { shapes, duals, nodes, nodes_by_shape, nodes_by_shapes, edges, is_connected, regions, total_visits, total_expected_visits, }
     }
 
-    pub fn area(&self, key: &String) -> D {
+    pub fn area(&self, key: &String) -> Option<D> {
         match key.split_once('*') {
             Some((prefix, suffix)) => {
                 let k0 = format!("{}-{}", prefix, suffix);
@@ -262,17 +262,27 @@ impl Shapes {
                 if k0.chars().all(|ch| ch == '-') {
                     return self.area(&k1)
                 } else {
-                    self.area(&k0) + self.area(&k1)
+                    let a0 = self.area(&k0).unwrap_or_else(|| self.zero());
+                    let a1 = self.area(&k1).unwrap_or_else(|| self.zero());
+                    Some(a0 + a1)
                 }
             }
-            None => self.regions.iter().find(|r| &r.key == key).expect(&format!("No region found with key {}", key)).area()
+            None => {
+                let regions = &self.regions;
+                regions
+                .iter()
+                .find(|r| &r.key == key)
+                .map(|r| r.area())
+                // .expect(
+                //     &format!(
+                //         "No region found with key {}; region keys: {}",
+                //         key,
+                //         regions.iter().map(|r| r.key.clone()).collect::<Vec<_>>().join(", ")
+                //     )
+                // )
+                // .area()
+            }
         }
-        // for ch in key.chars() {
-        //     if ch == '*' {
-
-        //     }
-        // }
-        // self.regions.iter().filter(|r| r.matches(key)).map(|r| r.area()).sum()
     }
 
     pub fn len(&self) -> usize {
@@ -281,6 +291,10 @@ impl Shapes {
 
     pub fn num_vars(&self) -> usize {
         self.duals[0].borrow().r.d().len()
+    }
+
+    pub fn zero(&self) -> D {
+        Dual::zero(self.duals[0].borrow().c.x.clone())
     }
 }
 

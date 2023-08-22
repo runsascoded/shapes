@@ -3,8 +3,8 @@ use std::{collections::HashMap, fmt::Display};
 use crate::{circle::{Circle, Split, Duals}, shapes::Shapes, dual::D, r2::R2, areas::Areas};
 
 
-type Targets = HashMap<String, f64>;
-type Errors = HashMap<String, Error>;
+pub type Targets = HashMap<String, f64>;
+pub type Errors = HashMap<String, Error>;
 
 #[derive(Clone, Debug)]
 pub struct Diagram {
@@ -19,7 +19,7 @@ pub struct Diagram {
 #[derive(Clone, Debug)]
 pub struct Error {
     pub key: String,
-    pub actual_area: D,
+    pub actual_area: Option<D>,
     pub total_area: D,
     pub actual_frac: D,
     pub target_area: f64,
@@ -31,10 +31,11 @@ pub struct Error {
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f,
-            "{}: err {:.3}, {:.3} / {:.3} = {:.3}, {:.3} / {:.3} = {:.3}",
+            "{}: err {:.3}, {:.3} / {:.3} = {:.3}, {} / {:.3} = {:.3}",
             self.key, self.error.v(),
             self.target_area, self.total_target_area, self.target_frac,
-            self.actual_area.v(), self.total_area.v(), self.actual_frac.v(),
+            self.actual_area.clone().map(|a| format!("{:.3}", a.v())).unwrap_or_else(|| "-".to_string()),
+            self.total_area.v(), self.actual_frac.v(),
         )
     }
 }
@@ -65,14 +66,14 @@ impl Diagram {
         let n = shapes.len();
         let all_key = String::from_utf8(vec![b'*'; n]).unwrap();
         let none_key = String::from_utf8(vec![b'-'; n]).unwrap();
-        let total_area = shapes.area(&all_key);
+        let total_area = shapes.area(&all_key).unwrap_or_else(|| shapes.zero());
         targets.iter().filter_map(|(key, target_area)| {
             if key == &none_key {
                 None
             } else {
                 let actual_area = shapes.area(key);
                 let target_frac = target_area / total_target_area;
-                let actual_frac = actual_area.clone() / &total_area;
+                let actual_frac = actual_area.clone().unwrap_or_else(|| shapes.zero()).clone() / &total_area;
                 let error = (actual_frac.clone() - target_frac).abs();
                 Some((
                     key.clone(),
