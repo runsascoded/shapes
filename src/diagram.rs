@@ -1,10 +1,12 @@
-use std::{collections::HashMap, fmt::Display};
+use std::{collections::HashMap, fmt::Display, cell::RefCell, rc::Rc};
 
 use crate::{circle::{Circle, Split, Duals}, shapes::Shapes, dual::D, r2::R2, areas::Areas};
 
 
 type Targets = HashMap<String, f64>;
 type Errors = HashMap<String, Error>;
+type Step = (f64, Rc<RefCell<Shapes>>);
+type History = Vec<Step>;
 
 pub struct Diagram {
     inputs: Vec<Split>,
@@ -13,6 +15,7 @@ pub struct Diagram {
     total_target_area: f64,
     errors: Errors,
     error: D,
+    history: History,
 }
 
 #[derive(Clone, Debug)]
@@ -39,7 +42,7 @@ impl Display for Error {
 }
 
 impl Diagram {
-    pub fn new(inputs: Vec<Split>, targets: HashMap<String, f64>, total_target_area: Option<f64>) -> Diagram {
+    pub fn new(inputs: Vec<Split>, targets: HashMap<String, f64>, total_target_area: Option<f64>, history: History) -> Diagram {
         let shapes = Shapes::new(&inputs);
         let all_key = String::from_utf8(vec![b'*'; shapes.len()]).unwrap();
         let total_target_area = total_target_area.unwrap_or_else(|| {
@@ -49,7 +52,7 @@ impl Diagram {
         });
         let errors = Self::compute_errors(&shapes, &targets, total_target_area);
         let error = errors.values().into_iter().map(|e| &e.error).cloned().collect::<Vec<D>>().into_iter().sum();
-        Diagram { inputs, shapes, targets, total_target_area: total_target_area.clone(), errors, error }
+        Diagram { inputs, shapes, targets, total_target_area: total_target_area.clone(), errors, error, history }
     }
 
     pub fn n(&self) -> usize {
@@ -92,10 +95,10 @@ impl Diagram {
         self.inputs.iter().map(|(_, duals)| duals.clone()).collect()
     }
 
-    pub fn step(&self, step_size: f64) -> Diagram {
+    pub fn step(&mut self, step_size: f64) -> Diagram {
         let error = self.error.clone();
-        let error_size = error.v();
-        let grad_vec = (-error).d();
+        let error_size = self.error.v();
+        let grad_vec = (-error.clone()).d();
         // let max_error = grad_vec.iter().map(|(_, e)| e.error.v()).unwrap().1.error.v();
         let clamped_step_size = f64::min(error_size, step_size);
         let magnitude = grad_vec.iter().map(|d| d * d).sum::<f64>();
@@ -116,7 +119,29 @@ impl Diagram {
         for (cur, (nxt, _)) in shapes.iter().zip(new_inputs.iter()) {
             println!("  {} -> {}", cur, nxt);
         }
-        Diagram::new(new_inputs, self.targets.clone(), Some(self.total_target_area))
+        // let history = self.history;
+        // for prv_idx in history.len() - 1..0 {
+
+        // }
+        let mut min_step: Option<Step> = None;
+        for (prv_err, prv_shapes) in self.history.iter().rev() {
+            let is_new_min = match min_step {
+                Some((min_err, _)) => (prv_err < &min_err),
+                None => true,
+            };
+            if is_new_min {
+                min_step = Some((prv_err.clone(), prv_shapes.clone()));
+            }
+            if prv_err == &error.clone().re && prv_shapes.borrow().shapes.iter().zip(self.shapes.shapes.iter()).all(|(a, b)| a == b) {
+                println!("  (repeated)");
+                break;
+            }
+        }
+        match min_step {
+            Some(t) =>
+        }
+        self.history.push((error.re, Rc::new(RefCell::new(self.shapes.clone()))));
+        Diagram::new(new_inputs, self.targets.clone(), Some(self.total_target_area), self.history.clone())
     }
 }
 
@@ -145,7 +170,7 @@ mod tests {
             ("01", 1. / 15.),  // Fizz Buzz (multiples of both 3 and 5)
         ];
         let targets: HashMap::<_, _> = tgts.iter().map(|(k, v)| (k.to_string(), *v)).collect();
-        let mut diagram = Diagram::new(inputs, targets, None);
+        let mut diagram = Diagram::new(inputs, targets, None, Vec::new());
         let os = env::consts::OS;
         let expected_errs = vec![
             (( 1.000, 1.000 ), 0.386    , ( 0.426, -1.456 )),  // Step 0
@@ -200,6 +225,10 @@ mod tests {
             (( 1.113, 0.775 ), 1.388e-16, (-0.264,  1.586 )),  // Step 47
             (( 1.113, 0.775 ), 1.943e-16, (-0.440, -1.046 )),  // Step 48
             (( 1.113, 0.775 ), 1.388e-16, (-0.264,  1.586 )),  // Step 49
+            (( 1.113, 0.775 ), 1.943e-16, (-0.440, -1.046 )),  // Step 50
+            (( 1.113, 0.775 ), 1.388e-16, (-0.264,  1.586 )),  // Step 51
+            (( 1.113, 0.775 ), 1.943e-16, (-0.440, -1.046 )),  // Step 52
+            (( 1.113, 0.775 ), 1.388e-16, (-0.264,  1.586 )),  // Step 53
         ];
         let macos = vec![
             (( 1.113, 0.775 ), 7.147e-13, ( 0.704, -0.540 )),  // Step 27

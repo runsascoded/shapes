@@ -8,7 +8,7 @@ use crate::{
     intersection::Intersection, dual::{D, Dual},
 };
 
-#[derive(Debug, Clone, Copy, From, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, From, PartialEq, Serialize, Deserialize)]
 pub struct Circle<D> {
     pub idx: usize,
     pub c: R2<D>,
@@ -25,6 +25,16 @@ impl<D: Clone + Float> Circle<D> {
         let y = self.c.y.clone() + self.r.clone() * t.clone().sin();
         R2 { x, y }
     }
+}
+
+// impl<D: PartialEq + Eq> PartialEq for Circle<D> {
+//     fn eq(&self, o: &Circle<D>) -> bool {
+//         self.idx == o.idx && self.c == o.c && self.r == o.r
+//     }
+// }
+
+impl<D: Eq> Eq for Circle<D> {
+
 }
 
 impl Circle<f64> {

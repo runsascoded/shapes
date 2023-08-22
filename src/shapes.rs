@@ -2,6 +2,7 @@ use std::{cell::RefCell, rc::Rc, f64::consts::PI, collections::HashSet};
 
 use crate::{circle::{Circle, C, Split}, intersection::Node, edge::{self, E}, region::{Region, Segment}, dual::D};
 
+#[derive(Clone, Debug)]
 pub struct Shapes {
     pub shapes: Vec<Circle<f64>>,
     pub duals: Vec<C>,
