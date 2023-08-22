@@ -16,7 +16,11 @@ mod region;
 mod shapes;
 mod zero;
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use circle::Split;
+use diagram::Diagram;
 use dual::Dual;
 use serde::{Serialize, Deserialize};
 use wasm_bindgen::prelude::*;
@@ -41,33 +45,62 @@ impl From<&Dual> for JsDual {
     }
 }
 
+impl From<Rc<RefCell<Dual>>> for JsDual {
+    fn from(d: Rc<RefCell<Dual>>) -> Self {
+        JsDual {
+            v: d.borrow().v().clone(),
+            d: d.borrow().d().clone(),
+        }
+    }
+}
+
+impl From<Rc<RefCell<Circle<Dual>>>> for Circle<JsDual> {
+    fn from(d: Rc<RefCell<Circle<Dual>>>) -> Self {
+        let d = d.borrow();
+        Circle {
+            idx: d.idx,
+            c: R2 { x: JsDual::from(&d.c.x), y: JsDual::from(&d.c.y) },
+            r: JsDual::from(&d.r),
+        }
+    }
+}
+
+
 #[derive(Serialize, Deserialize)]
-struct JsModel {
+struct JsDiagram {
     shapes: Vec<Circle<f64>>,
     duals: Vec<Circle<JsDual>>,
     error: f64,
 }
 
+impl From<Rc<RefCell<Diagram>>> for JsDiagram {
+    fn from(d: Rc<RefCell<Diagram>>) -> Self {
+        JsDiagram {
+            shapes: d.borrow().shapes.shapes.clone(),
+            duals: d.borrow().shapes.duals.iter().map(|d| From::from(d.clone())).collect(),
+            error: d.borrow().error.re,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct JsModel {
+    pub steps: Vec<JsDiagram>,
+    pub repeat_idx: Option<usize>,
+    pub min_idx: usize,
+    pub min_step: JsDiagram,
+    pub error: f64,
+}
+
 impl From<Model> for JsModel {
     fn from(m: Model) -> Self {
-        let min_step = m.min_step.borrow();
-        let duals: Vec<Circle<JsDual>> = min_step.shapes.duals.iter().map(|c| {
-            Circle {
-                idx: c.borrow().idx,
-                c: R2 { x: JsDual::from(&c.borrow().c.x), y: JsDual::from(&c.borrow().c.y) },
-                r: JsDual::from(&c.borrow().r),
-            }
-        }).collect();
+        let steps: Vec<JsDiagram> = m.steps.iter().map(|d| From::from(d.clone())).collect();
         JsModel {
-            shapes: duals.iter().map(|c| {
-                Circle {
-                    idx: c.idx,
-                    c: R2 { x: c.c.x.v, y: c.c.y.v },
-                    r: c.r.v,
-                }
-            }).collect(),
-            duals,
-            error: min_step.error.re,
+            steps,
+            repeat_idx: m.repeat_idx,
+            min_idx: m.min_idx,
+            min_step: m.min_step.into(),
+            error: m.error,
         }
     }
 }
@@ -100,12 +133,6 @@ pub fn fit(circles: &JsValue, targets: &JsValue, step_size: f64, max_steps: usiz
     }).collect();
     console::log_1(&"made splits".into());
 
-    //     Circle {
-    //         idx: c.idx,
-    //         c: R2 { x: Dual::new(c.c.x.v, c.c.x.d), y: Dual::new(c.c.y.v, c.c.y.d) },
-    //         r: Dual::new(c.r.v, c.r.d),
-    //     }
-    // });
     let targets: Vec<(String, f64)> = serde_wasm_bindgen::from_value(targets.clone()).unwrap();
     console::log_1(&"target tuples".into());
     let targets: Targets = targets.into_iter().collect();
@@ -113,9 +140,6 @@ pub fn fit(circles: &JsValue, targets: &JsValue, step_size: f64, max_steps: usiz
     let model = Model::new(circles, targets, step_size, max_steps);
     console::log_1(&"model".into());
     let js_model: JsModel = model.into();
-    // let min_step = &model.min_step.borrow();
-    // let error = min_step.error;
-    // let shapes = min_step.shapes.shapes;
     console::log_1(&"js_model".into());
     serde_wasm_bindgen::to_value(&js_model).unwrap()
 }
