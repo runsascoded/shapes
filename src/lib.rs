@@ -22,8 +22,10 @@ use std::rc::Rc;
 use circle::Split;
 use diagram::Diagram;
 use dual::Dual;
+use log::info;
 use serde::{Serialize, Deserialize};
 use wasm_bindgen::prelude::*;
+use wasm_bindgen_console_logger::DEFAULT_LOGGER;
 use web_sys::console;
 use crate::circle::Circle;
 use crate::diagram::Targets;
@@ -39,17 +41,8 @@ struct JsDual {
 impl From<&Dual> for JsDual {
     fn from(d: &Dual) -> Self {
         JsDual {
-            v: d.v(),
-            d: d.d(),
-        }
-    }
-}
-
-impl From<Rc<RefCell<Dual>>> for JsDual {
-    fn from(d: Rc<RefCell<Dual>>) -> Self {
-        JsDual {
-            v: d.borrow().v().clone(),
-            d: d.borrow().d().clone(),
+            v: d.v().clone(),
+            d: d.d().clone(),
         }
     }
 }
@@ -70,7 +63,7 @@ impl From<Rc<RefCell<Circle<Dual>>>> for Circle<JsDual> {
 struct JsDiagram {
     shapes: Vec<Circle<f64>>,
     duals: Vec<Circle<JsDual>>,
-    error: f64,
+    error: JsDual,
 }
 
 impl From<Rc<RefCell<Diagram>>> for JsDiagram {
@@ -78,7 +71,7 @@ impl From<Rc<RefCell<Diagram>>> for JsDiagram {
         JsDiagram {
             shapes: d.borrow().shapes.shapes.clone(),
             duals: d.borrow().shapes.duals.iter().map(|d| From::from(d.clone())).collect(),
-            error: d.borrow().error.re,
+            error: (&d.borrow().error).into(),
         }
     }
 }
@@ -89,18 +82,17 @@ struct JsModel {
     pub repeat_idx: Option<usize>,
     pub min_idx: usize,
     pub min_step: JsDiagram,
-    pub error: f64,
+    pub error: JsDual,
 }
 
 impl From<Model> for JsModel {
     fn from(m: Model) -> Self {
-        let steps: Vec<JsDiagram> = m.steps.iter().map(|d| From::from(d.clone())).collect();
         JsModel {
-            steps,
+            steps: m.steps.iter().map(|d| { From::from(d.clone()) }).collect(),
             repeat_idx: m.repeat_idx,
             min_idx: m.min_idx,
-            min_step: m.min_step.into(),
-            error: m.error,
+            min_step: m.min_step.clone().into(),
+            error: (&m.min_step.borrow().error).into(),
         }
     }
 }
@@ -118,6 +110,8 @@ pub fn circle(cx: f64, cy: f64, r: f64) -> JsValue {
 
 #[wasm_bindgen]
 pub fn fit(circles: &JsValue, targets: &JsValue, step_size: f64, max_steps: usize) -> JsValue {
+    log::set_logger(&DEFAULT_LOGGER).unwrap();
+    log::set_max_level(log::LevelFilter::Info);
     console_error_panic_hook::set_once();
     console::log_2(&"web-sys fit".into(), circles);
     let circles: Vec<Circle<JsDual>> = serde_wasm_bindgen::from_value(circles.clone()).unwrap();

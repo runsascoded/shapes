@@ -1,5 +1,7 @@
 use std::{collections::HashMap, fmt::Display};
 
+use log::{info, debug};
+
 use crate::{circle::{Circle, Split, Duals}, shapes::Shapes, dual::D, r2::R2, areas::Areas};
 
 
@@ -100,30 +102,29 @@ impl Diagram {
         let grad_vec = (-error.clone()).d();
         // let max_error = grad_vec.iter().map(|(_, e)| e.error.v()).unwrap().1.error.v();
         let clamped_step_size = f64::min(error_size, step_size);
-        let magnitude = grad_vec.iter().map(|d| d * d).sum::<f64>();
+        let magnitude = grad_vec.iter().map(|d| d * d).sum::<f64>().sqrt();
         let step_vec = grad_vec.iter().map(|d| d / magnitude * clamped_step_size).collect::<Vec<f64>>();
-        // println!("step_vec {:?}", step_vec);
+        debug!("  step_vec {:?}", step_vec);
         let shapes = &self.shapes.shapes;
         let new_inputs = shapes.iter().zip(self.duals()).map(|(s, duals)| {
             let updates: [f64; 3] = duals.clone().map(|d| d.iter().zip(&step_vec).map(|(mask, step)| mask * step).sum());
-            // println!("  updates {:?}", updates);
             let c = R2 {
                 x: s.c.x + updates[0],
                 y: s.c.y + updates[1],
             };
             let r = s.r + updates[2];
-            (Circle { idx: s.idx, c, r }, duals)
+            ( Circle { idx: s.idx, c, r }, duals )
         }).collect::<Vec<Split>>();
-        println!("  step_size {:.3}, updates [{}]:", clamped_step_size, step_vec.iter().map(|x| format!("{:.3}", x)).collect::<Vec<String>>().join(", "));
+        debug!("  step_size {}, updates [{}]:", clamped_step_size, step_vec.iter().map(|x| format!("{}", x)).collect::<Vec<String>>().join(", "));
         for (cur, (nxt, _)) in shapes.iter().zip(new_inputs.iter()) {
-            println!("  {} -> {}", cur, nxt);
+            debug!("  {} -> {}", cur, nxt);
         }
         let errors = &self.errors;
         for (target, _) in &self.targets {
             let err = errors.get(&target.to_string()).unwrap();
-            println!("  {}", err);
+            debug!("  {}", err);
         }
-        println!("  err {:?}", error);
+        debug!("  err {:?}", error);
         Diagram::new(new_inputs, self.targets.clone(), Some(self.total_target_area))
     }
 }
