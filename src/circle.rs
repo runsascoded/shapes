@@ -19,7 +19,7 @@ pub struct Circle<D> {
 pub type C = Rc<RefCell<Circle<D>>>;
 pub type Duals = [Vec<f64>; 3];
 #[declare]
-pub type Split = (Circle<f64>, Duals);
+pub type Input = (Circle<f64>, Duals);
 
 impl<D: Clone + Float> Circle<D> {
     pub fn point(&self, t: D) -> R2<D> {
@@ -65,7 +65,7 @@ impl Circle<D> {
     pub fn v(&self) -> Circle<f64> {
         Circle { idx: self.idx, c: self.c.v(), r: self.r.v() }
     }
-    pub fn split(&self) -> Split {
+    pub fn split(&self) -> Input {
         ( self.v(), [ self.c.x.d().clone(), self.c.y.d().clone(), self.r.d().clone() ] )
     }
     pub fn intersect(&self, c1: &Circle<D>) -> Vec<Intersection> {

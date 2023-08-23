@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc, f64::consts::PI, collections::HashSet};
 
-use crate::{circle::{Circle, C, Split}, intersection::Node, edge::{self, E}, region::{Region, Segment}, dual::{D, Dual}, zero::Zero};
+use crate::{circle::{Circle, C, Input}, intersection::Node, edge::{self, E}, region::{Region, Segment}, dual::{D, Dual}, zero::Zero};
 
 #[derive(Clone, Debug)]
 pub struct Intersections {
@@ -17,7 +17,7 @@ pub struct Intersections {
 }
 
 impl Intersections {
-    pub fn new(inputs: &Vec<Split>) -> Intersections {
+    pub fn new(inputs: &Vec<Input>) -> Intersections {
         let n = inputs.len();
         let shapes: Vec<Circle<f64>> = inputs.iter().map(|(c, _duals)| c.clone()).collect();
         let duals: Vec<C> = inputs.iter().map(|(c, duals)| Rc::new(RefCell::new(c.dual(duals)))).collect();

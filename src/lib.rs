@@ -21,7 +21,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use circle::Split;
+use circle::Input;
 use diagram::Diagram;
 use dual::Dual;
 use log::info;
@@ -33,90 +33,6 @@ use crate::circle::Circle;
 use crate::diagram::{Error, Targets};
 use crate::r2::R2;
 use tsify::{Tsify};
-
-#[derive(Tsify, Serialize, Deserialize)]
-pub struct JsDual {
-    v: f64,
-    d: Vec<f64>,
-}
-
-impl From<&Dual> for JsDual {
-    fn from(d: &Dual) -> Self {
-        JsDual {
-            v: d.v().clone(),
-            d: d.d().clone(),
-        }
-    }
-}
-
-impl From<Rc<RefCell<Circle<Dual>>>> for Circle<JsDual> {
-    fn from(d: Rc<RefCell<Circle<Dual>>>) -> Self {
-        let d = d.borrow();
-        Circle {
-            idx: d.idx,
-            c: R2 { x: JsDual::from(&d.c.x), y: JsDual::from(&d.c.y) },
-            r: JsDual::from(&d.r),
-        }
-    }
-}
-
-#[derive(Tsify, Serialize, Deserialize)]
-pub struct JsPoint<T> {
-    x: T,
-    y: T,
-}
-#[derive(Tsify, Serialize, Deserialize)]
-pub struct JsCircle {
-    idx: usize,
-    c: JsPoint<JsDual>,
-    r: JsDual,
-}
-
-#[derive(Tsify, Serialize, Deserialize)]
-pub struct JsErr {
-    pub key: String,
-    pub actual_area: Option<JsDual>,
-    pub total_area: JsDual,
-    pub actual_frac: JsDual,
-    pub target_area: f64,
-    pub total_target_area: f64,
-    pub target_frac: f64,
-    pub error: JsDual,
-}
-
-impl From<Error> for JsErr {
-    fn from(e: Error) -> Self {
-        JsErr {
-            key: e.key,
-            actual_area: e.actual_area.map(|a| (&a).into()),
-            total_area: (&e.total_area).into(),
-            actual_frac: (&e.actual_frac).into(),
-            target_area: e.target_area,
-            total_target_area: e.total_target_area,
-            target_frac: e.target_frac,
-            error: (&e.error).into(),
-        }
-    }
-}
-
-#[derive(Tsify, Serialize, Deserialize)]
-pub struct JsDiagram {
-    shapes: Vec<Circle<f64>>,
-    // duals: Vec<Circle<JsDual>>,
-    error: JsDual,
-    errors: HashMap<String, JsErr>,
-}
-
-impl From<Rc<RefCell<Diagram>>> for JsDiagram {
-    fn from(d: Rc<RefCell<Diagram>>) -> Self {
-        JsDiagram {
-            shapes: d.borrow().shapes.clone(),
-            // duals: d.borrow().duals.iter().map(|d| From::from(d.clone())).collect(),
-            error: (&d.borrow().error).into(),
-            errors: d.borrow().errors.iter().map(|(k, v)| (k.clone(), v.clone().into())).collect(),
-        }
-    }
-}
 
 #[derive(Tsify, Serialize, Deserialize)]
 pub struct Model {
@@ -142,95 +58,96 @@ impl From<model::Model> for Model {
 }
 
 #[wasm_bindgen]
-pub fn diagram(circles: &JsValue, targets: &JsValue) -> JsValue {
+pub fn make_diagram(circles: JsValue, targets: JsValue) -> JsValue {
     log::set_logger(&DEFAULT_LOGGER).unwrap();
     log::set_max_level(log::LevelFilter::Info);
     console_error_panic_hook::set_once();
-    console::log_2(&"web-sys fit".into(), circles);
-    let circles: Vec<Circle<JsDual>> = serde_wasm_bindgen::from_value(circles.clone()).unwrap();
-    let circles: Vec<Split> = circles.iter().map(|c| {
-        (
-            Circle {
-                idx: c.idx,
-                c: R2 { x: c.c.x.v, y: c.c.y.v },
-                r: c.r.v,
-            },
-            [c.c.x.d.clone(), c.c.y.d.clone(), c.r.d.clone(), ],
-        )
-    }).collect();
-    console::log_1(&"made splits".into());
-
-    let targets: Vec<(String, f64)> = serde_wasm_bindgen::from_value(targets.clone()).unwrap();
-    console::log_1(&"target tuples".into());
-    let targets: Targets = targets.into_iter().collect();
-    console::log_1(&"targets".into());
-    let diagram = Diagram::new(circles, targets, None);
-    let js_diagram: JsDiagram = From::from(Rc::new(RefCell::new(diagram)));
-    serde_wasm_bindgen::to_value(&js_diagram).unwrap()
+    let inputs: Vec<Input> = serde_wasm_bindgen::from_value(circles).unwrap();
+    // console::log_2(&"web-sys fit".into(), circles);
+    // let circles: Vec<Circle<JsDual>> = serde_wasm_bindgen::from_value(circles.clone()).unwrap();
+    // let circles: Vec<Split> = circles.iter().map(|c| {
+    //     (
+    //         Circle {
+    //             idx: c.idx,
+    //             c: R2 { x: c.c.x.v, y: c.c.y.v },
+    //             r: c.r.v,
+    //         },
+    //         [c.c.x.d.clone(), c.c.y.d.clone(), c.r.d.clone(), ],
+    //     )
+    // }).collect();
+    // console::log_1(&"made splits".into());
+    //
+    let targets: Targets = serde_wasm_bindgen::from_value(targets.clone()).unwrap();
+    // console::log_1(&"target tuples".into());
+    // let targets: Targets = targets.into_iter().collect();
+    // console::log_1(&"targets".into());
+    let diagram = Diagram::new(inputs, targets, None);
+    // let js_diagram: JsDiagram = From::from(Rc::new(RefCell::new(diagram)));
+    serde_wasm_bindgen::to_value(&diagram).unwrap()
 }
 
-#[wasm_bindgen]
-pub fn step(circles: &JsValue, targets: &JsValue, step_size: f64) -> JsValue {
-    log::set_logger(&DEFAULT_LOGGER).unwrap();
-    log::set_max_level(log::LevelFilter::Info);
-    console_error_panic_hook::set_once();
-    console::log_2(&"web-sys fit".into(), circles);
-    let circles: Vec<Circle<JsDual>> = serde_wasm_bindgen::from_value(circles.clone()).unwrap();
-    let circles: Vec<Split> = circles.iter().map(|c| {
-        (
-            Circle {
-                idx: c.idx,
-                c: R2 { x: c.c.x.v, y: c.c.y.v },
-                r: c.r.v,
-            },
-            [ c.c.x.d.clone(), c.c.y.d.clone(), c.r.d.clone(), ],
-        )
-    }).collect();
-    console::log_1(&"made splits".into());
+// #[wasm_bindgen]
+// pub fn step(circles: &JsValue, targets: &JsValue, step_size: f64) -> JsValue {
+//     log::set_logger(&DEFAULT_LOGGER).unwrap();
+//     log::set_max_level(log::LevelFilter::Info);
+//     console_error_panic_hook::set_once();
+//     console::log_2(&"web-sys fit".into(), circles);
+//     let circles: Vec<Circle<JsDual>> = serde_wasm_bindgen::from_value(circles.clone()).unwrap();
+//     let circles: Vec<Split> = circles.iter().map(|c| {
+//         (
+//             Circle {
+//                 idx: c.idx,
+//                 c: R2 { x: c.c.x.v, y: c.c.y.v },
+//                 r: c.r.v,
+//             },
+//             [ c.c.x.d.clone(), c.c.y.d.clone(), c.r.d.clone(), ],
+//         )
+//     }).collect();
+//     console::log_1(&"made splits".into());
+//
+//     let targets: Vec<(String, f64)> = serde_wasm_bindgen::from_value(targets.clone()).unwrap();
+//     console::log_1(&"target tuples".into());
+//     let targets: Targets = targets.into_iter().collect();
+//     console::log_1(&"targets".into());
+//     let mut diagram = Diagram::new(circles, targets, None);
+//     diagram.step(step_size);
+//     let js_diagram: JsDiagram = From::from(Rc::new(RefCell::new(diagram)));
+//     // let shapes = diagram.shapes.shapes;
+//     // let errors = diagram.errors;
+//     // let error = diagram.error;
+//     // let model = Model::new(circles, targets, step_size, max_steps);
+//     // console::log_1(&"model".into());
+//     // let js_model: JsModel = model.into();
+//     // console::log_1(&"js_model".into());
+//     serde_wasm_bindgen::to_value(&js_diagram).unwrap()
+// }
 
-    let targets: Vec<(String, f64)> = serde_wasm_bindgen::from_value(targets.clone()).unwrap();
-    console::log_1(&"target tuples".into());
-    let targets: Targets = targets.into_iter().collect();
-    console::log_1(&"targets".into());
-    let mut diagram = Diagram::new(circles, targets, None);
-    diagram.step(step_size);
-    let js_diagram: JsDiagram = From::from(Rc::new(RefCell::new(diagram)));
-    // let shapes = diagram.shapes.shapes;
-    // let errors = diagram.errors;
-    // let error = diagram.error;
-    // let model = Model::new(circles, targets, step_size, max_steps);
-    // console::log_1(&"model".into());
-    // let js_model: JsModel = model.into();
-    // console::log_1(&"js_model".into());
-    serde_wasm_bindgen::to_value(&js_diagram).unwrap()
-}
-
-#[wasm_bindgen]
-pub fn fit(circles: &JsValue, targets: &JsValue, step_size: f64, max_steps: usize) -> JsValue {
-    log::set_logger(&DEFAULT_LOGGER).unwrap();
-    log::set_max_level(log::LevelFilter::Info);
-    console_error_panic_hook::set_once();
-    console::log_2(&"web-sys fit".into(), circles);
-    let circles: Vec<Circle<JsDual>> = serde_wasm_bindgen::from_value(circles.clone()).unwrap();
-    let circles: Vec<Split> = circles.iter().map(|c| {
-        (
-            Circle {
-                idx: c.idx,
-                c: R2 { x: c.c.x.v, y: c.c.y.v },
-                r: c.r.v,
-            },
-            [ c.c.x.d.clone(), c.c.y.d.clone(), c.r.d.clone(), ],
-        )
-    }).collect();
-    console::log_1(&"made splits".into());
-
-    let targets: Vec<(String, f64)> = serde_wasm_bindgen::from_value(targets.clone()).unwrap();
-    console::log_1(&"target tuples".into());
-    let targets: Targets = targets.into_iter().collect();
-    console::log_1(&"targets".into());
-    let model = model::Model::new(circles, targets, step_size, max_steps);
-    console::log_1(&"model".into());
-    let js_model: Model = model.into();
-    console::log_1(&"js_model".into());
-    serde_wasm_bindgen::to_value(&js_model).unwrap()
-}
+// #[wasm_bindgen]
+// pub fn fit(circles: &JsValue, targets: &JsValue, step_size: f64, max_steps: usize) -> JsValue {
+//     log::set_logger(&DEFAULT_LOGGER).unwrap();
+//     log::set_max_level(log::LevelFilter::Info);
+//     console_error_panic_hook::set_once();
+//     console::log_2(&"web-sys fit".into(), circles);
+//     let circles: Vec<Circle<JsDual>> = serde_wasm_bindgen::from_value(circles.clone()).unwrap();
+//     let circles: Vec<Split> = circles.iter().map(|c| {
+//         (
+//             Circle {
+//                 idx: c.idx,
+//                 c: R2 { x: c.c.x.v, y: c.c.y.v },
+//                 r: c.r.v,
+//             },
+//             [ c.c.x.d.clone(), c.c.y.d.clone(), c.r.d.clone(), ],
+//         )
+//     }).collect();
+//     console::log_1(&"made splits".into());
+//
+//     let targets: Vec<(String, f64)> = serde_wasm_bindgen::from_value(targets.clone()).unwrap();
+//     console::log_1(&"target tuples".into());
+//     let targets: Targets = targets.into_iter().collect();
+//     console::log_1(&"targets".into());
+//     let model = model::Model::new(circles, targets, step_size, max_steps);
+//     console::log_1(&"model".into());
+//     let js_model: Model = model.into();
+//     console::log_1(&"js_model".into());
+//     serde_wasm_bindgen::to_value(&js_model).unwrap()
+// }

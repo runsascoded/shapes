@@ -2,19 +2,20 @@ use std::{collections::HashMap, fmt::Display};
 
 use log::{info, debug};
 use serde::{Deserialize, Serialize};
-use tsify::Tsify;
+use tsify::{declare, Tsify};
 
-use crate::{circle::{Circle, Split, Duals}, intersections::Intersections, dual::D, r2::R2, areas::Areas};
+use crate::{circle::{Circle, Input, Duals}, intersections::Intersections, dual::D, r2::R2, areas::Areas};
 use crate::circle::C;
 use crate::dual::Dual;
 
-
+#[declare]
 pub type Targets = HashMap<String, f64>;
+#[declare]
 pub type Errors = HashMap<String, Error>;
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
 pub struct Diagram {
-    pub inputs: Vec<Split>,
+    pub inputs: Vec<Input>,
     pub shapes: Vec<Circle<f64>>,
     // pub duals: Vec<C>,
     pub targets: Targets,
@@ -48,7 +49,7 @@ impl Display for Error {
 }
 
 impl Diagram {
-    pub fn new(inputs: Vec<Split>, targets: HashMap<String, f64>, total_target_area: Option<f64>) -> Diagram {
+    pub fn new(inputs: Vec<Input>, targets: HashMap<String, f64>, total_target_area: Option<f64>) -> Diagram {
         let intersections = Intersections::new(&inputs);
         // let duals = intersections.duals;
         let all_key = String::from_utf8(vec![b'*'; intersections.len()]).unwrap();
@@ -117,7 +118,7 @@ impl Diagram {
             };
             let r = s.r + updates[2];
             ( Circle { idx: s.idx, c, r }, duals )
-        }).collect::<Vec<Split>>();
+        }).collect::<Vec<Input>>();
         debug!("  step_size {}, updates [{}]:", clamped_step_size, step_vec.iter().map(|x| format!("{}", x)).collect::<Vec<String>>().join(", "));
         for (cur, (nxt, _)) in shapes.iter().zip(new_inputs.iter()) {
             debug!("  {} -> {}", cur, nxt);

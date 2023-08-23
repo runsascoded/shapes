@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc, collections::HashMap};
 
 use log::{info, debug};
 
-use crate::{diagram::{Diagram, Targets}, circle::Split};
+use crate::{diagram::{Diagram, Targets}, circle::Input};
 
 
 type Step = Rc<RefCell<Diagram>>;
@@ -15,7 +15,7 @@ pub struct Model {
 }
 
 impl Model {
-    pub fn new(inputs: Vec<Split>, targets: Targets, step_size: f64, max_steps: usize) -> Model {
+    pub fn new(inputs: Vec<Input>, targets: Targets, step_size: f64, max_steps: usize) -> Model {
         let mut diagram = Rc::new(RefCell::new(Diagram::new(inputs, targets, None)));
         let mut steps = Vec::<Step>::new();
         let mut min_step: Option<(usize, Step)> = None;
