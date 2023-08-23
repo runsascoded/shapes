@@ -1,6 +1,7 @@
 use std::{collections::HashMap, fmt::Display};
 
 use log::{info, debug};
+use serde::{Deserialize, Serialize};
 
 use crate::{circle::{Circle, Split, Duals}, shapes::Shapes, dual::D, r2::R2, areas::Areas};
 
@@ -8,9 +9,10 @@ use crate::{circle::{Circle, Split, Duals}, shapes::Shapes, dual::D, r2::R2, are
 pub type Targets = HashMap<String, f64>;
 pub type Errors = HashMap<String, Error>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Diagram {
     pub inputs: Vec<Split>,
+    #[serde(skip)]
     pub shapes: Shapes,
     pub targets: Targets,
     pub total_target_area: f64,
@@ -18,7 +20,7 @@ pub struct Diagram {
     pub error: D,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Error {
     pub key: String,
     pub actual_area: Option<D>,

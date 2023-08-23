@@ -4,8 +4,9 @@ use approx::{AbsDiffEq, RelativeEq};
 use nalgebra::{ComplexField, Dyn, Matrix, RealField, U1};
 use num_dual::{Derivative, DualDVec64};
 use num_traits::Zero;
-use serde::{Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::ser::{SerializeSeq, SerializeStruct};
+use tsify::{declare, Tsify};
 
 pub type D = Dual;
 
@@ -22,6 +23,57 @@ impl Serialize for Dual {
         ser.serialize_field("v", &self.v())?;
         ser.serialize_field("d", &self.d())?;
         ser.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for Dual {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: Deserializer<'de>
+    // fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error>
+    {
+        #[derive(Deserialize)]
+        #[serde(field_identifier, rename_all = "lowercase")]
+        enum Field { V, D };
+        struct DualVisitor;
+        impl<'de> serde::de::Visitor<'de> for DualVisitor {
+            type Value = Dual;
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("struct Dual")
+            }
+            fn visit_seq<V: serde::de::SeqAccess<'de>>(self, mut seq: V) -> Result<Self::Value, V::Error> {
+                let v = seq.next_element()?
+                    .ok_or_else(|| serde::de::Error::invalid_length(0, &self))?;
+                let d = seq.next_element()?
+                    .ok_or_else(|| serde::de::Error::invalid_length(1, &self))?;
+                Ok(Dual::new(v, d))
+            }
+            fn visit_map<V: serde::de::MapAccess<'de>>(self, mut map: V) -> Result<Self::Value, V::Error> {
+                let mut v = None;
+                let mut d = None;
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        Field::V => {
+                            if v.is_some() {
+                                return Err(serde::de::Error::duplicate_field("v"));
+                            }
+                            v = Some(map.next_value()?);
+                        }
+                        Field::D => {
+                            if d.is_some() {
+                                return Err(serde::de::Error::duplicate_field("d"));
+                            }
+                            d = Some(map.next_value()?);
+                        }
+                    }
+                }
+                let v = v.ok_or_else(|| serde::de::Error::missing_field("v"))?;
+                let d = d.ok_or_else(|| serde::de::Error::missing_field("d"))?;
+                Ok(Dual::new(v, d))
+            }
+        }
+        const FIELDS: &'static [&'static str] = &["v", "d"];
+        deserializer.deserialize_struct("Dual", FIELDS, DualVisitor)
     }
 }
 

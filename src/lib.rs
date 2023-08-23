@@ -15,6 +15,7 @@ mod r2;
 mod region;
 mod shapes;
 mod zero;
+mod js_dual;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -32,7 +33,7 @@ use crate::circle::Circle;
 use crate::diagram::{Error, Targets};
 use crate::model::Model;
 use crate::r2::R2;
-use tsify::Tsify;
+use tsify::{declare, Tsify};
 
 #[derive(Tsify, Serialize, Deserialize)]
 pub struct JsDual {
