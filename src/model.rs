@@ -4,48 +4,44 @@ use log::{info, debug};
 
 use crate::{diagram::{Diagram, Targets}, circle::Input};
 
-
-type Step = Rc<RefCell<Diagram>>;
 pub struct Model {
-    pub steps: Vec<Step>,
+    pub steps: Vec<Diagram>,
     pub repeat_idx: Option<usize>,
     pub min_idx: usize,
-    pub min_step: Step,
-    pub error: f64,
+    pub min_error: f64,
 }
 
 impl Model {
     pub fn new(inputs: Vec<Input>, targets: Targets) -> Model {
-        let diagram = Rc::new(RefCell::new(Diagram::new(inputs, targets, None)));
-        let mut steps = Vec::<Step>::new();
-        steps.push(diagram.clone());
+        let diagram = Diagram::new(inputs, targets, None);
+        let min_error = (&diagram).error.re.clone();
+        let mut steps = Vec::<Diagram>::new();
+        steps.push(diagram);
         let mut repeat_idx: Option<usize> = None;
-        let error = diagram.borrow().error.re;
-        Model { steps, min_idx: 0, min_step: diagram.clone(), repeat_idx, error }
+        Model { steps, min_idx: 0, repeat_idx, min_error }
     }
     pub fn fit(&mut self, step_size: f64, max_steps: usize) {
         let num_steps = self.steps.len().clone();
         let mut diagram = self.steps[num_steps - 1].clone();
         for idx in 0..max_steps {
             debug!("Step {}:", idx);
-            let nxt_diagram = diagram.borrow_mut().step(step_size);
-            let nxt = Rc::new(RefCell::new(nxt_diagram));
-            let nxt_err = nxt.borrow().error.re;
-            if nxt_err < self.min_step.borrow().error.re {
+            let nxt = diagram.step(step_size);
+            let nxt_err = nxt.error.re;
+            let min_step = &self.steps[self.min_idx];
+            if nxt_err < min_step.error.re {
                 self.min_idx = idx;
-                self.min_step = nxt.clone();
+                self.min_error = nxt_err;
             }
             self.steps.push(nxt.clone());
 
             // Check whether the newest step (`nxt`) is a repeat of a previous step:
             for (prv_idx, prv) in self.steps.iter().enumerate().rev().skip(1) {
-                let prv_err = prv.borrow().error.re;
+                let prv_err = prv.error.re;
                 if prv_err == nxt_err &&
                     prv
-                    .borrow()
                     .shapes
                     .iter()
-                    .zip(nxt.borrow().shapes.iter())
+                    .zip(nxt.shapes.iter())
                     .all(|(a, b)| {
                         //println!("Checking {} vs {}", a, b);
                         a == b
@@ -62,7 +58,6 @@ impl Model {
             }
             diagram = nxt;
         }
-        self.error = self.min_step.borrow().error.re;
     }
 }
 
@@ -86,12 +81,12 @@ mod tests {
             (Circle { idx: 1, c: R2 { x: 1., y: 0. }, r: 1. }, [ vec![1., 0.], vec![0., 0.], vec![0., 1.], ]),
         ];
         // Fizz Buzz example:
-        let tgts = [
+        let targets = [
             ("0*", 1. /  3.),  // Fizz (multiples of 3)
             ("*1", 1. /  5.),  // Buzz (multiples of 5)
             ("01", 1. / 15.),  // Fizz Buzz (multiples of both 3 and 5)
         ];
-        let targets: HashMap::<_, _> = tgts.iter().map(|(k, v)| (k.to_string(), *v)).collect();
+        let targets: HashMap<_, _> = targets.iter().map(|(k, v)| (k.to_string(), *v)).collect();
         let mut model = Model::new(inputs, targets);
         model.fit(0.1, 100);
         // let mut diagram = Diagram::new(inputs, targets, None);
@@ -208,17 +203,17 @@ mod tests {
         match generate_vals {
             Some(n) => {
                 for (idx, step) in steps.iter().enumerate() {
-                    print_step(&step.borrow(), idx);
+                    print_step(&step, idx);
                 }
             }
             None => {
                 assert_eq!(steps.len(), expected_errs.len());
                 for (idx, (step, ((e_cx, e_cr), e_err, (e_grad0, e_grad1)))) in steps.iter().zip(expected_errs.iter()).enumerate() {
-                    let c1 = step.borrow().shapes[1];
+                    let c1 = &step.shapes[1];
                     assert_relative_eq!(c1.c.x, *e_cx, epsilon = 1e-3);
                     assert_relative_eq!(c1.r, *e_cr, epsilon = 1e-3);
 
-                    let total_err = step.borrow().error.clone();
+                    let total_err = (&step).error.clone();
                     let expected_err = Dual::new(*e_err, vec![-*e_grad0, -*e_grad1]);
                     assert_relative_eq!(total_err, expected_err, epsilon = 1e-3);
 
@@ -227,7 +222,7 @@ mod tests {
                     let relative_err = abs_err_diff / *e_err;
                     assert!(relative_err < 1e-3, "relative_err {} >= 1e-3: actual err {}, expected {}", relative_err, actual_err, *e_err);
 
-                    print_step(&step.borrow(), idx);
+                    print_step(&step, idx);
                 }
             }
         }

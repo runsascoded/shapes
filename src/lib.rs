@@ -28,29 +28,6 @@ use web_sys::console;
 use crate::diagram::{Targets};
 use tsify::{Tsify};
 
-#[derive(Tsify, Serialize, Deserialize)]
-pub struct Model {
-    pub steps: Vec<Diagram>,
-    pub repeat_idx: Option<usize>,
-    pub min_idx: usize,
-    pub min_step: Diagram,
-    pub error: Dual,
-}
-
-impl From<model::Model> for Model {
-    fn from(m: model::Model) -> Self {
-        let min_step = m.min_step.borrow().clone();
-        let error = min_step.error.clone();
-        Model {
-            steps: m.steps.iter().map(|d| From::from(d.borrow().clone())).collect(),
-            repeat_idx: m.repeat_idx,
-            min_idx: m.min_idx,
-            min_step,
-            error,
-        }
-    }
-}
-
 #[wasm_bindgen]
 pub fn init_logs(level: JsValue) {
     let level: Option<String> = serde_wasm_bindgen::from_value(level).unwrap();
