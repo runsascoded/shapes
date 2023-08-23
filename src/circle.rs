@@ -3,12 +3,13 @@ use std::{fmt::Display, ops::{Mul, Add}, rc::Rc, cell::RefCell, f64::consts::PI}
 use derive_more::From;
 use num_traits::Float;
 use serde::{Deserialize, Serialize};
+use tsify::Tsify;
 use crate::{
     r2::R2,
     intersection::Intersection, dual::{D, Dual},
 };
 
-#[derive(Debug, Clone, Copy, From, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, From, PartialEq, Tsify, Serialize, Deserialize)]
 pub struct Circle<D> {
     pub idx: usize,
     pub c: R2<D>,

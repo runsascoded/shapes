@@ -1,9 +1,11 @@
-use std::{ops::{Deref, Mul, Sub, Neg, Div, AddAssign, SubAssign, Add}, fmt::{Display, Debug}, iter::Sum};
+use std::{fmt::{Debug, Display}, iter::Sum, ops::{Add, AddAssign, Deref, Div, Mul, Neg, Sub, SubAssign}};
 
-use approx::{RelativeEq, AbsDiffEq};
-use nalgebra::{Dyn, RealField, U1, Matrix, ComplexField};
-use num_dual::{DualDVec64, Derivative};
+use approx::{AbsDiffEq, RelativeEq};
+use nalgebra::{ComplexField, Dyn, Matrix, RealField, U1};
+use num_dual::{Derivative, DualDVec64};
 use num_traits::Zero;
+use serde::{Serialize, Serializer};
+use serde::ser::{SerializeSeq, SerializeStruct};
 
 pub type D = Dual;
 
@@ -12,6 +14,16 @@ pub struct Dual(
     DualDVec64,
     usize
 );
+
+impl Serialize for Dual {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    {
+        let mut ser = serializer.serialize_struct("Dual", 2)?;
+        ser.serialize_field("v", &self.v())?;
+        ser.serialize_field("d", &self.d())?;
+        ser.end()
+    }
+}
 
 impl Dual {
     pub fn fmt(f: &f64, n: usize) -> String {

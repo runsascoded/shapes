@@ -2,10 +2,11 @@ use std::{ops::{Sub, Mul, Add, Div}, fmt::{Display, Formatter, self}};
 use approx::{AbsDiffEq, RelativeEq};
 
 use serde::{Deserialize, Serialize};
+use tsify::Tsify;
 
 use crate::dual::Dual;
 
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Tsify, Serialize, Deserialize)]
 pub struct R2<D> {
     pub x: D,
     pub y: D,
@@ -111,4 +112,3 @@ impl<D: Div<D, Output = D> + Clone> Div<D> for R2<D> {
         }
     }
 }
-
