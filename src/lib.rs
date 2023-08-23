@@ -20,7 +20,7 @@ mod js_dual;
 use circle::Input;
 use diagram::Diagram;
 use dual::Dual;
-use log::info;
+use log::LevelFilter;
 use serde::{Serialize, Deserialize};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_console_logger::DEFAULT_LOGGER;
@@ -52,9 +52,18 @@ impl From<model::Model> for Model {
 }
 
 #[wasm_bindgen]
-pub fn init_logs() {
+pub fn init_logs(level: JsValue) {
+    let level: Option<String> = serde_wasm_bindgen::from_value(level).unwrap();
     log::set_logger(&DEFAULT_LOGGER).unwrap();
-    log::set_max_level(log::LevelFilter::Debug);
+    let level = match level.as_deref() {
+        Some("error") => LevelFilter::Error,
+        Some("warn") => LevelFilter::Warn,
+        Some("info") | Some("") | None => LevelFilter::Info,
+        Some("debug") => LevelFilter::Debug,
+        Some("trace") => LevelFilter::Trace,
+        Some(level) => panic!("invalid log level: {}", level),
+    };
+    log::set_max_level(level);
     console_error_panic_hook::set_once();
 }
 

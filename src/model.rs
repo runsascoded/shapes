@@ -15,21 +15,30 @@ pub struct Model {
 }
 
 impl Model {
-    pub fn new(inputs: Vec<Input>, targets: Targets, step_size: f64, max_steps: usize) -> Model {
-        let mut diagram = Rc::new(RefCell::new(Diagram::new(inputs, targets, None)));
+    pub fn new(inputs: Vec<Input>, targets: Targets) -> Model {
+        let diagram = Rc::new(RefCell::new(Diagram::new(inputs, targets, None)));
         let mut steps = Vec::<Step>::new();
-        let mut min_step: Option<(usize, Step)> = None;
+        steps.push(diagram.clone());
         let mut repeat_idx: Option<usize> = None;
+        let error = diagram.borrow().error.re;
+        Model { steps, min_idx: 0, min_step: diagram.clone(), repeat_idx, error }
+    }
+    pub fn fit(&mut self, step_size: f64, max_steps: usize) {
+        let num_steps = self.steps.len().clone();
+        let mut diagram = self.steps[num_steps - 1].clone();
         for idx in 0..max_steps {
-            steps.push(diagram.clone());
             debug!("Step {}:", idx);
             let nxt_diagram = diagram.borrow_mut().step(step_size);
             let nxt = Rc::new(RefCell::new(nxt_diagram));
             let nxt_err = nxt.borrow().error.re;
-            if min_step.clone().map(|(_, cur_min)| nxt_err < cur_min.borrow().error.re).unwrap_or(true) {
-                min_step = Some((idx, nxt.clone()));
+            if nxt_err < self.min_step.borrow().error.re {
+                self.min_idx = idx;
+                self.min_step = nxt.clone();
             }
-            for (prv_idx, prv) in steps.iter().enumerate().rev() {
+            self.steps.push(nxt.clone());
+
+            // Check whether the newest step (`nxt`) is a repeat of a previous step:
+            for (prv_idx, prv) in self.steps.iter().enumerate().rev().skip(1) {
                 let prv_err = prv.borrow().error.re;
                 if prv_err == nxt_err &&
                     prv
@@ -43,20 +52,17 @@ impl Model {
                     })
                 {
                     info!("  Step {} matches step {}: {}", idx + 1, prv_idx, prv_err);
-                    repeat_idx = Some(prv_idx);
-                    steps.push(nxt.clone());
+                    self.repeat_idx = Some(prv_idx);
                     break;
                 }
             }
-            if repeat_idx.is_some() {
+            // If so, break
+            if self.repeat_idx.is_some() {
                 break;
             }
             diagram = nxt;
         }
-        let (min_idx, min_step) = min_step.unwrap();
-        let error = min_step.borrow().error.re;
-
-        Model { steps, min_idx, min_step, repeat_idx, error }
+        self.error = self.min_step.borrow().error.re;
     }
 }
 
@@ -86,7 +92,8 @@ mod tests {
             ("01", 1. / 15.),  // Fizz Buzz (multiples of both 3 and 5)
         ];
         let targets: HashMap::<_, _> = tgts.iter().map(|(k, v)| (k.to_string(), *v)).collect();
-        let model = Model::new(inputs, targets, 0.1, 100);
+        let mut model = Model::new(inputs, targets);
+        model.fit(0.1, 100);
         // let mut diagram = Diagram::new(inputs, targets, None);
         let os = env::consts::OS;
         let shared = vec![

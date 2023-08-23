@@ -16,7 +16,6 @@ pub type Errors = HashMap<String, Error>;
 pub struct Diagram {
     pub inputs: Vec<Input>,
     pub shapes: Vec<Circle<f64>>,
-    // pub duals: Vec<C>,
     pub targets: Targets,
     pub total_target_area: f64,
     pub errors: Errors,
