@@ -3,7 +3,7 @@ use std::{fmt::Display, ops::{Mul, Add}, rc::Rc, cell::RefCell, f64::consts::PI}
 use derive_more::From;
 use num_traits::Float;
 use serde::{Deserialize, Serialize};
-use tsify::Tsify;
+use tsify::{declare, Tsify};
 use crate::{
     r2::R2,
     intersection::Intersection, dual::{D, Dual},
@@ -18,6 +18,7 @@ pub struct Circle<D> {
 
 pub type C = Rc<RefCell<Circle<D>>>;
 pub type Duals = [Vec<f64>; 3];
+#[declare]
 pub type Split = (Circle<f64>, Duals);
 
 impl<D: Clone + Float> Circle<D> {

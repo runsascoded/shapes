@@ -13,7 +13,7 @@ mod math;
 mod model;
 mod r2;
 mod region;
-mod shapes;
+mod intersections;
 mod zero;
 mod js_dual;
 
@@ -31,9 +31,8 @@ use wasm_bindgen_console_logger::DEFAULT_LOGGER;
 use web_sys::console;
 use crate::circle::Circle;
 use crate::diagram::{Error, Targets};
-use crate::model::Model;
 use crate::r2::R2;
-use tsify::{declare, Tsify};
+use tsify::{Tsify};
 
 #[derive(Tsify, Serialize, Deserialize)]
 pub struct JsDual {
@@ -103,7 +102,7 @@ impl From<Error> for JsErr {
 #[derive(Tsify, Serialize, Deserialize)]
 pub struct JsDiagram {
     shapes: Vec<Circle<f64>>,
-    duals: Vec<Circle<JsDual>>,
+    // duals: Vec<Circle<JsDual>>,
     error: JsDual,
     errors: HashMap<String, JsErr>,
 }
@@ -111,8 +110,8 @@ pub struct JsDiagram {
 impl From<Rc<RefCell<Diagram>>> for JsDiagram {
     fn from(d: Rc<RefCell<Diagram>>) -> Self {
         JsDiagram {
-            shapes: d.borrow().shapes.shapes.clone(),
-            duals: d.borrow().shapes.duals.iter().map(|d| From::from(d.clone())).collect(),
+            shapes: d.borrow().shapes.clone(),
+            // duals: d.borrow().duals.iter().map(|d| From::from(d.clone())).collect(),
             error: (&d.borrow().error).into(),
             errors: d.borrow().errors.iter().map(|(k, v)| (k.clone(), v.clone().into())).collect(),
         }
@@ -120,22 +119,24 @@ impl From<Rc<RefCell<Diagram>>> for JsDiagram {
 }
 
 #[derive(Tsify, Serialize, Deserialize)]
-pub struct JsModel {
-    pub steps: Vec<JsDiagram>,
+pub struct Model {
+    pub steps: Vec<Diagram>,
     pub repeat_idx: Option<usize>,
     pub min_idx: usize,
-    pub min_step: JsDiagram,
-    pub error: JsDual,
+    pub min_step: Diagram,
+    pub error: Dual,
 }
 
-impl From<Model> for JsModel {
-    fn from(m: Model) -> Self {
-        JsModel {
-            steps: m.steps.iter().map(|d| { From::from(d.clone()) }).collect(),
+impl From<model::Model> for Model {
+    fn from(m: model::Model) -> Self {
+        let min_step = m.min_step.borrow().clone();
+        let error = min_step.error.clone();
+        Model {
+            steps: m.steps.iter().map(|d| From::from(d.borrow().clone())).collect(),
             repeat_idx: m.repeat_idx,
             min_idx: m.min_idx,
-            min_step: m.min_step.clone().into(),
-            error: (&m.min_step.borrow().error).into(),
+            min_step,
+            error,
         }
     }
 }
@@ -227,9 +228,9 @@ pub fn fit(circles: &JsValue, targets: &JsValue, step_size: f64, max_steps: usiz
     console::log_1(&"target tuples".into());
     let targets: Targets = targets.into_iter().collect();
     console::log_1(&"targets".into());
-    let model = Model::new(circles, targets, step_size, max_steps);
+    let model = model::Model::new(circles, targets, step_size, max_steps);
     console::log_1(&"model".into());
-    let js_model: JsModel = model.into();
+    let js_model: Model = model.into();
     console::log_1(&"js_model".into());
     serde_wasm_bindgen::to_value(&js_model).unwrap()
 }

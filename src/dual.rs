@@ -8,6 +8,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::ser::{SerializeSeq, SerializeStruct};
 use tsify::{declare, Tsify};
 
+#[declare]
 pub type D = Dual;
 
 #[derive(Clone, PartialEq, PartialOrd)]

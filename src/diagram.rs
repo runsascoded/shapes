@@ -2,34 +2,37 @@ use std::{collections::HashMap, fmt::Display};
 
 use log::{info, debug};
 use serde::{Deserialize, Serialize};
+use tsify::Tsify;
 
-use crate::{circle::{Circle, Split, Duals}, shapes::Shapes, dual::D, r2::R2, areas::Areas};
+use crate::{circle::{Circle, Split, Duals}, intersections::Intersections, dual::D, r2::R2, areas::Areas};
+use crate::circle::C;
+use crate::dual::Dual;
 
 
 pub type Targets = HashMap<String, f64>;
 pub type Errors = HashMap<String, Error>;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
 pub struct Diagram {
     pub inputs: Vec<Split>,
-    #[serde(skip)]
-    pub shapes: Shapes,
+    pub shapes: Vec<Circle<f64>>,
+    // pub duals: Vec<C>,
     pub targets: Targets,
     pub total_target_area: f64,
     pub errors: Errors,
-    pub error: D,
+    pub error: Dual,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
 pub struct Error {
     pub key: String,
-    pub actual_area: Option<D>,
-    pub total_area: D,
-    pub actual_frac: D,
+    pub actual_area: Option<Dual>,
+    pub total_area: Dual,
+    pub actual_frac: Dual,
     pub target_area: f64,
     pub total_target_area: f64,
     pub target_frac: f64,
-    pub error: D,
+    pub error: Dual,
 }
 
 impl Display for Error {
@@ -46,15 +49,17 @@ impl Display for Error {
 
 impl Diagram {
     pub fn new(inputs: Vec<Split>, targets: HashMap<String, f64>, total_target_area: Option<f64>) -> Diagram {
-        let shapes = Shapes::new(&inputs);
-        let all_key = String::from_utf8(vec![b'*'; shapes.len()]).unwrap();
+        let intersections = Intersections::new(&inputs);
+        // let duals = intersections.duals;
+        let all_key = String::from_utf8(vec![b'*'; intersections.len()]).unwrap();
         let total_target_area = total_target_area.unwrap_or_else(|| {
             let mut expanded_target = targets.clone();
             Areas::expand(&mut expanded_target);
             expanded_target.get(&all_key).unwrap().clone()
         });
-        let errors = Self::compute_errors(&shapes, &targets, total_target_area);
+        let errors = Self::compute_errors(&intersections, &targets, total_target_area);
         let error = errors.values().into_iter().map(|e| &e.error).cloned().collect::<Vec<D>>().into_iter().sum();
+        let shapes = intersections.shapes;
         Diagram { inputs, shapes, targets, total_target_area: total_target_area.clone(), errors, error }
     }
 
@@ -62,7 +67,7 @@ impl Diagram {
         self.shapes.len()
     }
 
-    pub fn compute_errors(shapes: &Shapes, targets: &Targets, total_target_area: f64) -> Errors {
+    pub fn compute_errors(shapes: &Intersections, targets: &Targets, total_target_area: f64) -> Errors {
         let n = shapes.len();
         let all_key = String::from_utf8(vec![b'*'; n]).unwrap();
         let none_key = String::from_utf8(vec![b'-'; n]).unwrap();
@@ -103,7 +108,7 @@ impl Diagram {
         let magnitude = grad_vec.iter().map(|d| d * d).sum::<f64>().sqrt();
         let step_vec = grad_vec.iter().map(|d| d / magnitude * clamped_step_size).collect::<Vec<f64>>();
         debug!("  step_vec {:?}", step_vec);
-        let shapes = &self.shapes.shapes;
+        let shapes = &self.shapes;
         let new_inputs = shapes.iter().zip(self.duals()).map(|(s, duals)| {
             let updates: [f64; 3] = duals.clone().map(|d| d.iter().zip(&step_vec).map(|(mask, step)| mask * step).sum());
             let c = R2 {

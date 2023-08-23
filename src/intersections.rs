@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc, f64::consts::PI, collections::HashSet};
 use crate::{circle::{Circle, C, Split}, intersection::Node, edge::{self, E}, region::{Region, Segment}, dual::{D, Dual}, zero::Zero};
 
 #[derive(Clone, Debug)]
-pub struct Shapes {
+pub struct Intersections {
     pub shapes: Vec<Circle<f64>>,
     pub duals: Vec<C>,
     pub nodes: Vec<Node>,
@@ -16,8 +16,8 @@ pub struct Shapes {
     pub total_expected_visits: usize,
 }
 
-impl Shapes {
-    pub fn new(inputs: &Vec<Split>) -> Shapes {
+impl Intersections {
+    pub fn new(inputs: &Vec<Split>) -> Intersections {
         let n = inputs.len();
         let shapes: Vec<Circle<f64>> = inputs.iter().map(|(c, _duals)| c.clone()).collect();
         let duals: Vec<C> = inputs.iter().map(|(c, duals)| Rc::new(RefCell::new(c.dual(duals)))).collect();
@@ -250,7 +250,7 @@ impl Shapes {
             panic!("total_visits ({}) != total_expected_visits ({})", total_visits, total_expected_visits);
         }
 
-        Shapes { shapes, duals, nodes, nodes_by_shape, nodes_by_shapes, edges, is_connected, regions, total_visits, total_expected_visits, }
+        Intersections { shapes, duals, nodes, nodes_by_shape, nodes_by_shapes, edges, is_connected, regions, total_visits, total_expected_visits, }
     }
 
     pub fn area(&self, key: &String) -> Option<D> {
@@ -329,7 +329,7 @@ mod tests {
             (c1, duals(1, 3)),
             (c2, duals(2, 3)),
         ];
-        let shapes = Shapes::new(&inputs);
+        let shapes = Intersections::new(&inputs);
 
         for node in shapes.nodes.iter() {
             println!("{}", node.borrow());
@@ -461,7 +461,7 @@ mod tests {
             (c2, duals(2, 4)),
             (c3, duals(3, 4)),
         ];
-        let shapes = Shapes::new(&circles);
+        let shapes = Intersections::new(&circles);
 
         for node in shapes.nodes.iter() {
             println!("{}", node.borrow());

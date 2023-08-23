@@ -35,9 +35,8 @@ impl Model {
                     prv
                     .borrow()
                     .shapes
-                    .shapes
                     .iter()
-                    .zip(nxt.borrow().shapes.shapes.iter())
+                    .zip(nxt.borrow().shapes.iter())
                     .all(|(a, b)| {
                         //println!("Checking {} vs {}", a, b);
                         a == b
@@ -187,7 +186,7 @@ mod tests {
 
         let print_step = |diagram: &Diagram, idx: usize| {
             let total_err = diagram.error.clone();
-            let c1 = diagram.shapes.shapes[1];
+            let c1 = diagram.shapes[1];
             let grads = (-total_err.clone()).d();
             let err = total_err.v();
             let err_str = if err < 0.001 {
@@ -208,7 +207,7 @@ mod tests {
             None => {
                 assert_eq!(steps.len(), expected_errs.len());
                 for (idx, (step, ((e_cx, e_cr), e_err, (e_grad0, e_grad1)))) in steps.iter().zip(expected_errs.iter()).enumerate() {
-                    let c1 = step.borrow().shapes.shapes[1];
+                    let c1 = step.borrow().shapes[1];
                     assert_relative_eq!(c1.c.x, *e_cx, epsilon = 1e-3);
                     assert_relative_eq!(c1.r, *e_cr, epsilon = 1e-3);
 
