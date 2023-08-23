@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 use tsify::{declare, Tsify};
 
 use crate::{circle::{Circle, Input, Duals}, intersections::Intersections, dual::D, r2::R2, areas::Areas};
-use crate::circle::C;
 use crate::dual::Dual;
 
 #[declare]
@@ -100,7 +99,7 @@ impl Diagram {
         self.inputs.iter().map(|(_, duals)| duals.clone()).collect()
     }
 
-    pub fn step(&mut self, step_size: f64) -> Diagram {
+    pub fn step(&self, step_size: f64) -> Diagram {
         let error = self.error.clone();
         let error_size = self.error.v();
         let grad_vec = (-error.clone()).d();
@@ -129,6 +128,7 @@ impl Diagram {
             debug!("  {}", err);
         }
         debug!("  err {:?}", error);
+        debug!("  new_inputs: {:?}", new_inputs);
         Diagram::new(new_inputs, self.targets.clone(), Some(self.total_target_area))
     }
 }

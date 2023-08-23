@@ -17,10 +17,6 @@ mod intersections;
 mod zero;
 mod js_dual;
 
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::rc::Rc;
-
 use circle::Input;
 use diagram::Diagram;
 use dual::Dual;
@@ -29,9 +25,7 @@ use serde::{Serialize, Deserialize};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_console_logger::DEFAULT_LOGGER;
 use web_sys::console;
-use crate::circle::Circle;
-use crate::diagram::{Error, Targets};
-use crate::r2::R2;
+use crate::diagram::{Targets};
 use tsify::{Tsify};
 
 #[derive(Tsify, Serialize, Deserialize)]
@@ -60,16 +54,12 @@ impl From<model::Model> for Model {
 #[wasm_bindgen]
 pub fn init_logs() {
     log::set_logger(&DEFAULT_LOGGER).unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
     console_error_panic_hook::set_once();
-    // serde_wasm_bindgen::to_value(&0.).unwrap()
 }
 
 #[wasm_bindgen]
 pub fn make_diagram(circles: JsValue, targets: JsValue) -> JsValue {
-    // log::set_logger(&DEFAULT_LOGGER).unwrap();
-    // log::set_max_level(log::LevelFilter::Info);
-    // console_error_panic_hook::set_once();
     let inputs: Vec<Input> = serde_wasm_bindgen::from_value(circles).unwrap();
     let targets: Targets = serde_wasm_bindgen::from_value(targets.clone()).unwrap();
     let diagram = Diagram::new(inputs, targets, None);
@@ -78,10 +68,9 @@ pub fn make_diagram(circles: JsValue, targets: JsValue) -> JsValue {
 
 #[wasm_bindgen]
 pub fn step(diagram: JsValue, step_size: f64) -> JsValue {
-    let mut diagram: Diagram = serde_wasm_bindgen::from_value(diagram).unwrap();
-    diagram.step(step_size);
-    let diagram = serde_wasm_bindgen::to_value(&diagram).unwrap();
-    console::log_2(&"new diagram: {:?}".into(), &diagram);
+    let diagram: Diagram = serde_wasm_bindgen::from_value(diagram).unwrap();
+    let diagram = diagram.step(step_size);
+    let diagram = serde_wasm_bindgen::to_value(&diagram.clone()).unwrap();
     diagram
 }
 
