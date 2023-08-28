@@ -9,7 +9,17 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - run: cargo --version
       - uses: actions/checkout@v3
       - run: cargo build
       - run: cargo test -- --nocapture
+      - uses: jetli/wasm-pack-action@v0.4.0
+      - run: wasm-pack build --target web
+      - run: ls -l pkg
+      - name: Push pkg/
+        uses: s0/git-publish-subdir-action@develop
+        env:
+          REPO: self
+          BRANCH: dist
+          FOLDER: pkg
+          MESSAGE: "{sha}: {msg}"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
