@@ -67,6 +67,8 @@ export interface R2<D> {
 
 export type Input = [Circle<number>, Duals];
 
+export type Duals = [number[], number[], number[]];
+
 export interface Circle<D> {
     idx: number;
     c: R2<D>;
