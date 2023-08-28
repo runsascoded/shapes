@@ -17,6 +17,7 @@ pub struct Circle<D> {
 }
 
 pub type C = Rc<RefCell<Circle<D>>>;
+#[declare]
 pub type Duals = [Vec<f64>; 3];
 #[declare]
 pub type Input = (Circle<f64>, Duals);
