@@ -1,9 +1,12 @@
 use std::{cell::RefCell, rc::Rc, collections::HashMap};
 
 use log::{info, debug};
+use serde::{Deserialize, Serialize};
+use tsify::Tsify;
 
 use crate::{diagram::{Diagram, Targets}, circle::Input};
 
+#[derive(Debug, Clone, Tsify, Serialize, Deserialize)]
 pub struct Model {
     pub steps: Vec<Diagram>,
     pub repeat_idx: Option<usize>,
@@ -20,7 +23,7 @@ impl Model {
         let mut repeat_idx: Option<usize> = None;
         Model { steps, min_idx: 0, repeat_idx, min_error }
     }
-    pub fn fit(&mut self, step_size: f64, max_steps: usize) {
+    pub fn train(&mut self, step_size: f64, max_steps: usize) {
         let num_steps = self.steps.len().clone();
         let mut diagram = self.steps[num_steps - 1].clone();
         for idx in 0..max_steps {
@@ -88,7 +91,7 @@ mod tests {
         ];
         let targets: HashMap<_, _> = targets.iter().map(|(k, v)| (k.to_string(), *v)).collect();
         let mut model = Model::new(inputs, targets);
-        model.fit(0.1, 100);
+        model.train(0.1, 100);
         // let mut diagram = Diagram::new(inputs, targets, None);
         let os = env::consts::OS;
         let shared = vec![

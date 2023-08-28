@@ -27,6 +27,7 @@ use wasm_bindgen_console_logger::DEFAULT_LOGGER;
 use web_sys::console;
 use crate::diagram::{Targets};
 use tsify::{Tsify};
+use crate::model::Model;
 
 #[wasm_bindgen]
 pub fn init_logs(level: JsValue) {
@@ -45,11 +46,26 @@ pub fn init_logs(level: JsValue) {
 }
 
 #[wasm_bindgen]
-pub fn make_diagram(circles: JsValue, targets: JsValue) -> JsValue {
-    let inputs: Vec<Input> = serde_wasm_bindgen::from_value(circles).unwrap();
+pub fn make_diagram(inputs: JsValue, targets: JsValue) -> JsValue {
+    let inputs: Vec<Input> = serde_wasm_bindgen::from_value(inputs).unwrap();
     let targets: Targets = serde_wasm_bindgen::from_value(targets.clone()).unwrap();
     let diagram = Diagram::new(inputs, targets, None);
     serde_wasm_bindgen::to_value(&diagram).unwrap()
+}
+
+#[wasm_bindgen]
+pub fn make_model(inputs: JsValue, targets: JsValue) -> JsValue {
+    let inputs: Vec<Input> = serde_wasm_bindgen::from_value(inputs).unwrap();
+    let targets: Targets = serde_wasm_bindgen::from_value(targets.clone()).unwrap();
+    let model = Model::new(inputs, targets);
+    serde_wasm_bindgen::to_value(&model).unwrap()
+}
+
+#[wasm_bindgen]
+pub fn train(model: JsValue, step_size: f64, max_steps: usize) -> JsValue {
+    let mut model: Model = serde_wasm_bindgen::from_value(model).unwrap();
+    model.train(step_size, max_steps);
+    serde_wasm_bindgen::to_value(&model).unwrap()
 }
 
 #[wasm_bindgen]
