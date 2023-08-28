@@ -1,0 +1,14 @@
+{
+  "name": "apvd",
+  "version": "0.1.0",
+  "files": [
+    "apvd_bg.wasm",
+    "apvd.js",
+    "apvd.d.ts"
+  ],
+  "module": "apvd.js",
+  "types": "apvd.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
