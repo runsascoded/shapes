@@ -54,10 +54,11 @@ impl Diagram {
         let total_target_area = total_target_area.unwrap_or_else(|| {
             let mut expanded_target = targets.clone();
             Areas::expand(&mut expanded_target);
-            expanded_target.get(&all_key).unwrap().clone()
+            expanded_target.get(&all_key).expect(&format!("{} not found among {} keys", all_key, expanded_target.len())).clone()
         });
         let errors = Self::compute_errors(&intersections, &targets, total_target_area);
-        let error = errors.values().into_iter().map(|e| &e.error).cloned().collect::<Vec<D>>().into_iter().sum();
+        let error = errors.values().into_iter().map(|e| e.error.abs()).sum();
+        // let error = errors.values().into_iter().map(|e| e.error.clone() * &e.error).sum::<D>().sqrt();
         let shapes = intersections.shapes;
         Diagram { inputs, shapes, targets, total_target_area: total_target_area.clone(), errors, error }
     }
@@ -78,7 +79,7 @@ impl Diagram {
                 let actual_area = shapes.area(key);
                 let target_frac = target_area / total_target_area;
                 let actual_frac = actual_area.clone().unwrap_or_else(|| shapes.zero()).clone() / &total_area;
-                let error = (actual_frac.clone() - target_frac).abs();
+                let error = actual_frac.clone() - target_frac;
                 Some((
                     key.clone(),
                     Error {
@@ -98,36 +99,33 @@ impl Diagram {
         self.inputs.iter().map(|(_, duals)| duals.clone()).collect()
     }
 
-    pub fn step(&self, step_size: f64) -> Diagram {
+    pub fn step(&self, max_step_error_ratio: f64) -> Diagram {
         let error = self.error.clone();
-        let error_size = self.error.v();
+        // let error = self.errors.values().into_iter().map(|e| e.error.clone() * &e.error).sum::<D>().sqrt();
+        let error_size = &error.v();
         let grad_vec = (-error.clone()).d();
-        // let max_error = grad_vec.iter().map(|(_, e)| e.error.v()).unwrap().1.error.v();
-        let clamped_step_size = f64::min(error_size, step_size);
+
+        let step_size = error_size * max_step_error_ratio;
         let magnitude = grad_vec.iter().map(|d| d * d).sum::<f64>().sqrt();
-        let step_vec = grad_vec.iter().map(|d| d / magnitude * clamped_step_size).collect::<Vec<f64>>();
+        let grad_scale = step_size / magnitude;
+        let step_vec = grad_vec.iter().map(|grad| grad * grad_scale).collect::<Vec<f64>>();
+
+        debug!("  err {:?}", error);
+        debug!("  step_size {}, magnitude {}, grad_scale {}", step_size, magnitude, grad_scale);
         debug!("  step_vec {:?}", step_vec);
         let shapes = &self.shapes;
         let new_inputs = shapes.iter().zip(self.duals()).map(|(s, duals)| {
-            let updates: [f64; 3] = duals.clone().map(|d| d.iter().zip(&step_vec).map(|(mask, step)| mask * step).sum());
+            let [ dx, dy, dr ]: [f64; 3] = duals.clone().map(|d| d.iter().zip(&step_vec).map(|(mask, step)| mask * step).sum());
             let c = R2 {
-                x: s.c.x + updates[0],
-                y: s.c.y + updates[1],
+                x: s.c.x + dx,
+                y: s.c.y + dy,
             };
-            let r = s.r + updates[2];
+            let r = s.r + dr;
             ( Circle { idx: s.idx, c, r }, duals )
         }).collect::<Vec<Input>>();
-        debug!("  step_size {}, updates [{}]:", clamped_step_size, step_vec.iter().map(|x| format!("{}", x)).collect::<Vec<String>>().join(", "));
         for (cur, (nxt, _)) in shapes.iter().zip(new_inputs.iter()) {
             debug!("  {} -> {}", cur, nxt);
         }
-        let errors = &self.errors;
-        for (target, _) in &self.targets {
-            let err = errors.get(&target.to_string()).unwrap();
-            debug!("  {}", err);
-        }
-        debug!("  err {:?}", error);
-        debug!("  new_inputs: {:?}", new_inputs);
         Diagram::new(new_inputs, self.targets.clone(), Some(self.total_target_area))
     }
 }

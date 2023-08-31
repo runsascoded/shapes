@@ -19,14 +19,10 @@ mod js_dual;
 
 use circle::Input;
 use diagram::Diagram;
-use dual::Dual;
-use log::LevelFilter;
-use serde::{Serialize, Deserialize};
+use log::{LevelFilter, debug, info};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_console_logger::DEFAULT_LOGGER;
-use web_sys::console;
 use crate::diagram::{Targets};
-use tsify::{Tsify};
 use crate::model::Model;
 
 #[wasm_bindgen]
@@ -62,46 +58,16 @@ pub fn make_model(inputs: JsValue, targets: JsValue) -> JsValue {
 }
 
 #[wasm_bindgen]
-pub fn train(model: JsValue, step_size: f64, max_steps: usize) -> JsValue {
+pub fn train(model: JsValue, max_step_error_ratio: f64, max_steps: usize) -> JsValue {
     let mut model: Model = serde_wasm_bindgen::from_value(model).unwrap();
-    model.train(step_size, max_steps);
+    model.train(max_step_error_ratio, max_steps);
     serde_wasm_bindgen::to_value(&model).unwrap()
 }
 
 #[wasm_bindgen]
-pub fn step(diagram: JsValue, step_size: f64) -> JsValue {
+pub fn step(diagram: JsValue, max_step_error_ratio: f64) -> JsValue {
     let diagram: Diagram = serde_wasm_bindgen::from_value(diagram).unwrap();
-    let diagram = diagram.step(step_size);
+    let diagram = diagram.step(max_step_error_ratio);
     let diagram = serde_wasm_bindgen::to_value(&diagram.clone()).unwrap();
     diagram
 }
-
-// #[wasm_bindgen]
-// pub fn fit(circles: &JsValue, targets: &JsValue, step_size: f64, max_steps: usize) -> JsValue {
-//     log::set_logger(&DEFAULT_LOGGER).unwrap();
-//     log::set_max_level(log::LevelFilter::Info);
-//     console_error_panic_hook::set_once();
-//     console::log_2(&"web-sys fit".into(), circles);
-//     let circles: Vec<Circle<JsDual>> = serde_wasm_bindgen::from_value(circles.clone()).unwrap();
-//     let circles: Vec<Split> = circles.iter().map(|c| {
-//         (
-//             Circle {
-//                 idx: c.idx,
-//                 c: R2 { x: c.c.x.v, y: c.c.y.v },
-//                 r: c.r.v,
-//             },
-//             [ c.c.x.d.clone(), c.c.y.d.clone(), c.r.d.clone(), ],
-//         )
-//     }).collect();
-//     console::log_1(&"made splits".into());
-//
-//     let targets: Vec<(String, f64)> = serde_wasm_bindgen::from_value(targets.clone()).unwrap();
-//     console::log_1(&"target tuples".into());
-//     let targets: Targets = targets.into_iter().collect();
-//     console::log_1(&"targets".into());
-//     let model = model::Model::new(circles, targets, step_size, max_steps);
-//     console::log_1(&"model".into());
-//     let js_model: Model = model.into();
-//     console::log_1(&"js_model".into());
-//     serde_wasm_bindgen::to_value(&js_model).unwrap()
-// }
