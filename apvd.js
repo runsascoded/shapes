@@ -226,22 +226,22 @@ export function make_model(inputs, targets) {
 
 /**
 * @param {any} model
-* @param {number} step_size
+* @param {number} max_step_error_ratio
 * @param {number} max_steps
 * @returns {any}
 */
-export function train(model, step_size, max_steps) {
-    const ret = wasm.train(addHeapObject(model), step_size, max_steps);
+export function train(model, max_step_error_ratio, max_steps) {
+    const ret = wasm.train(addHeapObject(model), max_step_error_ratio, max_steps);
     return takeObject(ret);
 }
 
 /**
 * @param {any} diagram
-* @param {number} step_size
+* @param {number} max_step_error_ratio
 * @returns {any}
 */
-export function step(diagram, step_size) {
-    const ret = wasm.step(addHeapObject(diagram), step_size);
+export function step(diagram, max_step_error_ratio) {
+    const ret = wasm.step(addHeapObject(diagram), max_step_error_ratio);
     return takeObject(ret);
 }
 
@@ -287,6 +287,10 @@ async function __wbg_load(module, imports) {
 function __wbg_get_imports() {
     const imports = {};
     imports.wbg = {};
+    imports.wbg.__wbindgen_is_string = function(arg0) {
+        const ret = typeof(getObject(arg0)) === 'string';
+        return ret;
+    };
     imports.wbg.__wbindgen_object_drop_ref = function(arg0) {
         takeObject(arg0);
     };
@@ -308,10 +312,6 @@ function __wbg_get_imports() {
         var len1 = WASM_VECTOR_LEN;
         getInt32Memory0()[arg0 / 4 + 1] = len1;
         getInt32Memory0()[arg0 / 4 + 0] = ptr1;
-    };
-    imports.wbg.__wbindgen_is_string = function(arg0) {
-        const ret = typeof(getObject(arg0)) === 'string';
-        return ret;
     };
     imports.wbg.__wbindgen_error_new = function(arg0, arg1) {
         const ret = new Error(getStringFromWasm0(arg0, arg1));

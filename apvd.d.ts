@@ -18,23 +18,38 @@ export function make_diagram(inputs: any, targets: any): any;
 export function make_model(inputs: any, targets: any): any;
 /**
 * @param {any} model
-* @param {number} step_size
+* @param {number} max_step_error_ratio
 * @param {number} max_steps
 * @returns {any}
 */
-export function train(model: any, step_size: number, max_steps: number): any;
+export function train(model: any, max_step_error_ratio: number, max_steps: number): any;
 /**
 * @param {any} diagram
-* @param {number} step_size
+* @param {number} max_step_error_ratio
 * @returns {any}
 */
-export function step(diagram: any, step_size: number): any;
+export function step(diagram: any, max_step_error_ratio: number): any;
 export interface Dual {
     v: number;
     d: number[];
 }
 
 export type D = Dual;
+
+export interface R2<D> {
+    x: D;
+    y: D;
+}
+
+export type Input = [Circle<number>, Duals];
+
+export type Duals = [number[], number[], number[]];
+
+export interface Circle<D> {
+    idx: number;
+    c: R2<D>;
+    r: D;
+}
 
 export interface Error {
     key: string;
@@ -59,21 +74,6 @@ export interface Diagram {
 export type Errors = Record<string, Error>;
 
 export type Targets = Record<string, number>;
-
-export interface R2<D> {
-    x: D;
-    y: D;
-}
-
-export type Input = [Circle<number>, Duals];
-
-export type Duals = [number[], number[], number[]];
-
-export interface Circle<D> {
-    idx: number;
-    c: R2<D>;
-    r: D;
-}
 
 export interface Model {
     steps: Diagram[];
