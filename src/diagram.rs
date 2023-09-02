@@ -26,6 +26,7 @@ pub struct Diagram {
     //pub shapes: Vec<Circle<f64>>,
     pub targets: Targets,
     pub total_target_area: f64,
+    pub total_area: Dual,
     pub errors: Errors,
     pub error: Dual,
 }
@@ -34,7 +35,6 @@ pub struct Diagram {
 pub struct Error {
     pub key: String,
     pub actual_area: Option<Dual>,
-    pub total_area: Dual,
     pub actual_frac: Dual,
     pub target_area: f64,
     pub total_target_area: f64,
@@ -45,11 +45,11 @@ pub struct Error {
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f,
-            "{}: err {:.3}, {:.3} / {:.3} = {:.3}, {} / {:.3} = {:.3}",
+            "{}: err {:.3}, {:.3} / {:.3} = {:.3}, {} → {:.3}",
             self.key, self.error.v(),
             self.target_area, self.total_target_area, self.target_frac,
             self.actual_area.clone().map(|a| format!("{:.3}", a.v())).unwrap_or_else(|| "-".to_string()),
-            self.total_area.v(), self.actual_frac.v(),
+            self.actual_frac.v(),
         )
     }
 }
@@ -67,7 +67,8 @@ impl Diagram {
             .expect(&format!("{} not found among {} keys", all_key, expanded_targets.len()))
             .clone()
         });
-        let errors = Self::compute_errors(&intersections, &targets, &total_target_area);
+        let total_area = intersections.area(&all_key).unwrap_or_else(|| intersections.zero());
+        let errors = Self::compute_errors(&intersections, &targets, &total_target_area, &total_area);
         let mut error = errors.values().into_iter().map(|e| e.error.abs()).sum();
         // Optional/Alternate loss function based on per-region squared errors, weights errors by region size:
         // let error = errors.values().into_iter().map(|e| e.error.clone() * &e.error).sum::<D>().sqrt();
@@ -110,7 +111,7 @@ impl Diagram {
             error += total_disjoint_penalty;
         }
 
-        Diagram { inputs, regions, targets, total_target_area, errors, error }
+        Diagram { inputs, regions, targets, total_target_area, total_area, errors, error }
     }
 
     pub fn shapes(&self) -> Vec<Circle<f64>> {
@@ -121,24 +122,23 @@ impl Diagram {
         self.shapes().len()
     }
 
-    pub fn compute_errors(intersections: &Intersections, targets: &Targets, total_target_area: &f64) -> Errors {
+    pub fn compute_errors(intersections: &Intersections, targets: &Targets, total_target_area: &f64, total_area: &Dual) -> Errors {
         let n = intersections.len();
         let all_key = String::from_utf8(vec![b'*'; n]).unwrap();
         let none_key = String::from_utf8(vec![b'-'; n]).unwrap();
-        let total_area = intersections.area(&all_key).unwrap_or_else(|| intersections.zero());
         targets.iter().filter_map(|(key, target_area)| {
             if key == &none_key {
                 None
             } else {
                 let actual_area = intersections.area(key);
                 let target_frac = target_area / total_target_area;
-                let actual_frac = actual_area.clone().unwrap_or_else(|| intersections.zero()).clone() / &total_area;
+                let actual_frac = actual_area.clone().unwrap_or_else(|| intersections.zero()).clone() / total_area;
                 let error = actual_frac.clone() - target_frac;
                 Some((
                     key.clone(),
                     Error {
                         key: key.clone(),
-                        actual_area, total_area: total_area.clone(),
+                        actual_area,
                         target_area: target_area.clone(), total_target_area: total_target_area.clone(),
                         actual_frac,
                         target_frac,
