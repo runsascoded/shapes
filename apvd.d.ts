@@ -29,6 +29,11 @@ export function train(model: any, max_step_error_ratio: number, max_steps: numbe
 * @returns {any}
 */
 export function step(diagram: any, max_step_error_ratio: number): any;
+/**
+* @param {any} targets
+* @returns {any}
+*/
+export function expand_areas(targets: any): any;
 export interface Error {
     key: string;
     actual_area: Dual | null;
@@ -72,25 +77,6 @@ export interface Dual {
     d: number[];
 }
 
-export type Input = [Circle<number>, Duals];
-
-export type Duals = [number[], number[], number[]];
-
-export interface Circle<D> {
-    idx: number;
-    c: R2<D>;
-    r: D;
-}
-
-export interface Intersection {
-    x: D;
-    y: D;
-    c0idx: number;
-    c1idx: number;
-    t0: D;
-    t1: D;
-}
-
 export interface Regions {
     shapes: Circle<number>[];
     points: Point[];
@@ -101,6 +87,7 @@ export interface Regions {
 export interface Region {
     key: string;
     segments: Segment[];
+    area: Dual;
     container_idxs: number[];
     container_bmp: boolean[];
 }
@@ -125,6 +112,25 @@ export interface Point {
     edge_idxs: number[];
 }
 
+export type Input = [Circle<number>, Duals];
+
+export type Duals = [number[], number[], number[]];
+
+export interface Circle<D> {
+    idx: number;
+    c: R2<D>;
+    r: D;
+}
+
+export interface Intersection {
+    x: D;
+    y: D;
+    c0idx: number;
+    c1idx: number;
+    t0: D;
+    t1: D;
+}
+
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
@@ -135,6 +141,7 @@ export interface InitOutput {
   readonly make_model: (a: number, b: number) => number;
   readonly train: (a: number, b: number, c: number) => number;
   readonly step: (a: number, b: number) => number;
+  readonly expand_areas: (a: number) => number;
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
   readonly __wbindgen_exn_store: (a: number) => void;
