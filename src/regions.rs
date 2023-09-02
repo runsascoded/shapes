@@ -1,7 +1,7 @@
 use serde::{Serialize, Deserialize};
 use tsify::Tsify;
 
-use crate::{circle::{Intersection, Circle}, node::Node, intersections::{self, Intersections}};
+use crate::{circle::{Intersection, Circle}, node::Node, intersections::{self, Intersections}, dual::Dual};
 
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
@@ -36,6 +36,7 @@ pub struct Segment {
 pub struct Region {
     pub key: String,
     pub segments: Vec<Segment>,
+    pub area: Dual,
     pub container_idxs: Vec<usize>,
     pub container_bmp: Vec<bool>,
 }
@@ -78,6 +79,7 @@ impl Regions {
                 edge_idx: s.edge.borrow().idx,
                 fwd: s.fwd,
             }).collect(),
+            area: r.area(),
             container_idxs: r.container_idxs.clone(),
             container_bmp: r.container_bmp.clone(),
         }).collect();

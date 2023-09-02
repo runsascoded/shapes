@@ -18,6 +18,7 @@ mod intersections;
 mod zero;
 mod js_dual;
 
+use areas::Areas;
 use circle::Input;
 use diagram::Diagram;
 use log::{LevelFilter, debug, info};
@@ -71,4 +72,11 @@ pub fn step(diagram: JsValue, max_step_error_ratio: f64) -> JsValue {
     let diagram = diagram.step(max_step_error_ratio);
     let diagram = serde_wasm_bindgen::to_value(&diagram.clone()).unwrap();
     diagram
+}
+
+#[wasm_bindgen]
+pub fn expand_areas(targets: JsValue) -> JsValue {
+    let mut targets: Targets = serde_wasm_bindgen::from_value(targets.clone()).unwrap();
+    Areas::expand(&mut targets);
+    serde_wasm_bindgen::to_value(&targets).unwrap()
 }
