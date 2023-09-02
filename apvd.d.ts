@@ -29,28 +29,6 @@ export function train(model: any, max_step_error_ratio: number, max_steps: numbe
 * @returns {any}
 */
 export function step(diagram: any, max_step_error_ratio: number): any;
-export interface Dual {
-    v: number;
-    d: number[];
-}
-
-export type D = Dual;
-
-export interface R2<D> {
-    x: D;
-    y: D;
-}
-
-export type Input = [Circle<number>, Duals];
-
-export type Duals = [number[], number[], number[]];
-
-export interface Circle<D> {
-    idx: number;
-    c: R2<D>;
-    r: D;
-}
-
 export interface Error {
     key: string;
     actual_area: Dual | null;
@@ -64,7 +42,7 @@ export interface Error {
 
 export interface Diagram {
     inputs: Input[];
-    shapes: Circle<number>[];
+    regions: Regions;
     targets: Targets;
     total_target_area: number;
     errors: Errors;
@@ -75,11 +53,76 @@ export type Errors = Record<string, Error>;
 
 export type Targets = Record<string, number>;
 
+export interface R2<D> {
+    x: D;
+    y: D;
+}
+
 export interface Model {
     steps: Diagram[];
     repeat_idx: number | null;
     min_idx: number;
     min_error: number;
+}
+
+export type D = Dual;
+
+export interface Dual {
+    v: number;
+    d: number[];
+}
+
+export type Input = [Circle<number>, Duals];
+
+export type Duals = [number[], number[], number[]];
+
+export interface Circle<D> {
+    idx: number;
+    c: R2<D>;
+    r: D;
+}
+
+export interface Intersection {
+    x: D;
+    y: D;
+    c0idx: number;
+    c1idx: number;
+    t0: D;
+    t1: D;
+}
+
+export interface Regions {
+    shapes: Circle<number>[];
+    points: Point[];
+    edges: Edge[];
+    regions: Region[];
+}
+
+export interface Region {
+    key: string;
+    segments: Segment[];
+    container_idxs: number[];
+    container_bmp: boolean[];
+}
+
+export interface Segment {
+    edge_idx: number;
+    fwd: boolean;
+}
+
+export interface Edge {
+    cidx: number;
+    i0: number;
+    i1: number;
+    t0: number;
+    t1: number;
+    containers: number[];
+    containments: boolean[];
+}
+
+export interface Point {
+    i: Intersection;
+    edge_idxs: number[];
 }
 
 
