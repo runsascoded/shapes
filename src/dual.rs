@@ -208,6 +208,13 @@ impl Mul<f64> for Dual {
     }
 }
 
+impl Mul<&f64> for Dual {
+    type Output = Self;
+    fn mul(self, rhs: &f64) -> Self::Output {
+        Dual(self.0 * rhs.clone(), self.1)
+    }
+}
+
 impl Mul<f64> for &Dual {
     type Output = Dual;
     fn mul(self, rhs: f64) -> Self::Output {

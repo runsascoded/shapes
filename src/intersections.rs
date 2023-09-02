@@ -276,18 +276,19 @@ impl Intersections {
             }
             None => {
                 let regions = &self.regions;
+                let areas =
                 regions
                 .iter()
-                .find(|r| &r.key == key)
-                .map(|r| r.area())
-                // .expect(
-                //     &format!(
-                //         "No region found with key {}; region keys: {}",
-                //         key,
-                //         regions.iter().map(|r| r.key.clone()).collect::<Vec<_>>().join(", ")
-                //     )
-                // )
-                // .area()
+                .filter(|r| &r.key == key)
+                .map(|r| r.area());
+                let mut sum = None;
+                for area in areas {
+                    match sum {
+                        None => sum = Some(area),
+                        Some(s) => sum = Some(s + area),
+                    }
+                }
+                sum
             }
         }
     }
@@ -301,7 +302,7 @@ impl Intersections {
     }
 
     pub fn zero(&self) -> D {
-        Dual::zero(self.duals[0].borrow().c.x.clone())
+        Dual::zero(&self.duals[0].borrow().c.x.clone())
     }
 }
 

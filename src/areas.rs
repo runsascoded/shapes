@@ -40,7 +40,7 @@ impl<D: Clone + Zero<D> + Display + Add<Output = D> + Sub<Output = D>> Areas<D>
         let empty_key = String::from_utf8(vec![b'-'; n]).unwrap();
         if !map.contains_key(&empty_key) {
             let first = map.values().next().unwrap().clone();
-            map.insert(empty_key, D::zero(first));
+            map.insert(empty_key, D::zero(&first));
         }
         let mut queue: HashSet<String> = map.keys().cloned().collect();
         let max = pow(3, n);

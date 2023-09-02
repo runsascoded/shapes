@@ -1,16 +1,23 @@
-use std::{collections::HashMap, fmt::Display};
+use std::{collections::HashMap, fmt::Display, cell::Ref};
 
 use log::{info, debug};
 use serde::{Deserialize, Serialize};
 use tsify::{declare, Tsify};
 
-use crate::{circle::{Circle, Input, Duals}, intersections::Intersections, dual::D, r2::R2, areas::Areas, regions::Regions};
+use crate::{circle::{Circle, Input, Duals}, intersections::Intersections, dual::D, r2::R2, areas::Areas, regions::Regions, zero::Zero};
 use crate::dual::Dual;
 
 #[declare]
 pub type Targets = HashMap<String, f64>;
 #[declare]
 pub type Errors = HashMap<String, Error>;
+
+pub struct DisjointPenalty {
+    pub i: usize,
+    pub j: usize,
+    pub gap: Dual,
+    pub target: f64,
+}
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
 pub struct Diagram {
@@ -48,20 +55,62 @@ impl Display for Error {
 }
 
 impl Diagram {
-    pub fn new(inputs: Vec<Input>, targets: HashMap<String, f64>, total_target_area: Option<f64>) -> Diagram {
+    pub fn new(inputs: Vec<Input>, targets: Targets, total_target_area: Option<f64>) -> Diagram {
         let intersections = Intersections::new(&inputs);
         // let duals = intersections.duals;
         let all_key = String::from_utf8(vec![b'*'; intersections.len()]).unwrap();
+        let mut expanded_targets = targets.clone();
+        Areas::expand(&mut expanded_targets);
         let total_target_area = total_target_area.unwrap_or_else(|| {
-            let mut expanded_target = targets.clone();
-            Areas::expand(&mut expanded_target);
-            expanded_target.get(&all_key).expect(&format!("{} not found among {} keys", all_key, expanded_target.len())).clone()
+            expanded_targets
+            .get(&all_key)
+            .expect(&format!("{} not found among {} keys", all_key, expanded_targets.len()))
+            .clone()
         });
-        let errors = Self::compute_errors(&intersections, &targets, total_target_area);
-        let error = errors.values().into_iter().map(|e| e.error.abs()).sum();
+        let errors = Self::compute_errors(&intersections, &targets, &total_target_area);
+        let mut error = errors.values().into_iter().map(|e| e.error.abs()).sum();
+        // Optional/Alternate loss function based on per-region squared errors, weights errors by region size:
         // let error = errors.values().into_iter().map(|e| e.error.clone() * &e.error).sum::<D>().sqrt();
-        let regions = Regions::new(intersections);
-        Diagram { inputs, regions, targets, total_target_area: total_target_area.clone(), errors, error }
+        let regions = Regions::new(&intersections);
+        let duals = &intersections.duals;
+
+        // Include penalties for erroneously-disjoint shapes
+        // let mut disjoint_penalties = Vec::<DisjointPenalty>::new();
+        let mut total_disjoint_penalty = Dual::zero(&error);
+        let n = inputs.len();
+        for i in 0..(n - 1) {
+            let ci = duals[i].clone();
+            for j in (i + 1)..n {
+                let mut key = String::from_utf8(vec![b'*'; n]).unwrap();
+                let chi = char::to_string(&char::from_digit(i as u32, 10).unwrap());
+                let chj = char::to_string(&char::from_digit(j as u32, 10).unwrap());
+                key.replace_range(i..i+1, &chi);
+                key.replace_range(j..j+1, &chj);
+                let target = expanded_targets.get(&key);
+                match target {
+                    Some(target) => {
+                        match ci.borrow().distance(&*duals[j].borrow()) {
+                            Some(gap) => {
+                                // disjoint_penalties.push(
+                                //     DisjointPenalty { i, j, gap: gap.clone(), target: target.clone() }
+                                // );
+                                debug!("  disjoint penalty: {}: {} * {}", key, &gap, target);
+                                total_disjoint_penalty += gap * target;
+                            },
+                            None => (),
+                        }
+                    },
+                    None => ()
+                }
+            }
+        }
+
+        if total_disjoint_penalty.v() > 0. {
+            debug!("  total_disjoint_penalty: {}", total_disjoint_penalty);
+            error += total_disjoint_penalty;
+        }
+
+        Diagram { inputs, regions, targets, total_target_area, errors, error }
     }
 
     pub fn shapes(&self) -> Vec<Circle<f64>> {
@@ -72,18 +121,18 @@ impl Diagram {
         self.shapes().len()
     }
 
-    pub fn compute_errors(shapes: &Intersections, targets: &Targets, total_target_area: f64) -> Errors {
-        let n = shapes.len();
+    pub fn compute_errors(intersections: &Intersections, targets: &Targets, total_target_area: &f64) -> Errors {
+        let n = intersections.len();
         let all_key = String::from_utf8(vec![b'*'; n]).unwrap();
         let none_key = String::from_utf8(vec![b'-'; n]).unwrap();
-        let total_area = shapes.area(&all_key).unwrap_or_else(|| shapes.zero());
+        let total_area = intersections.area(&all_key).unwrap_or_else(|| intersections.zero());
         targets.iter().filter_map(|(key, target_area)| {
             if key == &none_key {
                 None
             } else {
-                let actual_area = shapes.area(key);
+                let actual_area = intersections.area(key);
                 let target_frac = target_area / total_target_area;
-                let actual_frac = actual_area.clone().unwrap_or_else(|| shapes.zero()).clone() / &total_area;
+                let actual_frac = actual_area.clone().unwrap_or_else(|| intersections.zero()).clone() / &total_area;
                 let error = actual_frac.clone() - target_frac;
                 Some((
                     key.clone(),

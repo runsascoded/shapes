@@ -171,6 +171,15 @@ impl Circle<D> {
         let y = p.y.clone() - self.c.y.clone();
         y.clone().atan2(x.clone())
     }
+    pub fn distance(&self, o: &Circle<D>) -> Option<D> {
+        let distance = (self.c.clone() - o.c.clone()).norm();
+        let gap = distance - &self.r - &o.r;
+        if gap.v() > 0. {
+            Some(gap)
+        } else {
+            None
+        }
+    }
 }
 
 impl<D: Display> Display for Circle<D> {

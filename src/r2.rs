@@ -22,6 +22,9 @@ impl R2<Dual> {
     pub fn v(&self) -> R2<f64> {
         R2 { x: self.x.v(), y: self.y.v() }
     }
+    pub fn norm(&self) -> Dual {
+        (self.x.clone() * &self.x + self.y.clone() * &self.y).sqrt()
+    }
 }
 
 impl AbsDiffEq for R2<Dual> {

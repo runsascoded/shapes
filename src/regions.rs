@@ -44,20 +44,14 @@ pub struct Region {
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
 pub struct Regions {
     pub shapes: Vec<Circle<f64>>,
-    // pub duals: Vec<C>,
     pub points: Vec<Point>,
-    // pub nodes_by_shape: Vec<Vec<usize>>,
-    // pub nodes_by_shapes: Vec<Vec<Vec<usize>>>,
     pub edges: Vec<Edge>,
-    // pub is_connected: Vec<Vec<bool>>,
     pub regions: Vec<Region>,
-    // pub total_visits: usize,
-    // pub total_expected_visits: usize,
 }
 
 impl Regions {
-    pub fn new(intersections: Intersections) -> Self {
-        let shapes = intersections.shapes;
+    pub fn new(intersections: &Intersections) -> Self {
+        let shapes = intersections.shapes.clone();
         let points = intersections.nodes.iter().map(|n| Point {
             i: n.borrow().i.clone(),
             edge_idxs: n.borrow().edges.iter().map(|e| e.borrow().idx).collect(),
