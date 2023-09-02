@@ -4,7 +4,7 @@ use log::{info, debug};
 use serde::{Deserialize, Serialize};
 use tsify::{declare, Tsify};
 
-use crate::{circle::{Circle, Input, Duals}, intersections::Intersections, dual::D, r2::R2, areas::Areas};
+use crate::{circle::{Circle, Input, Duals}, intersections::Intersections, dual::D, r2::R2, areas::Areas, regions::Regions};
 use crate::dual::Dual;
 
 #[declare]
@@ -15,7 +15,8 @@ pub type Errors = HashMap<String, Error>;
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
 pub struct Diagram {
     pub inputs: Vec<Input>,
-    pub shapes: Vec<Circle<f64>>,
+    pub regions: Regions,
+    //pub shapes: Vec<Circle<f64>>,
     pub targets: Targets,
     pub total_target_area: f64,
     pub errors: Errors,
@@ -59,12 +60,16 @@ impl Diagram {
         let errors = Self::compute_errors(&intersections, &targets, total_target_area);
         let error = errors.values().into_iter().map(|e| e.error.abs()).sum();
         // let error = errors.values().into_iter().map(|e| e.error.clone() * &e.error).sum::<D>().sqrt();
-        let shapes = intersections.shapes;
-        Diagram { inputs, shapes, targets, total_target_area: total_target_area.clone(), errors, error }
+        let regions = Regions::new(intersections);
+        Diagram { inputs, regions, targets, total_target_area: total_target_area.clone(), errors, error }
+    }
+
+    pub fn shapes(&self) -> Vec<Circle<f64>> {
+        self.inputs.iter().map(|(s, _)| s.clone()).collect()
     }
 
     pub fn n(&self) -> usize {
-        self.shapes.len()
+        self.shapes().len()
     }
 
     pub fn compute_errors(shapes: &Intersections, targets: &Targets, total_target_area: f64) -> Errors {
@@ -113,7 +118,7 @@ impl Diagram {
         debug!("  err {:?}", error);
         debug!("  step_size {}, magnitude {}, grad_scale {}", step_size, magnitude, grad_scale);
         debug!("  step_vec {:?}", step_vec);
-        let shapes = &self.shapes;
+        let shapes = &self.shapes();
         let new_inputs = shapes.iter().zip(self.duals()).map(|(s, duals)| {
             let [ dx, dy, dr ]: [f64; 3] = duals.clone().map(|d| d.iter().zip(&step_vec).map(|(mask, step)| mask * step).sum());
             let c = R2 {

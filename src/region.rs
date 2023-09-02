@@ -1,6 +1,6 @@
 use std::fmt::{Formatter, Display, self};
 
-use crate::{edge::E, intersection::Node, dual::{Dual, D}};
+use crate::{edge::E, node::N, dual::{Dual, D}};
 
 #[derive(Debug, Clone)]
 pub struct Segment {
@@ -12,12 +12,12 @@ impl Segment {
     pub fn secant_area(&self) -> D {
         self.edge.borrow().secant_area()
     }
-    pub fn start(&self) -> Node {
+    pub fn start(&self) -> N {
         let e = self.edge.borrow();
         let i = if self.fwd { &e.i0 } else { &e.i1 };
         i.clone()
     }
-    pub fn end(&self) -> Node {
+    pub fn end(&self) -> N {
         let e = self.edge.borrow();
         let i = if self.fwd { &e.i1 } else { &e.i0 };
         i.clone()

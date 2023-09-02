@@ -1,16 +1,17 @@
 use std::{fmt::Display, rc::Rc, cell::RefCell, collections::HashSet};
 
-use crate::{circle::C, intersection::Node, dual::D};
+use crate::{circle::C, node::N, dual::D};
 
 pub type E = Rc<RefCell<Edge>>;
 
 #[derive(Debug, Clone)]
 pub struct Edge {
+    pub idx: usize,
     pub c: C,
     pub c0: C,
     pub c1: C,
-    pub i0: Node,
-    pub i1: Node,
+    pub i0: N,
+    pub i1: N,
     pub t0: D,
     pub t1: D,
     pub containers: Vec<C>,

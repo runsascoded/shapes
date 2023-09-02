@@ -5,9 +5,44 @@ use num_traits::Float;
 use serde::{Deserialize, Serialize};
 use tsify::{declare, Tsify};
 use crate::{
+    deg::Deg,
+    dual::{D, Dual},
     r2::R2,
-    intersection::Intersection, dual::{D, Dual},
 };
+
+#[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
+pub struct Intersection {
+    pub x: D,
+    pub y: D,
+    pub c0idx: usize,
+    pub c1idx: usize,
+    pub t0: D,
+    pub t1: D,
+}
+
+impl Intersection {
+    pub fn p(&self) -> R2<D> {
+        R2 { x: self.x.clone(), y: self.y.clone() }
+    }
+    pub fn v(&self) -> R2<f64> {
+        R2 { x: self.x.v(), y: self.y.v() }
+    }
+    pub fn other(&self, cidx: usize) -> usize {
+        if cidx == self.c0idx {
+            self.c1idx
+        } else if cidx == self.c1idx {
+            self.c0idx
+        } else {
+            panic!("Invalid circle index {} ({}, {})", cidx, self.c0idx, self.c1idx);
+        }
+    }
+}
+
+impl Display for Intersection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "I({:.3}, {:.3}, C{}({})/C{}({})", self.x, self.y, self.c0idx, self.t0.deg().s(0), self.c1idx, self.t1.deg().s(0))
+    }
+}
 
 #[derive(Debug, Clone, Copy, From, PartialEq, Tsify, Serialize, Deserialize)]
 pub struct Circle<D> {
@@ -66,9 +101,6 @@ impl Circle<D> {
     pub fn v(&self) -> Circle<f64> {
         Circle { idx: self.idx, c: self.c.v(), r: self.r.v() }
     }
-    pub fn split(&self) -> Input {
-        ( self.v(), [ self.c.x.d().clone(), self.c.y.d().clone(), self.r.d().clone() ] )
-    }
     pub fn intersect(&self, c1: &Circle<D>) -> Vec<Intersection> {
         let c0 = self;
         let projected = c0.project(&c1);
@@ -81,7 +113,7 @@ impl Circle<D> {
             let p = R2 { x: x.clone(), y: y.clone() };
             let t0 = c0.theta(p.clone());
             let t1 = c1.theta(p.clone());
-            Intersection { x, y, c0idx: c0.idx, c1idx: c1.idx, t0, t1, edges: Vec::new(), }
+            Intersection { x, y, c0idx: c0.idx, c1idx: c1.idx, t0, t1, }
         });
         intersections.collect()
     }

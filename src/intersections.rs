@@ -1,14 +1,14 @@
 use std::{cell::RefCell, rc::Rc, f64::consts::PI, collections::HashSet};
 
-use crate::{circle::{Circle, C, Input}, intersection::Node, edge::{self, E}, region::{Region, Segment}, dual::{D, Dual}, zero::Zero};
+use crate::{circle::{Circle, C, Input}, node::{N, Node}, edge::{self, E}, region::{Region, Segment}, dual::{D, Dual}, zero::Zero};
 
 #[derive(Clone, Debug)]
 pub struct Intersections {
     pub shapes: Vec<Circle<f64>>,
     pub duals: Vec<C>,
-    pub nodes: Vec<Node>,
-    pub nodes_by_shape: Vec<Vec<Node>>,
-    pub nodes_by_shapes: Vec<Vec<Vec<Node>>>,
+    pub nodes: Vec<N>,
+    pub nodes_by_shape: Vec<Vec<N>>,
+    pub nodes_by_shapes: Vec<Vec<Vec<N>>>,
     pub edges: Vec<E>,
     pub is_connected: Vec<Vec<bool>>,
     pub regions: Vec<Region>,
@@ -21,12 +21,12 @@ impl Intersections {
         let n = inputs.len();
         let shapes: Vec<Circle<f64>> = inputs.iter().map(|(c, _duals)| c.clone()).collect();
         let duals: Vec<C> = inputs.iter().map(|(c, duals)| Rc::new(RefCell::new(c.dual(duals)))).collect();
-        let mut nodes: Vec<Node> = Vec::new();
-        let mut nodes_by_shape: Vec<Vec<Node>> = Vec::new();
-        let mut nodes_by_shapes: Vec<Vec<Vec<Node>>> = Vec::new();
+        let mut nodes: Vec<N> = Vec::new();
+        let mut nodes_by_shape: Vec<Vec<N>> = Vec::new();
+        let mut nodes_by_shapes: Vec<Vec<Vec<N>>> = Vec::new();
         for _idx in 0..n {
             nodes_by_shape.push(Vec::new());
-            let mut shapes_nodes: Vec<Vec<Node>> = Vec::new();
+            let mut shapes_nodes: Vec<Vec<N>> = Vec::new();
             for _jdx in 0..n {
                 shapes_nodes.push(Vec::new());
             }
@@ -35,8 +35,14 @@ impl Intersections {
         for (idx, dual) in duals.iter().enumerate() {
             for jdx in (idx + 1)..n {
                 let intersections = dual.borrow().intersect(&duals[jdx].borrow());
-                let ns = intersections.iter().map(|i| Rc::new(RefCell::new(i.clone())));
-                for n in ns {
+                // let ns = intersections.iter_mut().map(|i| Rc::new(RefCell::new(i.clone())));
+                for i in intersections {
+                    let node = Node {
+                        idx: nodes.len(),
+                        i,
+                        edges: Vec::new(),
+                    };
+                    let n = Rc::new(RefCell::new(node));
                     nodes.push(n.clone());
                     nodes_by_shape[idx].push(n.clone());
                     nodes_by_shapes[idx][jdx].push(n.clone());
@@ -61,8 +67,8 @@ impl Intersections {
             is_connected.push(connected);
         }
         for node in &nodes {
-            let i0 = node.borrow().c0idx;
-            let i1 = node.borrow().c1idx;
+            let i0 = node.borrow().i.c0idx;
+            let i1 = node.borrow().i.c1idx;
             if !is_connected[i0][i1] {
                 for i2 in 0..n {
                     if is_connected[i0][i2] && !is_connected[i1][i2] {
@@ -118,6 +124,7 @@ impl Intersections {
                 let expected_visits = if is_component_boundary { 1 } else { 2 };
                 total_expected_visits += expected_visits;
                 let edge = Rc::new(RefCell::new(edge::Edge {
+                    idx: edges.len(),
                     c: c.clone(),
                     c0: duals[c0idx].clone(),
                     c1: duals[c1idx].clone(),
@@ -137,7 +144,7 @@ impl Intersections {
         }
 
         fn traverse(
-            start: &Node,
+            start: &N,
             num_shapes: usize,
             regions: &mut Vec<Region>,
             segments: &mut Vec<Segment>,
@@ -337,14 +344,14 @@ mod tests {
 
         let check = |idx: usize, x: Dual, y: Dual, c0idx: usize, deg0v: i64, deg0d: [i64; 9], c1idx: usize, deg1v: i64, deg1d: [i64; 9]| {
             let n = shapes.nodes[idx].borrow();
-            assert_relative_eq!(n.x, x, epsilon = 1e-3);
-            assert_relative_eq!(n.y, y, epsilon = 1e-3);
-            assert_eq!(n.c0idx, c0idx);
-            assert_eq!(n.c1idx, c1idx);
-            let d0 = n.t0.deg();
+            assert_relative_eq!(n.i.x, x, epsilon = 1e-3);
+            assert_relative_eq!(n.i.y, y, epsilon = 1e-3);
+            assert_eq!(n.i.c0idx, c0idx);
+            assert_eq!(n.i.c1idx, c1idx);
+            let d0 = n.i.t0.deg();
             let a0: (i64, Vec<i64>) = (round(&d0.v()), d0.d().iter().map(round).collect());
             assert_eq!(a0, (deg0v, deg0d.into()));
-            let d1 = n.t1.deg();
+            let d1 = n.i.t1.deg();
             let a1: (i64, Vec<i64>) = (round(&d1.v()), d1.d().iter().map(round).collect());
             assert_eq!(a1, (deg1v, deg1d.into()));
         };
