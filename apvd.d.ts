@@ -113,7 +113,6 @@ export interface Intersection {
 export interface Error {
     key: string;
     actual_area: Dual | null;
-    total_area: Dual;
     actual_frac: Dual;
     target_area: number;
     total_target_area: number;
@@ -126,6 +125,7 @@ export interface Diagram {
     regions: Regions;
     targets: Targets;
     total_target_area: number;
+    total_area: Dual;
     errors: Errors;
     error: Dual;
 }
