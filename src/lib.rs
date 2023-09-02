@@ -21,16 +21,15 @@ mod js_dual;
 use areas::Areas;
 use circle::Input;
 use diagram::Diagram;
-use log::{LevelFilter, debug, info};
+use log::LevelFilter;
+
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_console_logger::DEFAULT_LOGGER;
-use crate::diagram::{Targets};
+use crate::diagram::Targets;
 use crate::model::Model;
 
-#[wasm_bindgen]
-pub fn init_logs(level: JsValue) {
+pub fn deser_log_level(level: JsValue) -> LevelFilter {
     let level: Option<String> = serde_wasm_bindgen::from_value(level).unwrap();
-    log::set_logger(&DEFAULT_LOGGER).unwrap();
     let level = match level.as_deref() {
         Some("error") => LevelFilter::Error,
         Some("warn") => LevelFilter::Warn,
@@ -39,8 +38,19 @@ pub fn init_logs(level: JsValue) {
         Some("trace") => LevelFilter::Trace,
         Some(level) => panic!("invalid log level: {}", level),
     };
-    log::set_max_level(level);
+    level
+}
+
+#[wasm_bindgen]
+pub fn init_logs() {
+    log::set_logger(&DEFAULT_LOGGER).unwrap();
     console_error_panic_hook::set_once();
+}
+
+#[wasm_bindgen]
+pub fn update_log_level(level: JsValue) {
+    let level = deser_log_level(level);
+    log::set_max_level(level);
 }
 
 #[wasm_bindgen]
