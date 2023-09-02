@@ -1,7 +1,8 @@
 /* tslint:disable */
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
-export function init_logs(a: number): void;
+export function init_logs(): void;
+export function update_log_level(a: number): void;
 export function make_diagram(a: number, b: number): number;
 export function make_model(a: number, b: number): number;
 export function train(a: number, b: number, c: number): number;

@@ -1,9 +1,12 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
+*/
+export function init_logs(): void;
+/**
 * @param {any} level
 */
-export function init_logs(level: any): void;
+export function update_log_level(level: any): void;
 /**
 * @param {any} inputs
 * @param {any} targets
@@ -34,30 +37,6 @@ export function step(diagram: any, max_step_error_ratio: number): any;
 * @returns {any}
 */
 export function expand_areas(targets: any): any;
-export interface Error {
-    key: string;
-    actual_area: Dual | null;
-    total_area: Dual;
-    actual_frac: Dual;
-    target_area: number;
-    total_target_area: number;
-    target_frac: number;
-    error: Dual;
-}
-
-export interface Diagram {
-    inputs: Input[];
-    regions: Regions;
-    targets: Targets;
-    total_target_area: number;
-    errors: Errors;
-    error: Dual;
-}
-
-export type Errors = Record<string, Error>;
-
-export type Targets = Record<string, number>;
-
 export interface R2<D> {
     x: D;
     y: D;
@@ -131,12 +110,37 @@ export interface Intersection {
     t1: D;
 }
 
+export interface Error {
+    key: string;
+    actual_area: Dual | null;
+    total_area: Dual;
+    actual_frac: Dual;
+    target_area: number;
+    total_target_area: number;
+    target_frac: number;
+    error: Dual;
+}
+
+export interface Diagram {
+    inputs: Input[];
+    regions: Regions;
+    targets: Targets;
+    total_target_area: number;
+    errors: Errors;
+    error: Dual;
+}
+
+export type Errors = Record<string, Error>;
+
+export type Targets = Record<string, number>;
+
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
-  readonly init_logs: (a: number) => void;
+  readonly init_logs: () => void;
+  readonly update_log_level: (a: number) => void;
   readonly make_diagram: (a: number, b: number) => number;
   readonly make_model: (a: number, b: number) => number;
   readonly train: (a: number, b: number, c: number) => number;
