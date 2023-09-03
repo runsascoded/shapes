@@ -170,6 +170,10 @@ mod tests {
         assert_relative_eq!(r.x, 2_f64.sqrt());
         assert_relative_eq!(r.y, 0., epsilon = 1e-15);
 
+        let r = p.rotate(&(-PI / 4.));
+        assert_relative_eq!(r.x, 2_f64.sqrt());
+        assert_relative_eq!(r.y, 0., epsilon = 1e-15);
+
         let r = p.rotate(&(PI / 2.));
         assert_relative_eq!(r.x, -1.);
         assert_relative_eq!(r.y,  1.);
