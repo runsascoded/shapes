@@ -17,6 +17,7 @@ mod model;
 mod r2;
 mod region;
 mod regions;
+mod roots;
 mod rotate;
 mod zero;
 mod js_dual;

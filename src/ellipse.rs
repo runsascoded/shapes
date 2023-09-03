@@ -23,8 +23,27 @@ pub struct ACDEF<D> {
     f: D,
 }
 
-impl<D> ACDEF<D> {
+pub trait UnitIntersectionsArg: Clone + Add<Output = Self> + Add<f64, Output = Self> + Sub<Output = Self> + Sub<f64, Output = Self> + Mul<Output = Self> + Div<Output = Self>
+// where f64: Mul<Self, Output = Self> + Div<Self, Output = Self>
+{}
+impl<D: Clone + Add<Output = D> + Add<f64, Output = D> + Sub<Output = D> + Sub<f64, Output = D> + Mul<Output = D> + Div<Output = D>> UnitIntersectionsArg for D
+// where f64: Mul<D, Output = D> + Div<D, Output = D>
+{}
+
+impl<D: UnitIntersectionsArg> ACDEF<D>
+where f64: Mul<D, Output = D> + Div<D, Output = D>
+{
     pub fn unit_intersections(&self) -> Vec<R2<D>> {
+        let rd = -1. / self.d.clone();
+        let c_2 = (self.c.clone() - self.a.clone()) * rd.clone();
+        let c_1 = self.e.clone() * rd.clone();
+        let c_0 = (self.a.clone() + self.f.clone()) * rd;
+
+        let a_4 = c_2.clone() * c_2.clone();
+        let a_3 = 2. * c_2.clone() * c_1.clone();
+        let a_2 = c_1.clone() * c_1.clone() + 2. * c_2.clone() * c_0.clone() + 1.;
+        let a_1 = 2. * c_1.clone() * c_0.clone();
+        let a_0 = c_0.clone() * c_0.clone() - 1.;
         todo!()
     }
 }
@@ -40,6 +59,13 @@ impl<D: RotateArg + Neg<Output = D>> XYRRT<D> {
     // pub fn rotate(&self, t: &D) -> XYRRT<D> {
     //     todo!()
     // }
+
+    pub fn abcdef(&self) -> ABCDEF<D> {
+        todo!()
+        // ABCDEF {
+
+        // }
+    }
 
     /// Rotate the plane so that this ellipse ends up aligned with the x- and y-axes (i.e. θ == B == 0)
     pub fn level(&self) -> XYRR<D> {
@@ -57,7 +83,7 @@ pub struct XYRR<D> {
     ry: D,
 }
 
-impl<D: Clone + Trig + Add<Output = D> + Sub<Output = D> + Sub<f64, Output = D> + Mul<Output = D>> XYRR<D>
+impl<D: UnitIntersectionsArg + RotateArg> XYRR<D>
 where
     f64: Mul<D, Output = D> + Div<D, Output = D>,
 {
