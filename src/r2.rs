@@ -4,7 +4,7 @@ use approx::{AbsDiffEq, RelativeEq};
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::dual::Dual;
+use crate::{dual::Dual, rotate::{Rotate, RotateArg}};
 
 #[derive(Debug, Copy, Clone, PartialEq, Tsify, Serialize, Deserialize)]
 pub struct R2<D> {
@@ -17,6 +17,34 @@ impl<D: Display> Display for R2<D> {
         write!(f, "({:.3}, {:.3})", self.x, self.y)
     }
 }
+
+impl<D: RotateArg> Rotate<D> for R2<D> {
+    fn rotate(&self, theta: &D) -> Self {
+        let c = (*theta).cos();
+        let s = (*theta).sin();
+        let x = &self.x;
+        let y = &self.y;
+        R2 {
+            x: x.clone() * c.clone() - y.clone() * s.clone(),
+            y: x.clone() * s + y.clone() * c,
+        }
+    }
+}
+
+// impl<D: Clone + Trig + Add<Output = D> + Sub<Output = D> + Mul<Output = D>> R2<D>
+// impl<D: CanRotate> R2<D>
+// {
+//     pub fn rotate(&self, theta: &D) -> R2<D> {
+//         let c = theta.cos();
+//         let s = theta.sin();
+//         let x = &self.x;
+//         let y = &self.y;
+//         R2 {
+//             x: x.clone() * c.clone() - y.clone() * s.clone(),
+//             y: x.clone() * s + y.clone() * c,
+//         }
+//     }
+// }
 
 impl R2<Dual> {
     pub fn v(&self) -> R2<f64> {
@@ -113,5 +141,45 @@ impl<D: Div<D, Output = D> + Clone> Div<D> for R2<D> {
             x: self.x / rhs.clone(),
             y: self.y / rhs.clone(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::f64::consts::PI;
+
+    use super::*;
+
+    #[test]
+    fn test_rotate() {
+        let p = R2 { x: 1., y: 1. };
+
+        let r = p.rotate(&(PI / 4.));
+        assert_relative_eq!(r.x, 0.);
+        assert_relative_eq!(r.y, 2_f64.sqrt());
+
+        let r = p.rotate(&(3. * PI / 4.));
+        assert_relative_eq!(r.x, -2_f64.sqrt());
+        assert_relative_eq!(r.y, 0.);
+
+        let r = p.rotate(&(5. * PI / 4.));
+        assert_relative_eq!(r.x, 0.);
+        assert_relative_eq!(r.y, -2_f64.sqrt());
+
+        let r = p.rotate(&(7. * PI / 4.));
+        assert_relative_eq!(r.x, 2_f64.sqrt());
+        assert_relative_eq!(r.y, 0., epsilon = 1e-15);
+
+        let r = p.rotate(&(PI / 2.));
+        assert_relative_eq!(r.x, -1.);
+        assert_relative_eq!(r.y,  1.);
+
+        let r = p.rotate(&(PI));
+        assert_relative_eq!(r.x, -1.);
+        assert_relative_eq!(r.y, -1.);
+
+        let r = p.rotate(&(3. * PI / 2.));
+        assert_relative_eq!(r.x,  1.);
+        assert_relative_eq!(r.y, -1.);
     }
 }

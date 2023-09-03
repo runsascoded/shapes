@@ -13,7 +13,7 @@ pub struct Areas<D> {
 type Neighbor = (char, String);
 type Neighbors = Vec<(Neighbor, Neighbor)>;
 
-impl<D: Clone + Zero<D> + Display + Add<Output = D> + Sub<Output = D>> Areas<D>
+impl<D: Clone + Zero + Display + Add<Output = D> + Sub<Output = D>> Areas<D>
 {
     pub fn neighbor(prefix: &String, ch: char, suffix: &String) -> Neighbor {
         (ch, format!("{}{}{}", prefix, ch, suffix))

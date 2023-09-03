@@ -8,13 +8,16 @@ mod diagram;
 mod deg;
 mod dual;
 mod edge;
+mod ellipse;
+mod intersections;
+mod math_ops;
 mod node;
 mod math;
 mod model;
 mod r2;
 mod region;
 mod regions;
-mod intersections;
+mod rotate;
 mod zero;
 mod js_dual;
 

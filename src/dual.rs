@@ -13,8 +13,8 @@ pub type D = Dual;
 
 #[derive(Clone, PartialEq, PartialOrd)]
 pub struct Dual(
-    DualDVec64,
-    usize
+    pub DualDVec64,
+    pub usize
 );
 
 impl Serialize for Dual {
@@ -117,6 +117,10 @@ impl Dual {
     #[inline]
     pub fn sin(self) -> Self {
         Dual(self.0.clone().sin(), self.1)
+    }
+    #[inline]
+    pub fn cos(self) -> Self {
+        Dual(self.0.clone().cos(), self.1)
     }
     #[inline]
     pub fn atan(self) -> Self {
