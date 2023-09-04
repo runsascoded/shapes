@@ -37,60 +37,11 @@ export function step(diagram: any, max_step_error_ratio: number): any;
 * @returns {any}
 */
 export function expand_areas(targets: any): any;
-export interface R2<D> {
-    x: D;
-    y: D;
-}
-
-export interface Model {
-    steps: Diagram[];
-    repeat_idx: number | null;
-    min_idx: number;
-    min_error: number;
-}
-
-export type D = Dual;
-
-export interface Dual {
-    v: number;
-    d: number[];
-}
-
-export interface Regions {
-    shapes: Circle<number>[];
-    points: Point[];
-    edges: Edge[];
-    regions: Region[];
-}
-
-export interface Region {
-    key: string;
-    segments: Segment[];
-    area: Dual;
-    container_idxs: number[];
-    container_bmp: boolean[];
-}
-
-export interface Segment {
-    edge_idx: number;
-    fwd: boolean;
-}
-
-export interface Edge {
-    cidx: number;
-    i0: number;
-    i1: number;
-    t0: number;
-    t1: number;
-    containers: number[];
-    containments: boolean[];
-}
-
-export interface Point {
-    i: Intersection;
-    edge_idxs: number[];
-}
-
+/**
+* @param {any} xyrr
+* @returns {any}
+*/
+export function xyrr_unit(xyrr: any): any;
 export type Input = [Circle<number>, Duals];
 
 export type Duals = [number[], number[], number[]];
@@ -134,6 +85,65 @@ export type Errors = Record<string, Error>;
 
 export type Targets = Record<string, number>;
 
+export type D = Dual;
+
+export interface Dual {
+    v: number;
+    d: number[];
+}
+
+export interface Model {
+    steps: Diagram[];
+    repeat_idx: number | null;
+    min_idx: number;
+    min_error: number;
+}
+
+export interface R2<D> {
+    x: D;
+    y: D;
+}
+
+export interface Regions {
+    shapes: Circle<number>[];
+    points: Point[];
+    edges: Edge[];
+    regions: Region[];
+}
+
+export interface Region {
+    key: string;
+    segments: Segment[];
+    area: Dual;
+    container_idxs: number[];
+    container_bmp: boolean[];
+}
+
+export interface Segment {
+    edge_idx: number;
+    fwd: boolean;
+}
+
+export interface Edge {
+    cidx: number;
+    i0: number;
+    i1: number;
+    t0: number;
+    t1: number;
+    containers: number[];
+    containments: boolean[];
+}
+
+export interface Point {
+    i: Intersection;
+    edge_idxs: number[];
+}
+
+export interface XYRR<D> {
+    c: R2<D>;
+    r: R2<D>;
+}
+
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
@@ -146,6 +156,7 @@ export interface InitOutput {
   readonly train: (a: number, b: number, c: number) => number;
   readonly step: (a: number, b: number) => number;
   readonly expand_areas: (a: number) => number;
+  readonly xyrr_unit: (a: number) => number;
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
   readonly __wbindgen_exn_store: (a: number) => void;
