@@ -1,11 +1,11 @@
-use std::ops::{Mul, Div, Add, Sub};
+use std::{ops::{Mul, Div, Add, Sub}, fmt::Display};
 
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
 use crate::{r2::R2, rotate::{Rotate, RotateArg}, dual::D};
 
-use super::{xyrrt::XYRRT, acdef::ACDEF};
+use super::{xyrrt::XYRRT, cdef::CDEF};
 
 
 pub trait UnitIntersectionsArg: Clone + Add<Output = Self> + Add<f64, Output = Self> + Sub<Output = Self> + Sub<f64, Output = Self> + Mul<Output = Self> + Div<Output = Self> {}
@@ -27,27 +27,25 @@ impl<D: RotateArg> XYRR<D> {
     }
 }
 
-impl<D: UnitIntersectionsArg> XYRR<D>
+impl<D: Display + UnitIntersectionsArg> XYRR<D>
 where
     f64: Mul<D, Output = D> + Div<D, Output = D>,
 {
-    pub fn acdef(&self) -> ACDEF<D> {
-        let rxr = 1. / self.r.x.clone();
-        let ryr = 1. / self.r.y.clone();
-        let r_x = self.c.x.clone() * rxr.clone();
-        let r_y = self.c.y.clone() * ryr.clone();
-        ACDEF {
-            a: rxr.clone() * rxr,
-            c: ryr.clone() * ryr,
-            d: -2. * r_x.clone(),
-            e: -2. * r_y.clone(),
-            f: r_x.clone() * r_x + r_y.clone() * r_y - 1.,
+    pub fn cdef(&self) -> CDEF<D> {
+        let rx2 = self.r.x.clone() * self.r.x.clone();
+        let rr = self.r.x.clone() / self.r.y.clone();
+        let rr2 = rr.clone() * rr.clone();
+        CDEF {
+            c: rr2.clone(),
+            d: -2. * self.c.x.clone(),
+            e: -2. * self.c.y.clone() * rr2.clone(),
+            f: self.c.x.clone() * self.c.x.clone() + self.c.y.clone() * self.c.y.clone() * rr2.clone() - rx2.clone(),
         }
     }
 }
 impl XYRR<D> {
     pub fn unit_intersections(&self) -> Vec<R2<D>> {
-        self.acdef().unit_intersections()
+        self.cdef().unit_intersections()
     }
 }
 

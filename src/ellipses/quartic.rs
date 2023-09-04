@@ -3,9 +3,11 @@ use std::ops::Mul;
 use log::warn;
 use roots::find_roots_quartic;
 
-use crate::{r2::R2, dual::{D, Dual}};
+use crate::dual::{D, Dual};
 
-pub fn quartic_roots(c_4: D, c_3: D, c_2: D, c_1: D, c_0: D) -> Vec<R2<D>> {
+pub struct Root(pub D, pub bool);  // (root, double_root
+
+pub fn quartic_roots(c_4: D, c_3: D, c_2: D, c_1: D, c_0: D) -> Vec<Root> {
     let coeff_duals: [ &D; 5 ] = [
         &c_0,
         &c_1,
@@ -28,7 +30,7 @@ pub fn quartic_roots(c_4: D, c_3: D, c_2: D, c_1: D, c_0: D) -> Vec<R2<D>> {
     let d_0: f64 = a_1;
     let fp = |x: f64| d_3 * x * x * x + d_2 * x * x + d_1 * x + d_0;
     let n = c_4.1;
-    let mut ys: Vec<(D, bool)> = vec![];
+    let mut ys: Vec<Root> = vec![];
     for root in roots.as_ref() {
         let fd = fp(*root);
         let mut double_root = false;
@@ -60,27 +62,10 @@ pub fn quartic_roots(c_4: D, c_3: D, c_2: D, c_1: D, c_0: D) -> Vec<R2<D>> {
             y_d += coeff.0.clone().eps.clone() * -root_pow / fd;
         }
         y.0.eps = y_d;
-        ys.push((y, double_root));
+        println!("root: {}", y.clone());
+        ys.push(Root(y, double_root));
     }
-    let f = |x: f64| {
-        let x2 = x * x;
-        a_4 * x2 * x2 + a_3 * x2 * x + a_2 * x2 + a_1 * x + a_0
-    };
-    let mut dual_roots: Vec<R2<D>> = Vec::new();
-    for (y, double_root) in ys {
-        let x0 = (1. - y.clone() * y.clone()).sqrt();
-        let x1 = -x0.clone();
-        let fx0 = f(x0.v());
-        let fx1 = f(x1.v());
-        if double_root {
-            dual_roots.push(R2 { x: x0, y: y.clone() });
-            dual_roots.push(R2 { x: x1, y: y.clone() });
-        } else {
-            let x = if fx0.abs() < fx1.abs() { x0 } else { x1 };
-            dual_roots.push(R2 { x: x, y: y.clone() });
-        }
-    }
-    dual_roots
+    ys
 }
 
 #[cfg(test)]
@@ -101,5 +86,8 @@ mod tests {
         let c_0 = Dual::new( 0., d_0);
         let roots = quartic_roots(c_4, c_3, c_2, c_1, c_0);
         assert_eq!(roots.len(), 4);
+        // for root in roots {
+        //     println!("{}", root);
+        // }
    }
 }

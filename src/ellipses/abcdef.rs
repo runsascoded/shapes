@@ -1,6 +1,6 @@
 use crate::{r2::R2, dual::D};
 
-use super::quartic::quartic_roots;
+use super::quartic::{quartic_roots, Root};
 
 /// Ax² + Bxy + Cy² + Dx + Ey + F = 0
 pub struct ABCDEF<D> {
@@ -24,13 +24,32 @@ impl ABCDEF<D> {
         let c_2 = d2.clone() - b2 - e2;  // D² - B² - E²
         let c_1 = (self.e.clone() * self.f.clone() + self.b.clone() * self.d.clone()) * -2.;  // -2(EF + BD)
         let c_0 = f2 - d2;  // F² - D²
-        quartic_roots(c_4, c_3, c_2, c_1, c_0)
+        let ys = quartic_roots(c_4, c_3, c_2, c_1, c_0);
+
+        let f = |x: f64, y: f64| {
+            self.a.clone() * x * x + self.b.clone() * x * y + self.c.clone() * y * y + self.d.clone() * x + self.e.clone() * y + self.f.clone()
+        };
+        let mut dual_roots: Vec<R2<D>> = Vec::new();
+        for Root(y, double_root) in ys {
+            let x0 = (1. - y.clone() * y.clone()).sqrt();
+            let x1 = -x0.clone();
+            let fx0 = f(x0.v(), y.v());
+            let fx1 = f(x1.v(), y.v());
+            if double_root {
+                dual_roots.push(R2 { x: x0, y: y.clone() });
+                dual_roots.push(R2 { x: x1, y: y.clone() });
+            } else {
+                let x = if fx0.abs() < fx1.abs() { x0 } else { x1 };
+                dual_roots.push(R2 { x: x, y: y.clone() });
+            }
+        }
+        dual_roots
     }
     // pub fn rotate(&self, t: &D) -> ABCDEF<D> {
     //     todo!()
     // }
     // Rotate the plane so that this ellipse ends up aligned with the x- and y-axes (i.e. θ == B == 0)
-    // pub fn level(&self) -> ACDEF<D> {
+    // pub fn level(&self) -> CDEF<D> {
     //     todo!()
     // }
 }
