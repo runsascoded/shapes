@@ -6,8 +6,7 @@ use super::xyrr::XYRR;
 
 pub struct XYRRT<D> {
     pub c: R2<D>,
-    pub rx: D,
-    pub ry: D,
+    pub r: R2<D>,
     pub t: D,
 }
 
@@ -22,8 +21,7 @@ impl<D: RotateArg + Neg<Output = D>> XYRRT<D> {
     pub fn level(&self) -> XYRR<D> {
         XYRR {
             c: self.c.clone().rotate(&-self.t.clone()),
-            rx: self.rx.clone(),
-            ry: self.ry.clone(),
+            r: self.r.clone(),
         }
     }
 }
@@ -48,8 +46,7 @@ mod tests {
     fn test_level() {
         let e = XYRRT {
             c: R2 { x: 1., y: 1. },
-            rx: 2.,
-            ry: 3.,
+            r: R2 { x: 2., y: 3. },
             t: PI / 4.,
         };
 
@@ -57,7 +54,7 @@ mod tests {
 
         assert_relative_eq!(l.c.x, 2_f64.sqrt());
         assert_relative_eq!(l.c.y, 0.);
-        assert_relative_eq!(l.rx, 2.);
-        assert_relative_eq!(l.ry, 3.);
+        assert_relative_eq!(l.r.x, 2.);
+        assert_relative_eq!(l.r.y, 3.);
     }
 }

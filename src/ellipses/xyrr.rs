@@ -10,16 +10,14 @@ impl<D: Clone + Add<Output = D> + Add<f64, Output = D> + Sub<Output = D> + Sub<f
 
 pub struct XYRR<D> {
     pub c: R2<D>,
-    pub rx: D,
-    pub ry: D,
+    pub r: R2<D>,
 }
 
 impl<D: RotateArg> XYRR<D> {
     pub fn rotate(&self, t: &D) -> XYRRT<D> {
         XYRRT {
             c: self.c.clone().rotate(t),
-            rx: self.rx.clone(),
-            ry: self.ry.clone(),
+            r: self.r.clone(),
             t: t.clone(),
         }
     }
@@ -30,8 +28,8 @@ where
     f64: Mul<D, Output = D> + Div<D, Output = D>,
 {
     pub fn acdef(&self) -> ACDEF<D> {
-        let rxr = 1. / self.rx.clone();
-        let ryr = 1. / self.ry.clone();
+        let rxr = 1. / self.r.x.clone();
+        let ryr = 1. / self.r.y.clone();
         let r_x = self.c.x.clone() * rxr.clone();
         let r_y = self.c.y.clone() * ryr.clone();
         ACDEF {
@@ -46,5 +44,26 @@ where
 impl XYRR<D> {
     pub fn unit_intersections(&self) -> Vec<R2<D>> {
         self.acdef().unit_intersections()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::dual::Dual;
+
+    use super::*;
+
+    #[test]
+    fn test_unit_intersections() {
+        let e = XYRR {
+            c: R2 { x: Dual::new(1., vec![1.,0.,0.,0.]),
+                    y: Dual::new(1., vec![0.,1.,0.,0.]), },
+            r: R2 { x: Dual::new(2., vec![0.,0.,1.,0.]),
+                    y: Dual::new(3., vec![0.,0.,0.,1.]), },
+        };
+        let us = e.unit_intersections();
+        for p in us {
+            println!("{}", p);
+        }
     }
 }
