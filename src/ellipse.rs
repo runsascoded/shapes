@@ -1,5 +1,8 @@
 use std::ops::{Mul, Div, Add, Sub, Neg};
 
+use log::info;
+use roots::find_roots_quartic;
+
 use crate::{r2::R2, rotate::{Rotate, RotateArg}, math_ops::Trig};
 
 
@@ -123,8 +126,30 @@ pub struct ABCDEF<D> {
     f: D,
 }
 
-impl<D: Clone + Add<Output = D> + Sub<Output = D> + Sub<f64, Output = D> + Mul<Output = D>> ABCDEF<D>
-where f64: Mul<D, Output = D>
+// pub fn derivative<T>(coeffs: [f64; 5]) -> [f64; 4]
+// where f64: Mul<T, Output = T> {
+//     let [ a_4, a_3, a_2, a_1, a_0 ] = coeffs;
+//     let d_3: f64 = f64::mul(a_4, 4.);
+//     let d_2: f64 = f64::mul(a_3, 3.);
+//     let d_1: f64 = f64::mul(a_2, 2.);
+//     let d_0: f64 = a_1;
+//     [ d_3, d_2, d_1, d_0 ]
+// }
+
+trait Scalar {
+    fn to_f64(&self) -> f64;
+}
+
+impl Scalar for f64 {
+    fn to_f64(&self) -> f64 { *self }
+}
+
+impl Scalar for Dual {
+    fn to_f64(&self) -> f64 { self.v() }
+}
+
+impl<D: Clone + Scalar + Add<Output = D> + Sub<Output = D> + Sub<f64, Output = D> + Mul<Output = D> + Mul<f64, Output = D>> ABCDEF<D>
+// where f64: Mul<D, Output = D> //+ Mul<f64, Output = f64>
 {
     pub fn unit_intersections(&self) -> Vec<R2<D>> {
         let ac1 = self.a.clone() - self.c.clone() - 1.;  // A - C - 1
@@ -133,11 +158,70 @@ where f64: Mul<D, Output = D>
         let e2 = self.e.clone() * self.e.clone();  // E²
         let f2 = self.f.clone() * self.f.clone();  // F²
         let c_4 = ac1.clone() * ac1.clone() + b2.clone();  // (A - C - 1)² + B²
-        let c_3 = 2. * (self.b.clone() * self.d.clone() - self.e.clone() * ac1.clone());  // 2(BD - E(A - C - 1))
+        let c_3 = (self.b.clone() * self.d.clone() - self.e.clone() * ac1.clone()) * 2.;  // 2(BD - E(A - C - 1))
         let c_2 = d2.clone() - b2 - e2;  // D² - B² - E²
-        let c_1 = -2. * (self.e.clone() * self.f.clone() + self.b.clone() * self.d.clone());  // -2(EF + BD)
+        let c_1 = (self.e.clone() * self.f.clone() + self.b.clone() * self.d.clone()) * -2.;  // -2(EF + BD)
         let c_0 = f2 - d2;  // F² - D²
-        todo!()
+        let coeff_duals: [ &D; 5 ] = [
+            &c_4,
+            &c_3,
+            &c_2,
+            &c_1,
+            &c_0,
+        ];
+        let coeffs: [ f64; 5 ] = [
+            c_4.to_f64(),
+            c_3.to_f64(),
+            c_2.to_f64(),
+            c_1.to_f64(),
+            c_0.to_f64(),
+        ];
+        let [ a_4, a_3, a_2, a_1, a_0 ] = coeffs;
+        let roots = find_roots_quartic(a_4, a_3, a_2, a_1, a_0);
+        let d_3: f64 = f64::mul(a_4, 4.);
+        let d_2: f64 = f64::mul(a_3, 3.);
+        let d_1: f64 = f64::mul(a_2, 2.);
+        let d_0: f64 = a_1;
+        let fp = |x: f64| d_3 * x * x * x + d_2 * x * x + d_1 * x + d_0;
+
+        let dual_roots: Vec<R2<D>> = vec![];
+        for root in roots.as_ref() {
+            let fd = fp(*root);
+            if fd == 0. {
+                // Multiple root
+                let mut order = 2;
+                let e_2: f64 = 3. * d_3;
+                let e_1: f64 = 2. * d_2;
+                let e_0: f64 = d_1;
+                let fpp = |x: f64| e_2 * x * x + e_1 * x + e_0;
+                let fdd = fpp(*root);
+                if fdd == 0. {
+                    let f_1 = 2. * e_2;
+                    let f_0 = e_1;
+                    let fppp = |x: f64| f_1 * x + f_0;
+                    let fddd = fppp(*root);
+                    if fddd == 0. {
+                        order = 4;
+                    } else {
+                        order = 3;
+                    }
+                }
+                info!("Skipping multiple root {} ({})", root, order);
+            } else {
+                for (idx, coeff) in coeff_duals.into_iter().enumerate().rev() {
+                    let d = coeff.d();
+                    if d != 0. {
+                        let dual = Dual::new(*root, d);
+                        dual_roots.push(R2 {
+                            x: dual.clone(),
+                            y: dual.clone(),
+                        });
+                        break;
+                    }
+                }
+            }
+        }
+        dual_roots
     }
     // pub fn rotate(&self, t: &D) -> ABCDEF<D> {
     //     todo!()
