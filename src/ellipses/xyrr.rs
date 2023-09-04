@@ -1,5 +1,8 @@
 use std::ops::{Mul, Div, Add, Sub};
 
+use serde::{Deserialize, Serialize};
+use tsify::Tsify;
+
 use crate::{r2::R2, rotate::{Rotate, RotateArg}, dual::D};
 
 use super::{xyrrt::XYRRT, acdef::ACDEF};
@@ -8,6 +11,7 @@ use super::{xyrrt::XYRRT, acdef::ACDEF};
 pub trait UnitIntersectionsArg: Clone + Add<Output = Self> + Add<f64, Output = Self> + Sub<Output = Self> + Sub<f64, Output = Self> + Mul<Output = Self> + Div<Output = Self> {}
 impl<D: Clone + Add<Output = D> + Add<f64, Output = D> + Sub<Output = D> + Sub<f64, Output = D> + Mul<Output = D> + Div<Output = D>> UnitIntersectionsArg for D {}
 
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 pub struct XYRR<D> {
     pub c: R2<D>,
     pub r: R2<D>,

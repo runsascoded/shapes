@@ -29,6 +29,8 @@ mod js_dual;
 use areas::Areas;
 use circle::Input;
 use diagram::Diagram;
+use dual::D;
+use ellipses::xyrr::XYRR;
 use log::LevelFilter;
 
 use wasm_bindgen::prelude::*;
@@ -97,4 +99,11 @@ pub fn expand_areas(targets: JsValue) -> JsValue {
     let mut targets: Targets = serde_wasm_bindgen::from_value(targets.clone()).unwrap();
     Areas::expand(&mut targets);
     serde_wasm_bindgen::to_value(&targets).unwrap()
+}
+
+#[wasm_bindgen]
+pub fn xyrr_unit(xyrr: JsValue) -> JsValue {
+    let xyrr: XYRR<D> = serde_wasm_bindgen::from_value(xyrr).unwrap();
+    let points = xyrr.unit_intersections();
+    serde_wasm_bindgen::to_value(&points).unwrap()
 }

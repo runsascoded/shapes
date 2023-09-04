@@ -1,5 +1,5 @@
-mod acdef;
-mod abcdef;
-mod quartic;
-mod xyrr;
-mod xyrrt;
+pub mod acdef;
+pub mod abcdef;
+pub mod quartic;
+pub mod xyrr;
+pub mod xyrrt;
