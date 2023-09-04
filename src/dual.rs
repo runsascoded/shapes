@@ -1,4 +1,4 @@
-use std::{fmt::{Debug, Display}, iter::Sum, ops::{Add, AddAssign, Deref, Div, Mul, Neg, Sub, SubAssign}};
+use std::{fmt::{Debug, Display}, iter::{Sum, repeat}, ops::{Add, AddAssign, Deref, Div, Mul, Neg, Sub, SubAssign}};
 
 use approx::{AbsDiffEq, RelativeEq};
 use nalgebra::{ComplexField, Dyn, Matrix, RealField, U1};
@@ -84,18 +84,19 @@ impl Dual {
     pub fn s(&self, n: usize) -> String {
         format!("{}, vec![{}]", Dual::fmt(&self.v(), n), self.d().iter().map(|d| Dual::fmt(d, n)).collect::<Vec<String>>().join(", "))
     }
-
     pub fn is_normal(&self) -> bool {
         let v = self.v();
         (v.is_normal() || v.is_zero()) && self.d().iter().all(|d| d.is_normal() || d.is_zero())
     }
-
     pub fn new(v: f64, d: Vec<f64>) -> Self {
         let n = d.len();
         Dual(
             DualDVec64::new(v, Derivative::some(Matrix::from(d))),
             n
         )
+    }
+    pub fn scalar(v: f64, n: usize) -> Self {
+        Dual::new(v, repeat(0.).take(n).collect())
     }
     pub fn v(&self) -> f64 {
         self.0.re
@@ -225,6 +226,13 @@ impl Mul<f64> for &Dual {
     }
 }
 
+impl Mul<Dual> for f64 {
+    type Output = Dual;
+    fn mul(self, rhs: Dual) -> Self::Output {
+        Dual(rhs.0 * self, rhs.1)
+    }
+}
+
 impl Sub for Dual {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self::Output {
@@ -297,6 +305,13 @@ impl Div<f64> for Dual {
     type Output = Self;
     fn div(self, rhs: f64) -> Self::Output {
         Dual(self.0 / rhs, self.1)
+    }
+}
+
+impl Div<Dual> for f64 {
+    type Output = Dual;
+    fn div(self, rhs: Dual) -> Self::Output {
+        Dual(rhs.0.recip() * self, rhs.1)
     }
 }
 

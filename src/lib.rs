@@ -9,7 +9,7 @@ mod deg;
 mod diagram;
 mod dual;
 mod edge;
-mod ellipse;
+mod ellipses;
 mod float_arr;
 mod float_vec;
 mod float_wrap;
