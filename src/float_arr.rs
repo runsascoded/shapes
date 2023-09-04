@@ -43,20 +43,6 @@ impl Sub<FloatArr> for FloatArr {
     }
 }
 
-impl Mul<FloatArr> for f64 {
-    type Output = f64;
-    fn mul(self, rhs: FloatArr) -> Self::Output {
-        self * rhs.0[0]
-    }
-}
-
-impl Div<FloatArr> for f64 {
-    type Output = f64;
-    fn div(self, rhs: FloatArr) -> Self::Output {
-        self / rhs.0[0]
-    }
-}
-
 impl Mul<FloatArr> for [f64; 1] {
     type Output = [f64; 1];
     fn mul(self, rhs: FloatArr) -> Self::Output {

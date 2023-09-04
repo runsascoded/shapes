@@ -4,9 +4,9 @@ use approx::{AbsDiffEq, RelativeEq};
 use nalgebra::{ComplexField, Dyn, Matrix, RealField, U1};
 use num_dual::{Derivative, DualDVec64};
 use num_traits::Zero;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde::ser::{SerializeSeq, SerializeStruct};
-use tsify::{declare, Tsify};
+use serde::{Deserialize, Deserializer, Serialize};
+use serde::ser::SerializeStruct;
+use tsify::declare;
 
 #[declare]
 pub type D = Dual;
@@ -31,11 +31,10 @@ impl<'de> Deserialize<'de> for Dual {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
         where
             D: Deserializer<'de>
-    // fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error>
     {
         #[derive(Deserialize)]
         #[serde(field_identifier, rename_all = "lowercase")]
-        enum Field { V, D };
+        enum Field { V, D }
         struct DualVisitor;
         impl<'de> serde::de::Visitor<'de> for DualVisitor {
             type Value = Dual;
