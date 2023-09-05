@@ -4,15 +4,37 @@ use derive_more::From;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::{r2::R2, rotate::{Rotate as Rot, RotateArg}, dual::{D, Dual}, shape::Duals, transform::{Projection, Transform::{Rotate, Scale, Translate, self}}};
+use crate::{r2::R2, rotate::{Rotate, RotateArg}, dual::{D, Dual}, shape::Duals, transform::{Transform::{Scale, Translate, self}, CanTransform, Projection}};
 
 use super::{xyrrt::XYRRT, cdef::CDEF};
 
 
-pub trait UnitIntersectionsArg: Clone + Add<Output = Self> + Add<f64, Output = Self> + Sub<Output = Self> + Sub<f64, Output = Self> + Mul<Output = Self> + Div<Output = Self> {}
-impl<D: Clone + Add<Output = D> + Add<f64, Output = D> + Sub<Output = D> + Sub<f64, Output = D> + Mul<Output = D> + Div<Output = D>> UnitIntersectionsArg for D {}
+pub trait UnitIntersectionsArg:
+    Clone
+    + Add<Output = Self>
+    + Add<f64, Output = Self>
+    + Sub<Output = Self>
+    + Sub<f64, Output = Self>
+    + Mul<Output = Self>
+    + Div<Output = Self>
+{}
 
-#[derive(Debug, Clone, From, Serialize, Deserialize, Tsify)]
+impl UnitIntersectionsArg for f64 {}
+impl UnitIntersectionsArg for Dual {}
+
+// impl<
+//     D:
+//     Clone
+//     + Add<Output = D>
+//     + Add<f64, Output = D>
+//     + Sub<Output = D>
+//     + Sub<f64, Output = D>
+//     + Mul<Output = D>
+//     + Div<Output = D>
+// > UnitIntersectionsArg for D
+// {}
+
+#[derive(Debug, Clone, From, PartialEq, Serialize, Deserialize, Tsify)]
 pub struct XYRR<D> {
     pub idx: usize,
     pub c: R2<D>,
@@ -34,6 +56,7 @@ impl XYRR<f64> {
 impl<D: RotateArg> XYRR<D> {
     pub fn rotate(&self, t: &D) -> XYRRT<D> {
         XYRRT {
+            idx: self.idx,
             c: self.c.clone().rotate(t),
             r: self.r.clone(),
             t: t.clone(),
@@ -57,12 +80,22 @@ where
         }
     }
 }
+
 impl XYRR<D> {
+    pub fn v(&self) -> XYRR<f64> {
+        XYRR { idx: self.idx, c: self.c.v(), r: self.r.v() }
+    }
     pub fn n(&self) -> usize {
         self.c.x.d().len()
     }
     pub fn unit_intersections(&self) -> Vec<R2<D>> {
         self.cdef().unit_intersections()
+    }
+}
+
+impl<D: Display> Display for XYRR<D> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{ idx: {}, c: {}, r: {} }}", self.idx, self.c, self.r)
     }
 }
 
@@ -79,11 +112,14 @@ where
     }
 }
 
-impl<'a, D: 'a + Clone + RotateArg> XYRR<D>
+impl<'a, D: 'a + Clone> CanTransform<D> for XYRR<D>
 where
-    R2<D>: Add<&'a R2<D>, Output = R2<D>> + Mul<&'a R2<D>, Output = R2<D>>,
+    R2<D>
+    : Add<&'a R2<D>, Output = R2<D>>
+    + Mul<&'a R2<D>, Output = R2<D>>,
 {
-    pub fn transform(&self, t: &Transform<D>) -> XYRR<D> {
+    type Output = XYRR<D>;
+    fn transform<'b>(&'b self, t: &'b Transform<D>) -> XYRR<D> {
         match t {
             Translate(v) => XYRR {
                 idx: self.idx,
@@ -95,7 +131,7 @@ where
                 c: self.c.clone() * v,
                 r: self.r.clone() * v,
             },
-            Rotate(a) => self.rotate(a),
+            // Rotate(a) => self.rotate(a),
         }
     }
 }

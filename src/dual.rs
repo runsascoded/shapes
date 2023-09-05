@@ -1,6 +1,7 @@
 use std::{fmt::{Debug, Display}, iter::{Sum, repeat}, ops::{Add, AddAssign, Deref, Div, Mul, Neg, Sub, SubAssign}};
 
 use approx::{AbsDiffEq, RelativeEq};
+use crate::fmt::Fmt;
 use nalgebra::{ComplexField, Dyn, Matrix, RealField, U1};
 use num_dual::{Derivative, DualDVec64};
 use num_traits::Zero;
@@ -81,9 +82,6 @@ impl Dual {
     pub fn fmt(f: &f64, n: usize) -> String {
         format!("{}{}", if f < &0. {""} else {" "}, format!("{:.1$}", f, n))
     }
-    pub fn s(&self, n: usize) -> String {
-        format!("{}, vec![{}]", Dual::fmt(&self.v(), n), self.d().iter().map(|d| Dual::fmt(d, n)).collect::<Vec<String>>().join(", "))
-    }
     pub fn is_normal(&self) -> bool {
         let v = self.v();
         (v.is_normal() || v.is_zero()) && self.d().iter().all(|d| d.is_normal() || d.is_zero())
@@ -141,23 +139,18 @@ impl Deref for Dual {
         &self.0
     }
 }
-
 impl Display for Dual {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.s(3))
     }
 }
-
 impl Debug for Dual {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} + [{}]ε", self.v(), self.d().iter().map(|x| format!("{}", x)).collect::<Vec<String>>().join(", "))
     }
 }
 
-impl Eq for Dual {
-
-}
-
+impl Eq for Dual {}
 impl Ord for Dual {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.v().partial_cmp(&other.v()).unwrap()
@@ -173,7 +166,6 @@ impl AbsDiffEq for Dual {
         self.v().abs_diff_eq(&other.v(), epsilon) && self.d().abs_diff_eq(&other.d(), epsilon)
     }
 }
-
 impl RelativeEq for Dual {
     fn default_max_relative() -> Self::Epsilon {
         1e-3
@@ -183,6 +175,24 @@ impl RelativeEq for Dual {
         self.v().relative_eq(&other.v(), epsilon, max_relative) && self.d().relative_eq(&other.d(), epsilon, max_relative)
     }
 }
+
+impl From<Dual> for f64 {
+    fn from(d: Dual) -> Self {
+        d.v()
+    }
+}
+
+impl From<&Dual> for f64 {
+    fn from(d: &Dual) -> Self {
+        d.v()
+    }
+}
+
+// impl Into<f64> for Dual {
+//     fn into(self) -> f64 {
+//         self.v()
+//     }
+// }
 
 impl Mul for Dual {
     type Output = Self;
@@ -330,6 +340,13 @@ impl Add<Dual> for f64 {
     type Output = Dual;
     fn add(self, rhs: Dual) -> Self::Output {
         Dual(rhs.0 + self, rhs.1)
+    }
+}
+
+impl Add<&Dual> for f64 {
+    type Output = Dual;
+    fn add(self, rhs: &Dual) -> Self::Output {
+        Dual(rhs.0.clone() + self, rhs.1)
     }
 }
 

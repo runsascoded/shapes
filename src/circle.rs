@@ -1,4 +1,4 @@
-use std::{fmt::Display, ops::{Mul, Add, Neg, Div}, rc::Rc, cell::RefCell, f64::consts::PI};
+use std::{fmt::Display, ops::{Mul, Add, Neg, Div, Sub}, rc::Rc, cell::RefCell, f64::consts::PI};
 
 use derive_more::From;
 use num_traits::Float;
@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 use crate::{
     dual::{D, Dual},
-    r2::R2, shape::{Duals, Shape}, intersection::Intersection, transform::Projection, transform::Transform::{Rotate, Scale, Translate, self}, ellipses::xyrr::XYRR, rotate,
+    r2::R2, shape::{Duals, Shape}, transform::{Projection, CanTransform}, transform::Transform::{Scale, Translate, self}, ellipses::xyrr::XYRR, sqrt::Sqrt,
 };
 
 #[derive(Debug, Clone, Copy, From, PartialEq, Tsify, Serialize, Deserialize)]
@@ -36,11 +36,6 @@ impl Circle<f64> {
         let c = R2 { x, y };
         Circle::from((self.idx, c, r))
     }
-    pub fn intersect(&self, o: &Circle<f64>) -> Vec<Intersection> {
-        let c0 = self.dual(&vec![ vec![ 1., 0., 0., 0., 0., 0., ], vec![ 0., 1., 0., 0., 0., 0., ], vec![ 0., 0., 1., 0., 0., 0., ] ]);
-        let c1 =    o.dual(&vec![ vec![ 0., 0., 0., 1., 0., 0., ], vec![ 0., 0., 0., 0., 1., 0., ], vec![ 0., 0., 0., 0., 0., 1., ] ]);
-        c0.intersect(&c1)
-    }
     pub fn arc_midpoint(&self, t0: f64, mut t1: f64) -> R2<f64> {
         if t1 < t0 {
             t1 += 2. * PI;
@@ -65,113 +60,107 @@ impl Circle<D> {
     pub fn n(&self) -> usize {
         self.c.x.d().len()
     }
-    pub fn intersect(&self, c1: &Circle<D>) -> Vec<Intersection> {
-        let c0 = self;
-        let projected = c0.project(&c1);
-        let unit_intersections = projected.unit_intersections();
-        let invert = |p: &R2<D>, c: &Circle<D>| c.invert(p);
-        let points = unit_intersections.iter().map(|p| invert(p, &c1));
-        let intersections = points.map(|p| {
-            let x = p.x.clone();
-            let y = p.y.clone();
-            let p = R2 { x: x.clone(), y: y.clone() };
-            let t0 = c0.theta(p.clone());
-            let t1 = c1.theta(p.clone());
-            Intersection { x, y, c0idx: c0.idx, c1idx: c1.idx, t0, t1, }
-        });
-        intersections.collect()
-    }
+}
+
+pub trait UnitIntersectionsArg<'a>
+    : 'a
+    + Clone
+    + Sqrt
+    + Neg<Output = Self>
+    + Add<&'a Self, Output = Self>
+    + Sub<&'a Self, Output = Self>
+    + Sub<f64, Output = Self>
+    + Mul<&'a Self, Output = Self>
+    + Div<&'a Self, Output = Self>
+    + Div<f64, Output = Self>
+    + Into<f64>
+{}
+
+impl<'a> UnitIntersectionsArg<'a> for f64 {}
+impl<'a> UnitIntersectionsArg<'a> for Dual {}
+
+impl<'a, D: 'a + UnitIntersectionsArg<'a>> Circle<D>
+where
+    f64: Add<&'a D, Output = D>
+{
     pub fn unit_intersections(&self) -> Vec<R2<D>> {
         let cx = self.c.x.clone();
         let cy = self.c.y.clone();
         let r = self.r.clone();
         let cx2 = cx.clone() * &cx;
-        let cy2 = cy.clone() * cy.clone();
-        let r2 = r.clone() * r.clone();
-        let z = (1. + cx2.clone() + cy2.clone() - r2.clone()) / 2.;
-        let [ u, v ] = if cx.re == 0. {
-            [ -cx.clone() / cy.clone(), z.clone() / cy.clone(), ]
+        let cy2 = cy.clone() * &cy;
+        let r2 = r.clone() * &r;
+        let z = (1. + &cx2 + &cy2 - &r2) / 2.;
+        let [ u, v ] = if cx.into() == 0. {
+            [ -cx.clone() / &cy, z.clone() / &cy, ]
         } else {
-            [ -cy.clone() / cx.clone(), z.clone() / cx.clone(), ]
+            [ -cy.clone() / &cx, z.clone() / &cx, ]
         };
-        let a = 1. + u.clone() * u.clone();
-        let b = u.clone() * v.clone();
-        let c = v.clone() * v.clone() - 1.;
-        let f = -b.clone() / a.clone();
-        let dsq = f.clone() * f.clone() - c.clone() / a.clone();
+        let a = 1. + &(u * &u);
+        let b = u * &v;
+        let c = v * &v - 1.;
+        let f = -b.clone() / &a;
+        let dsq = f.clone() * &f - &(c.clone() / &a);
         let d = dsq.clone().sqrt();
-        let [ x0, y0, x1, y1 ] = if cx.re == 0. {
-            let x0 = f.clone() + d.clone();
-            let x1 = f.clone() - d.clone();
-            let y0 = u.clone() * x0.clone() + v.clone();
-            let y1 = u.clone() * x1.clone() + v.clone();
+        let [ x0, y0, x1, y1 ] = if cx.into() == 0. {
+            let x0 = f.clone() + &d;
+            let x1 = f.clone() - &d;
+            let y0 = u.clone() * &x0 + &v;
+            let y1 = u.clone() * &x1 + &v;
             [ x0, y0, x1, y1 ]
         } else {
-            let y0 = f.clone() + d.clone();
-            let y1 = f.clone() - d.clone();
-            let x0 = u.clone() * y0.clone() + v.clone();
-            let x1 = u.clone() * y1.clone() + v.clone();
+            let y0 = f.clone() + &d;
+            let y1 = f.clone() - &d;
+            let x0 = u.clone() * &y0 + &v;
+            let x1 = u.clone() * &y1 + &v;
             [ x0, y0, x1, y1 ]
         };
         let mut intersections: Vec<R2<D>> = Vec::new();
-        if x0.is_normal() && y0.is_normal() {
+        if x0.into().is_normal() && y0.into().is_normal() {
             intersections.push(R2 { x: x0, y: y0 });
         }
-        if x1.is_normal() && y1.is_normal() {
+        if x1.into().is_normal() && y1.into().is_normal() {
             intersections.push(R2 { x: x1, y: y1 });
         }
         intersections
     }
-    pub fn project(&self, o: &Circle<D>) -> Self {
-        let c = (self.c.clone() - o.c.clone()) / o.r.clone();
-        let r = self.r.clone() / o.r.clone();
-        Circle { idx: self.idx, c, r, }
-    }
-    // pub fn apply(&self, projection: &Projection<D>) -> Shape<D> {
-    //     projection.0.iter().fold(Shape::Circle(*self), |c, t| c.transform(t))
-    // }
-    pub fn transform(&self, transform: &Transform<D>) -> Shape<D> {
+}
+
+impl<'a, D: 'a + Clone + PartialEq + Eq + Mul<Output = D> + Mul<&'a D, Output = D>> CanTransform<D> for Circle<D>
+where
+    R2<D>: Add<Output = R2<D>> + Mul<Output = R2<D>> + Mul<&'a R2<D>, Output = R2<D>> + Mul<D, Output = R2<D>>,
+{
+    type Output = Shape<D>;
+    fn transform(&self, transform: &Transform<D>) -> Shape<D> {
         match transform {
-            Translate(v) => Circle { idx: self.idx, c: self.c.clone() + v.clone(), r: self.r.clone(), }.into(),
+            Translate(v) =>
+                Circle {
+                    idx: self.idx,
+                    c: self.c.clone() + v.clone(),
+                    r: self.r.clone()
+                }.into(),
             Scale(s) => {
                 let R2 { x, y } = s;
                 if x == y {
                     Circle {
                         idx: self.idx,
-                        c: self.c.clone() * s.clone(),
+                        c: self.c.clone() * x,
                         r: self.r.clone() * x,
                     }.into()
                 } else {
                     XYRR {
                         idx: self.idx,
                         c: s.clone() * self.c.clone(),
-                        r: s.clone() * &self.r.clone(),
+                        r: s.clone() * self.r.clone(),
                     }.into()
                 }
             },
-            Rotate(a) => {
-                let c = rotate::Rotate::rotate(&self.c.clone(), a);
-                // let c = self.c.clone().rotate(a);
-                let r = self.r.clone();
-                Circle { idx: self.idx, c, r, }.into()
-            },
-        }
-    }
-    pub fn invert(&self, p: &R2<D>) -> R2<D> {
-        self.c.clone() + p * self.r.clone()
-    }
-    pub fn theta(&self, p: R2<D>) -> D {
-        let x = p.x.clone() - self.c.x.clone();
-        let y = p.y.clone() - self.c.y.clone();
-        y.clone().atan2(x.clone())
-    }
-    pub fn distance(&self, o: &Circle<D>) -> Option<D> {
-        let distance = (self.c.clone() - o.c.clone()).norm();
-        let gap = distance - &self.r - &o.r;
-        if gap.v() > 0. {
-            Some(gap)
-        } else {
-            None
+            // Rotate(a) => {
+            //     let c = rotate::Rotate::rotate(&self.c.clone(), a);
+            //     // let c = self.c.clone().rotate(a);
+            //     let r = self.r.clone();
+            //     Circle { idx: self.idx, c, r, }.into()
+            // },
         }
     }
 }
@@ -188,6 +177,16 @@ where
         let scale = Scale(R2 { x: 1. / r.clone(), y: 1. / r.clone() });
         let transforms = vec![ translate, scale ];
         Projection(transforms)
+    }
+}
+
+impl<D: Clone> Circle<D> {
+    pub fn xyrr(&self) -> XYRR<D> {
+        XYRR {
+            idx: self.idx,
+            c: self.c.clone(),
+            r: R2 { x: self.r.clone(), y: self.r.clone() },
+        }
     }
 }
 

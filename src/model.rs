@@ -4,7 +4,7 @@ use log::{info, debug};
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::{diagram::{Diagram, Targets}, circle::Input};
+use crate::{diagram::{Diagram, Targets}, shape::Input};
 
 #[derive(Debug, Clone, Tsify, Serialize, Deserialize)]
 pub struct Model {
@@ -69,7 +69,7 @@ impl Model {
 mod tests {
     use std::{env, collections::HashMap};
 
-    use crate::{dual::Dual, circle::Circle, r2::R2};
+    use crate::{dual::{Dual, D}, circle::Circle, r2::R2, shape::Shape};
 
     use super::*;
     use test_log::test;
@@ -80,9 +80,9 @@ mod tests {
         // - 1st circle is fixed unit circle at origin
         // - 2nd circle's center is fixed on x-axis (y=0)
         // This is the minimal degrees of freedom that can reach any target (relative) distribution between {"0*", "*1", and "01"} (1st circle size, 2nd circle size, intersection size).
-        let inputs = vec![
-            (Circle { idx: 0, c: R2 { x: 0., y: 0. }, r: 1. }, [ vec![0., 0.], vec![0., 0.], vec![0., 0.], ]),
-            (Circle { idx: 1, c: R2 { x: 1., y: 0. }, r: 1. }, [ vec![1., 0.], vec![0., 0.], vec![0., 1.], ]),
+        let inputs: Vec<Input> = vec![
+            (Shape::Circle(Circle { idx: 0, c: R2 { x: 0., y: 0. }, r: 1. }), vec![ vec![0., 0.], vec![0., 0.], vec![0., 0.], ]),
+            (Shape::Circle(Circle { idx: 1, c: R2 { x: 1., y: 0. }, r: 1. }), vec![ vec![1., 0.], vec![0., 0.], vec![0., 1.], ]),
         ];
         // Fizz Buzz example:
         let targets = [
@@ -171,7 +171,10 @@ mod tests {
 
         let print_step = |diagram: &Diagram, idx: usize| {
             let total_err = diagram.error.clone();
-            let c1 = diagram.shapes()[1];
+            let c1 = match diagram.shapes()[1] {
+                Shape::Circle(c) => c,
+                _ => panic!("Expected Circle"),
+            };
             let grads = (-total_err.clone()).d();
             let err = total_err.v();
             let err_str = if err < 0.001 {
@@ -192,7 +195,10 @@ mod tests {
             None => {
                 assert_eq!(steps.len(), expected_errs.len());
                 for (idx, (step, ((e_cx, e_cr), e_err, (e_grad0, e_grad1)))) in steps.iter().zip(expected_errs.iter()).enumerate() {
-                    let c1 = &step.shapes()[1];
+                    let c1 = match step.shapes()[1] {
+                        Shape::Circle(c) => c,
+                        _ => panic!("Expected Circle"),
+                    };
                     assert_relative_eq!(c1.c.x, *e_cx, epsilon = 1e-3);
                     assert_relative_eq!(c1.r, *e_cr, epsilon = 1e-3);
 

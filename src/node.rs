@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::fmt::Display;
 use std::rc::Rc;
 
-use crate::circle::Intersection;
+use crate::intersection::Intersection;
 use crate::dual::Dual;
 use crate::edge::E;
 use crate::r2::R2;
@@ -13,7 +13,7 @@ pub type N = Rc<RefCell<Node>>;
 #[derive(Clone, Debug)]
 pub struct Node {
     pub idx: usize,
-    pub i: Intersection,
+    pub i: Intersection<D>,
     pub edges: Vec<E>,
 }
 

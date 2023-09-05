@@ -5,6 +5,7 @@ use crate::{r2::R2, rotate::{Rotate, RotateArg}, dual::D};
 use super::xyrr::XYRR;
 
 pub struct XYRRT<D> {
+    pub idx: usize,
     pub c: R2<D>,
     pub r: R2<D>,
     pub t: D,
@@ -20,6 +21,7 @@ impl<D: RotateArg + Neg<Output = D>> XYRRT<D> {
     /// Rotate the plane so that this ellipse ends up aligned with the x- and y-axes (i.e. θ == B == 0)
     pub fn level(&self) -> XYRR<D> {
         XYRR {
+            idx: self.idx,
             c: self.c.clone().rotate(&-self.t.clone()),
             r: self.r.clone(),
         }
@@ -45,6 +47,7 @@ mod tests {
     #[test]
     fn test_level() {
         let e = XYRRT {
+            idx: 0,
             c: R2 { x: 1., y: 1. },
             r: R2 { x: 2., y: 3. },
             t: PI / 4.,

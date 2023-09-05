@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc, f64::consts::PI, collections::HashSet};
 
-use crate::{circle::{Circle, C}, node::{N, Node}, edge::{self, E}, region::{Region, Segment}, dual::{D, Dual}, zero::Zero, shape::{S, Shape, Input}};
+use crate::{circle::{Circle, C}, fmt::Fmt, intersect::{Intersect, PointToTheta}, node::{N, Node}, edge::{self, E}, region::{Region, Segment}, dual::{D, Dual}, shape::{S, Shape, Input}};
 
 #[derive(Clone, Debug)]
 pub struct Intersections {
@@ -102,7 +102,7 @@ impl Intersections {
                 }
                 let arc_midpoint = shapes[idx].arc_midpoint(t0.v(), t1.v());
                 let mut is_component_boundary = true;
-                let mut containers: Vec<C> = Vec::new();
+                let mut containers: Vec<S> = Vec::new();
                 let mut containments: Vec<bool> = Vec::new();
                 for cdx in 0..m {
                     if cdx == idx {
@@ -156,8 +156,8 @@ impl Intersections {
                 // Back where we started; check whether this is a valid region, push it if so, and return
                 let first_segment = segments.first().unwrap();
                 let first_edge = first_segment.edge.clone();
-                let cidx0 = first_edge.borrow().c.borrow().idx;
-                let cidx_end = last_segment.edge.borrow().c.borrow().idx;
+                let cidx0 = first_edge.borrow().c.borrow().idx();
+                let cidx_end = last_segment.edge.borrow().c.borrow().idx();
                 if cidx0 == cidx_end {
                     // Can't start and end on same shape. Adjacent segments are checked for this as each segment is pushed, but "closing the loop" requires this extra check of the first and last segments.
                     return
@@ -208,7 +208,7 @@ impl Intersections {
                     } else if num_extra == 1 {
                         let extra = nxt_idxs.difference(&container_idxs).cloned().collect::<HashSet<usize>>();
                         let extra_idx = extra.iter().next().unwrap();
-                        let nxt_edge_idx = successor.edge.borrow().c.borrow().idx;
+                        let nxt_edge_idx = successor.edge.borrow().c.borrow().idx();
                         if nxt_edge_idx != *extra_idx {
                             // The only admissible extra containing shape is the one the new edge traverses
                             continue;
@@ -319,19 +319,19 @@ mod tests {
 
     use super::*;
 
-    fn duals(idx: usize, n: usize) -> [Vec<f64>; 3 ] {
+    fn duals(idx: usize, n: usize) -> Vec<Vec<f64>> {
         let mut duals = [ vec![ 0.; 3 * n ], vec![ 0.; 3 * n ], vec![ 0.; 3 * n ] ];
         duals[0][3 * idx + 0] = 1.;
         duals[1][3 * idx + 1] = 1.;
         duals[2][3 * idx + 2] = 1.;
-        duals
+        duals.into()
     }
 
     #[test]
     fn test_00_10_01() {
-        let c0 = Circle { idx: 0, c: R2 { x: 0., y: 0. }, r: 1. };
-        let c1 = Circle { idx: 1, c: R2 { x: 1., y: 0. }, r: 1. };
-        let c2 = Circle { idx: 2, c: R2 { x: 0., y: 1. }, r: 1. };
+        let c0 = Shape::Circle(Circle { idx: 0, c: R2 { x: 0., y: 0. }, r: 1. });
+        let c1 = Shape::Circle(Circle { idx: 1, c: R2 { x: 1., y: 0. }, r: 1. });
+        let c2 = Shape::Circle(Circle { idx: 2, c: R2 { x: 0., y: 1. }, r: 1. });
         let inputs = vec![
             (c0, duals(0, 3)),
             (c1, duals(1, 3)),
@@ -392,12 +392,12 @@ mod tests {
         // }
 
         fn edge_str(edge: Ref<Edge>) -> String {
-            let containers: Vec<String> = edge.containers.iter().map(|c| format!("{}", c.borrow().idx)).collect();
+            let containers: Vec<String> = edge.containers.iter().map(|c| format!("{}", c.borrow().idx())).collect();
             format!(
                 "C{}: {}({}) → {}({}), containers: [{}], expected_visits: {}",
-                edge.c.borrow().idx,
-                edge.t0.v().deg_str(), edge.c0.borrow().idx,
-                edge.t1.v().deg_str(), edge.c1.borrow().idx,
+                edge.c.borrow().idx(),
+                edge.t0.v().deg_str(), edge.c0.borrow().idx(),
+                edge.t1.v().deg_str(), edge.c1.borrow().idx(),
                 containers.join(","),
                 edge.expected_visits,
             )
@@ -445,7 +445,7 @@ mod tests {
             let path_str = segments.iter().map(|segment| {
                 let start = segment.start();
                 let edge = segment.edge.clone();
-                let cidx = edge.borrow().c.borrow().idx;
+                let cidx = edge.borrow().c.borrow().idx();
                 format!("{}({})", cidx, start.borrow().theta(cidx).v().deg_str())
             }).collect::<Vec<String>>().join(" ");
             format!("{} {}: {:.3} + {:.3} = {}", region.key, path_str, region.polygon_area().v(), region.secant_area().v(), region.area().s(3))
@@ -459,17 +459,17 @@ mod tests {
     }
     #[test]
     fn test_components() {
-        let c0 = Circle { idx: 0, c: R2 { x: 0. , y: 0. }, r: 1. };
-        let c1 = Circle { idx: 1, c: R2 { x: 1. , y: 0. }, r: 1. };
-        let c2 = Circle { idx: 2, c: R2 { x: 0.5, y: 0. }, r: 3. };
-        let c3 = Circle { idx: 3, c: R2 { x: 0. , y: 3. }, r: 1. };
-        let circles = vec![
+        let c0 = Shape::Circle(Circle { idx: 0, c: R2 { x: 0. , y: 0. }, r: 1. });
+        let c1 = Shape::Circle(Circle { idx: 1, c: R2 { x: 1. , y: 0. }, r: 1. });
+        let c2 = Shape::Circle(Circle { idx: 2, c: R2 { x: 0.5, y: 0. }, r: 3. });
+        let c3 = Shape::Circle(Circle { idx: 3, c: R2 { x: 0. , y: 3. }, r: 1. });
+        let shapes = vec![
             (c0, duals(0, 4)),
             (c1, duals(1, 4)),
             (c2, duals(2, 4)),
             (c3, duals(3, 4)),
         ];
-        let shapes = Intersections::new(&circles);
+        let shapes = Intersections::new(&shapes);
 
         for node in shapes.nodes.iter() {
             println!("{}", node.borrow());

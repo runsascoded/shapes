@@ -2,10 +2,11 @@ use std::{ops::{Sub, Mul, Add, Div}, fmt::{Display, Formatter, self}};
 use approx::{AbsDiffEq, RelativeEq};
 
 use derive_more::Neg;
+use nalgebra::{ComplexField, RealField};
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::{dual::Dual, rotate::{Rotate, RotateArg}, transform::Transform};
+use crate::{dual::{Dual, D}, rotate::{Rotate, RotateArg}, transform::{Transform::{self, Translate, Scale}, CanTransform}, sqrt::Sqrt, trig::Trig};
 
 #[derive(Debug, Copy, Clone, Neg, PartialEq, Tsify, Serialize, Deserialize)]
 pub struct R2<D> {
@@ -32,6 +33,17 @@ impl<D: RotateArg> Rotate<D> for R2<D> {
     }
 }
 
+impl<D: Clone + Add<Output = D> + Mul<Output = D>> CanTransform<D> for R2<D> {
+    type Output = R2<D>;
+    fn transform(&self, transform: &Transform<D>) -> Self::Output {
+        match transform {
+            Translate(v) => self.clone() + v,
+            Scale(v) => self.clone() * v,
+            // Transform::Rotate(a) => self.rotate(&a),
+        }
+    }
+}
+
 // impl<D: Clone + Trig + Add<Output = D> + Sub<Output = D> + Mul<Output = D>> R2<D>
 // impl<D: CanRotate> R2<D>
 // {
@@ -51,13 +63,20 @@ impl<'a, D: 'a + RotateArg> R2<D>
 where
     R2<D>: Add<&'a R2<D>, Output = R2<D>>,
     R2<D>: Mul<&'a R2<D>, Output = R2<D>>,
+    R2<D>: Mul<Output = R2<D>>,
 {
-    pub fn transform(&self, t: Transform<D>) -> Self {
+    pub fn transform(&'a self, t: Transform<D>) -> Self {
         match t {
             Transform::Translate(v) => v + self,
             Transform::Scale(v) => v * self,
-            Transform::Rotate(a) => self.rotate(&a),
+            // Transform::Rotate(a) => self.rotate(&a),
         }
+    }
+}
+
+impl<'a, D: 'a + Clone + Sqrt + Add<Output = D> + Mul<&'a D, Output = D>> R2<D> {
+    pub fn norm(&'a self) -> D {
+        (self.x.clone() * &self.x + self.y.clone() * &self.y).sqrt()
     }
 }
 
@@ -65,7 +84,23 @@ impl R2<Dual> {
     pub fn v(&self) -> R2<f64> {
         R2 { x: self.x.v(), y: self.y.v() }
     }
-    pub fn norm(&self) -> Dual {
+}
+
+impl<D: Trig> R2<D> {
+    pub fn atan2(&self) -> D {
+        self.x.atan2(&self.y)
+    }
+}
+
+// impl<D: RealField> R2<D> {
+//     pub fn atan2(&self) -> D {
+//         self.x.atan2(self.y)
+//     }
+// }
+
+impl<'a, D: 'a + Clone + Add<Output = D> + Mul<&'a D, Output = D> + ComplexField> R2<D>
+{
+    pub fn r(&'a self) -> D {
         (self.x.clone() * &self.x + self.y.clone() * &self.y).sqrt()
     }
 }
@@ -99,12 +134,42 @@ impl<D: Add<Output = D>> Add for R2<D> {
     }
 }
 
+impl<'a, D: 'a + Clone + Add<Output = D>> Add<&'a R2<D>> for R2<D> {
+    type Output = Self;
+    fn add(self, rhs: &'a R2<D>) -> Self::Output {
+        R2 {
+            x: self.x + rhs.x.clone(),
+            y: self.y + rhs.y.clone(),
+        }
+    }
+}
+
+impl<D: Clone + Add<Output = D>> Add<D> for R2<D> {
+    type Output = Self;
+    fn add(self, rhs: D) -> Self::Output {
+        R2 {
+            x: self.x.clone() + rhs.clone(),
+            y: self.y.clone() + rhs.clone(),
+        }
+    }
+}
+
 impl<D: Sub<Output = D>> Sub for R2<D> {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self::Output {
         R2 {
             x: self.x - rhs.x,
             y: self.y - rhs.y,
+        }
+    }
+}
+
+impl<D: Clone + Sub<Output = D>> Sub<&R2<D>> for R2<D> {
+    type Output = Self;
+    fn sub(self, rhs: &R2<D>) -> Self::Output {
+        R2 {
+            x: self.x - rhs.x.clone(),
+            y: self.y - rhs.y.clone(),
         }
     }
 }
@@ -129,13 +194,34 @@ impl<D: Mul<D, Output = D> + Clone> Mul<&D> for R2<D> {
     }
 }
 
-impl<D: Mul<D, Output = D> + Clone> Mul<D> for &R2<D> {
+impl<D: Clone + Mul<Output = D>> Mul<D> for R2<D> {
     type Output = R2<D>;
     fn mul(self, rhs: D) -> Self::Output {
         R2 {
             x: self.x.clone() * rhs.clone(),
             y: self.y.clone() * rhs.clone(),
         }
+    }
+}
+
+impl<D: Clone + Mul<Output = D>> Mul<D> for &R2<D> {
+    type Output = R2<D>;
+    fn mul(self, rhs: D) -> Self::Output {
+        R2 {
+            x: self.x.clone() * rhs.clone(),
+            y: self.y.clone() * rhs.clone(),
+        }
+    }
+}
+
+impl<'a, D: 'a + Clone + Mul<Output = D>> Mul<&'a R2<D>> for R2<D> {
+    type Output = R2<D>;
+    fn mul(self, rhs: &'a R2<D>) -> Self::Output {
+        self * *rhs
+        // R2 {
+        //     x: self.x.clone() * rhs.x.clone(),
+        //     y: self.y.clone() * rhs.y.clone(),
+        // }
     }
 }
 

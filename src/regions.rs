@@ -1,12 +1,12 @@
 use serde::{Serialize, Deserialize};
 use tsify::Tsify;
 
-use crate::{circle::{Intersection, Circle}, node::Node, intersections::{self, Intersections}, dual::Dual};
+use crate::{intersection::Intersection, circle::Circle, intersections::Intersections, dual::{Dual, D}, shape::Shape};
 
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
 pub struct Point {
-    pub i: Intersection,
+    pub i: Intersection<D>,
     pub edge_idxs: Vec<usize>,
 }
 
@@ -43,7 +43,7 @@ pub struct Region {
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
 pub struct Regions {
-    pub shapes: Vec<Circle<f64>>,
+    pub shapes: Vec<Shape<f64>>,
     pub points: Vec<Point>,
     pub edges: Vec<Edge>,
     pub regions: Vec<Region>,
@@ -57,12 +57,12 @@ impl Regions {
             edge_idxs: n.borrow().edges.iter().map(|e| e.borrow().idx).collect(),
         }).collect();
         let edges = intersections.edges.iter().map(|e| Edge {
-            cidx: e.borrow().c.borrow().idx,
+            cidx: e.borrow().c.borrow().idx(),
             i0: e.borrow().i0.borrow().idx,
             i1: e.borrow().i1.borrow().idx,
             t0: e.borrow().t0.v(),
             t1: e.borrow().t1.v(),
-            containers: e.borrow().containers.iter().map(|c| c.borrow().idx).collect(),
+            containers: e.borrow().containers.iter().map(|c| c.borrow().idx()).collect(),
             containments: e.borrow().containments.clone(),
             // expected_visits: e.borrow().expected_visits,
             // visits: e.visits,

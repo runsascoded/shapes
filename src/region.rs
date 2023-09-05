@@ -26,9 +26,9 @@ impl Segment {
         let end = self.end();
         let end_p = end.borrow().p();
         let edge = self.edge.clone();
-        let idx = edge.borrow().c.borrow().idx;
+        let idx = edge.borrow().c.borrow().idx();
         let successors = end.borrow().edges.iter().filter(|e| {
-            e.borrow().c.borrow().idx != idx && e.borrow().visits < e.borrow().expected_visits
+            e.borrow().c.borrow().idx() != idx && e.borrow().visits < e.borrow().expected_visits
         }).map(|e| {
             let p = e.borrow().i0.borrow().p();
             let fwd = p == end_p;
@@ -60,7 +60,7 @@ impl Region {
     pub fn secant_area(&self) -> D {
         self.segments.iter().map(|s| {
             let area = s.secant_area();
-            let idx = s.edge.borrow().c.borrow().idx;
+            let idx = s.edge.borrow().c.borrow().idx();
             if self.container_idxs.contains(&idx) { area } else { -area }
         }).sum::<D>()
     }

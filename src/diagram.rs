@@ -4,8 +4,10 @@ use log::{info, debug};
 use serde::{Deserialize, Serialize};
 use tsify::{declare, Tsify};
 
-use crate::{circle::{Circle, Input, Duals}, intersections::Intersections, dual::D, r2::R2, areas::Areas, regions::Regions, zero::Zero};
-use crate::dual::Dual;
+use crate::ellipses::xyrr::XYRR;
+use crate::shape::{Input, Shape, Duals};
+use crate::{circle::Circle, intersections::Intersections, r2::R2, areas::Areas, regions::Regions, distance::Distance};
+use crate::dual::{Dual, D};
 
 #[declare]
 pub type Targets = HashMap<String, f64>;
@@ -69,7 +71,7 @@ impl Diagram {
         });
         let total_area = intersections.area(&all_key).unwrap_or_else(|| intersections.zero());
         let errors = Self::compute_errors(&intersections, &targets, &total_target_area, &total_area);
-        let mut error = errors.values().into_iter().map(|e| e.error.abs()).sum();
+        let mut error: D = errors.values().into_iter().map(|e| e.error.abs()).sum();
         // Optional/Alternate loss function based on per-region squared errors, weights errors by region size:
         // let error = errors.values().into_iter().map(|e| e.error.clone() * &e.error).sum::<D>().sqrt();
         let regions = Regions::new(&intersections);
@@ -77,7 +79,7 @@ impl Diagram {
 
         // Include penalties for erroneously-disjoint shapes
         // let mut disjoint_penalties = Vec::<DisjointPenalty>::new();
-        let mut total_disjoint_penalty = Dual::zero(&error);
+        let mut total_disjoint_penalty = Dual::zero(error.d().len());
         let n = inputs.len();
         for i in 0..(n - 1) {
             let ci = duals[i].clone();
@@ -114,7 +116,7 @@ impl Diagram {
         Diagram { inputs, regions, targets, total_target_area, total_area, errors, error }
     }
 
-    pub fn shapes(&self) -> Vec<Circle<f64>> {
+    pub fn shapes(&self) -> Vec<Shape<f64>> {
         self.inputs.iter().map(|(s, _)| s.clone()).collect()
     }
 
@@ -169,13 +171,33 @@ impl Diagram {
         debug!("  step_vec {:?}", step_vec);
         let shapes = &self.shapes();
         let new_inputs = shapes.iter().zip(self.duals()).map(|(s, duals)| {
-            let [ dx, dy, dr ]: [f64; 3] = duals.clone().map(|d| d.iter().zip(&step_vec).map(|(mask, step)| mask * step).sum());
-            let c = R2 {
-                x: s.c.x + dx,
-                y: s.c.y + dy,
-            };
-            let r = s.r + dr;
-            ( Circle { idx: s.idx, c, r }, duals )
+            (
+                match s {
+                    Shape::Circle(s) => {
+                        if duals.len() != 3 {
+                            panic!("expected 3 duals for Circle, got {}: {:?}", duals.len(), duals);
+                        }
+                        let duals = [ duals[0], duals[1], duals[2] ];
+                        let [ dx, dy, dr ]: [f64; 3] = duals.map(|d| d.iter().zip(&step_vec).map(|(mask, step)| mask * step).sum());
+                        let c = R2 {
+                            x: s.c.x + dx,
+                            y: s.c.y + dy,
+                        };
+                        Shape::Circle(Circle { idx: s.idx, c, r: s.r + dr })
+                    },
+                    Shape::XYRR(e) => {
+                        if duals.len() != 4 {
+                            panic!("expected 4 duals for XYRR ellipse, got {}: {:?}", duals.len(), duals);
+                        }
+                        let duals = [ duals[0], duals[1], duals[2], duals[3] ];
+                        let [ dcx, dcy, drx, dry ]: [f64; 4] = duals.map(|d| d.iter().zip(&step_vec).map(|(mask, step)| mask * step).sum());
+                        let c = e.c + R2 { x: dcx, y: dcy, };
+                        let r = e.r + R2 { x: drx, y: dry };
+                        Shape::XYRR(XYRR { idx: e.idx, c, r })
+                    },
+                },
+                duals ,
+            )
         }).collect::<Vec<Input>>();
         for (cur, (nxt, _)) in shapes.iter().zip(new_inputs.iter()) {
             debug!("  {} -> {}", cur, nxt);
