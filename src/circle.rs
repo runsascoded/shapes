@@ -1,4 +1,4 @@
-use std::{fmt::Display, ops::{Mul, Add}, rc::Rc, cell::RefCell, f64::consts::PI};
+use std::{fmt::Display, ops::{Mul, Add, Neg, Div}, rc::Rc, cell::RefCell, f64::consts::PI};
 
 use derive_more::From;
 use num_traits::Float;
@@ -127,14 +127,6 @@ impl Circle<D> {
         let r = self.r.clone() / o.r.clone();
         Circle { idx: self.idx, c, r, }
     }
-    pub fn projection(&self) -> Projection<D> {
-        let c = self.c.clone();
-        let r = self.r.clone();
-        let translate = Translate(c.clone());
-        let scale = Scale(R2 { x: r.clone(), y: r.clone() });
-        let transforms = vec![ translate, scale ];
-        Projection(transforms)
-    }
     // pub fn apply(&self, projection: &Projection<D>) -> Shape<D> {
     //     projection.0.iter().fold(Shape::Circle(*self), |c, t| c.transform(t))
     // }
@@ -181,6 +173,21 @@ impl Circle<D> {
         } else {
             None
         }
+    }
+}
+
+impl<D: Clone> Circle<D>
+where
+    R2<D>: Neg<Output = R2<D>>,
+    f64: Div<D, Output = D>,
+{
+    pub fn projection(&self) -> Projection<D> {
+        let c = self.c.clone();
+        let r = self.r.clone();
+        let translate = Translate(-c.clone());
+        let scale = Scale(R2 { x: 1. / r.clone(), y: 1. / r.clone() });
+        let transforms = vec![ translate, scale ];
+        Projection(transforms)
     }
 }
 

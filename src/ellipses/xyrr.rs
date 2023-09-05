@@ -1,10 +1,10 @@
-use std::{ops::{Mul, Div, Add, Sub}, fmt::Display};
+use std::{ops::{Mul, Div, Add, Sub, Neg}, fmt::Display};
 
 use derive_more::From;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::{r2::R2, rotate::{Rotate, RotateArg}, dual::{D, Dual}, shape::Duals};
+use crate::{r2::R2, rotate::{Rotate as Rot, RotateArg}, dual::{D, Dual}, shape::Duals, transform::{Projection, Transform::{Rotate, Scale, Translate, self}}};
 
 use super::{xyrrt::XYRRT, cdef::CDEF};
 
@@ -66,6 +66,40 @@ impl XYRR<D> {
     }
 }
 
+impl<D: Clone> XYRR<D>
+where
+    R2<D>: Neg<Output = R2<D>>,
+    f64: Div<R2<D>, Output = R2<D>>,
+{
+    pub fn projection(&self) -> Projection<D> {
+        Projection(vec![
+            Translate(-self.c.clone()),
+            Scale(1. / self.r.clone()),
+        ])
+    }
+}
+
+impl<'a, D: 'a + Clone + RotateArg> XYRR<D>
+where
+    R2<D>: Add<&'a R2<D>, Output = R2<D>> + Mul<&'a R2<D>, Output = R2<D>>,
+{
+    pub fn transform(&self, t: &Transform<D>) -> XYRR<D> {
+        match t {
+            Translate(v) => XYRR {
+                idx: self.idx,
+                c: self.c.clone() + v,
+                r: self.r.clone(),
+            },
+            Scale(v) => XYRR {
+                idx: self.idx,
+                c: self.c.clone() * v,
+                r: self.r.clone() * v,
+            },
+            Rotate(a) => self.rotate(a),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::dual::Dual;
@@ -75,6 +109,7 @@ mod tests {
     #[test]
     fn test_unit_intersections() {
         let e = XYRR {
+            idx: 0,
             c: R2 { x: Dual::new(1., vec![1.,0.,0.,0.]),
                     y: Dual::new(1., vec![0.,1.,0.,0.]), },
             r: R2 { x: Dual::new(2., vec![0.,0.,1.,0.]),

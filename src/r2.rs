@@ -5,7 +5,7 @@ use derive_more::Neg;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::{dual::Dual, rotate::{Rotate, RotateArg}};
+use crate::{dual::Dual, rotate::{Rotate, RotateArg}, transform::Transform};
 
 #[derive(Debug, Copy, Clone, Neg, PartialEq, Tsify, Serialize, Deserialize)]
 pub struct R2<D> {
@@ -46,6 +46,20 @@ impl<D: RotateArg> Rotate<D> for R2<D> {
 //         }
 //     }
 // }
+
+impl<'a, D: 'a + RotateArg> R2<D>
+where
+    R2<D>: Add<&'a R2<D>, Output = R2<D>>,
+    R2<D>: Mul<&'a R2<D>, Output = R2<D>>,
+{
+    pub fn transform(&self, t: Transform<D>) -> Self {
+        match t {
+            Transform::Translate(v) => v + self,
+            Transform::Scale(v) => v * self,
+            Transform::Rotate(a) => self.rotate(&a),
+        }
+    }
+}
 
 impl R2<Dual> {
     pub fn v(&self) -> R2<f64> {
@@ -141,6 +155,19 @@ impl<D: Div<D, Output = D> + Clone> Div<D> for R2<D> {
         R2 {
             x: self.x / rhs.clone(),
             y: self.y / rhs.clone(),
+        }
+    }
+}
+
+impl<D> Div<R2<D>> for f64
+where
+    f64: Div<D, Output = D>,
+{
+    type Output = R2<D>;
+    fn div(self, rhs: R2<D>) -> Self::Output {
+        R2 {
+            x: self / rhs.x,
+            y: self / rhs.y,
         }
     }
 }
