@@ -1,11 +1,11 @@
 use std::{cell::RefCell, rc::Rc, f64::consts::PI, collections::HashSet};
 
-use crate::{circle::{Circle, C, Input}, node::{N, Node}, edge::{self, E}, region::{Region, Segment}, dual::{D, Dual}, zero::Zero};
+use crate::{circle::{Circle, C}, node::{N, Node}, edge::{self, E}, region::{Region, Segment}, dual::{D, Dual}, zero::Zero, shape::{S, Shape, Input}};
 
 #[derive(Clone, Debug)]
 pub struct Intersections {
-    pub shapes: Vec<Circle<f64>>,
-    pub duals: Vec<C>,
+    pub shapes: Vec<Shape<f64>>,
+    pub duals: Vec<S>,
     pub nodes: Vec<N>,
     pub nodes_by_shape: Vec<Vec<N>>,
     pub nodes_by_shapes: Vec<Vec<Vec<N>>>,
@@ -19,8 +19,8 @@ pub struct Intersections {
 impl Intersections {
     pub fn new(inputs: &Vec<Input>) -> Intersections {
         let n = inputs.len();
-        let shapes: Vec<Circle<f64>> = inputs.iter().map(|(c, _duals)| c.clone()).collect();
-        let duals: Vec<C> = inputs.iter().map(|(c, duals)| Rc::new(RefCell::new(c.dual(duals)))).collect();
+        let shapes: Vec<Shape<f64>> = inputs.iter().map(|(c, _duals)| c.clone()).collect();
+        let duals: Vec<S> = inputs.iter().map(|(c, duals)| Rc::new(RefCell::new(c.dual(duals)))).collect();
         let mut nodes: Vec<N> = Vec::new();
         let mut nodes_by_shape: Vec<Vec<N>> = Vec::new();
         let mut nodes_by_shapes: Vec<Vec<Vec<N>>> = Vec::new();
@@ -298,11 +298,11 @@ impl Intersections {
     }
 
     pub fn num_vars(&self) -> usize {
-        self.duals[0].borrow().r.d().len()
+        self.duals[0].borrow().n()
     }
 
     pub fn zero(&self) -> D {
-        Dual::zero(&self.duals[0].borrow().c.x.clone())
+        self.duals[0].borrow().zero()
     }
 }
 

@@ -108,6 +108,9 @@ impl Dual {
         let sliced = unwrapped.as_slice();
         sliced.to_vec()
     }
+    pub fn zero(n: usize) -> Self {
+        Dual::new(0., repeat(0.).take(n).collect())
+    }
     pub fn sqrt(&self) -> Self {
         Dual(self.0.clone().sqrt(), self.1)
     }

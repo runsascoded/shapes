@@ -3,46 +3,11 @@ use std::{fmt::Display, ops::{Mul, Add}, rc::Rc, cell::RefCell, f64::consts::PI}
 use derive_more::From;
 use num_traits::Float;
 use serde::{Deserialize, Serialize};
-use tsify::{declare, Tsify};
+use tsify::Tsify;
 use crate::{
-    deg::Deg,
     dual::{D, Dual},
-    r2::R2,
+    r2::R2, shape::{Duals, Shape}, intersection::Intersection, transform::Projection, transform::Transform::{Rotate, Scale, Translate, self}, ellipses::xyrr::XYRR, rotate,
 };
-
-#[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
-pub struct Intersection {
-    pub x: D,
-    pub y: D,
-    pub c0idx: usize,
-    pub c1idx: usize,
-    pub t0: D,
-    pub t1: D,
-}
-
-impl Intersection {
-    pub fn p(&self) -> R2<D> {
-        R2 { x: self.x.clone(), y: self.y.clone() }
-    }
-    pub fn v(&self) -> R2<f64> {
-        R2 { x: self.x.v(), y: self.y.v() }
-    }
-    pub fn other(&self, cidx: usize) -> usize {
-        if cidx == self.c0idx {
-            self.c1idx
-        } else if cidx == self.c1idx {
-            self.c0idx
-        } else {
-            panic!("Invalid circle index {} ({}, {})", cidx, self.c0idx, self.c1idx);
-        }
-    }
-}
-
-impl Display for Intersection {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "I({:.3}, {:.3}, C{}({})/C{}({})", self.x, self.y, self.c0idx, self.t0.deg().s(0), self.c1idx, self.t1.deg().s(0))
-    }
-}
 
 #[derive(Debug, Clone, Copy, From, PartialEq, Tsify, Serialize, Deserialize)]
 pub struct Circle<D> {
@@ -52,10 +17,6 @@ pub struct Circle<D> {
 }
 
 pub type C = Rc<RefCell<Circle<D>>>;
-#[declare]
-pub type Duals = [Vec<f64>; 3];
-#[declare]
-pub type Input = (Circle<f64>, Duals);
 
 impl<D: Clone + Float> Circle<D> {
     pub fn point(&self, t: D) -> R2<D> {
@@ -68,7 +29,7 @@ impl<D: Clone + Float> Circle<D> {
 impl<D: Eq> Eq for Circle<D> {}
 
 impl Circle<f64> {
-    pub fn dual<'a>(&self, duals: &Duals) -> Circle<D> {
+    pub fn dual(&self, duals: &Duals) -> Circle<D> {
         let x = Dual::new(self.c.x, duals[0].clone());
         let y = Dual::new(self.c.y, duals[1].clone());
         let r = Dual::new(self.r  , duals[2].clone());
@@ -76,8 +37,8 @@ impl Circle<f64> {
         Circle::from((self.idx, c, r))
     }
     pub fn intersect(&self, o: &Circle<f64>) -> Vec<Intersection> {
-        let c0 = self.dual(&[ vec![ 1., 0., 0., 0., 0., 0., ], vec![ 0., 1., 0., 0., 0., 0., ], vec![ 0., 0., 1., 0., 0., 0., ] ]);
-        let c1 = o.dual(&[ vec![ 0., 0., 0., 1., 0., 0., ], vec![ 0., 0., 0., 0., 1., 0., ], vec![ 0., 0., 0., 0., 0., 1., ] ]);
+        let c0 = self.dual(&vec![ vec![ 1., 0., 0., 0., 0., 0., ], vec![ 0., 1., 0., 0., 0., 0., ], vec![ 0., 0., 1., 0., 0., 0., ] ]);
+        let c1 =    o.dual(&vec![ vec![ 0., 0., 0., 1., 0., 0., ], vec![ 0., 0., 0., 0., 1., 0., ], vec![ 0., 0., 0., 0., 0., 1., ] ]);
         c0.intersect(&c1)
     }
     pub fn arc_midpoint(&self, t0: f64, mut t1: f64) -> R2<f64> {
@@ -100,6 +61,9 @@ impl Circle<f64> {
 impl Circle<D> {
     pub fn v(&self) -> Circle<f64> {
         Circle { idx: self.idx, c: self.c.v(), r: self.r.v() }
+    }
+    pub fn n(&self) -> usize {
+        self.c.x.d().len()
     }
     pub fn intersect(&self, c1: &Circle<D>) -> Vec<Intersection> {
         let c0 = self;
@@ -162,6 +126,44 @@ impl Circle<D> {
         let c = (self.c.clone() - o.c.clone()) / o.r.clone();
         let r = self.r.clone() / o.r.clone();
         Circle { idx: self.idx, c, r, }
+    }
+    pub fn projection(&self) -> Projection<D> {
+        let c = self.c.clone();
+        let r = self.r.clone();
+        let translate = Translate(c.clone());
+        let scale = Scale(R2 { x: r.clone(), y: r.clone() });
+        let transforms = vec![ translate, scale ];
+        Projection(transforms)
+    }
+    // pub fn apply(&self, projection: &Projection<D>) -> Shape<D> {
+    //     projection.0.iter().fold(Shape::Circle(*self), |c, t| c.transform(t))
+    // }
+    pub fn transform(&self, transform: &Transform<D>) -> Shape<D> {
+        match transform {
+            Translate(v) => Circle { idx: self.idx, c: self.c.clone() + v.clone(), r: self.r.clone(), }.into(),
+            Scale(s) => {
+                let R2 { x, y } = s;
+                if x == y {
+                    Circle {
+                        idx: self.idx,
+                        c: self.c.clone() * s.clone(),
+                        r: self.r.clone() * x,
+                    }.into()
+                } else {
+                    XYRR {
+                        idx: self.idx,
+                        c: s.clone() * self.c.clone(),
+                        r: s.clone() * &self.r.clone(),
+                    }.into()
+                }
+            },
+            Rotate(a) => {
+                let c = rotate::Rotate::rotate(&self.c.clone(), a);
+                // let c = self.c.clone().rotate(a);
+                let r = self.r.clone();
+                Circle { idx: self.idx, c, r, }.into()
+            },
+        }
     }
     pub fn invert(&self, p: &R2<D>) -> R2<D> {
         self.c.clone() + p * self.r.clone()

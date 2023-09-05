@@ -1,9 +1,10 @@
 use std::{ops::{Mul, Div, Add, Sub}, fmt::Display};
 
+use derive_more::From;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::{r2::R2, rotate::{Rotate, RotateArg}, dual::D};
+use crate::{r2::R2, rotate::{Rotate, RotateArg}, dual::{D, Dual}, shape::Duals};
 
 use super::{xyrrt::XYRRT, cdef::CDEF};
 
@@ -11,10 +12,23 @@ use super::{xyrrt::XYRRT, cdef::CDEF};
 pub trait UnitIntersectionsArg: Clone + Add<Output = Self> + Add<f64, Output = Self> + Sub<Output = Self> + Sub<f64, Output = Self> + Mul<Output = Self> + Div<Output = Self> {}
 impl<D: Clone + Add<Output = D> + Add<f64, Output = D> + Sub<Output = D> + Sub<f64, Output = D> + Mul<Output = D> + Div<Output = D>> UnitIntersectionsArg for D {}
 
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[derive(Debug, Clone, From, Serialize, Deserialize, Tsify)]
 pub struct XYRR<D> {
+    pub idx: usize,
     pub c: R2<D>,
     pub r: R2<D>,
+}
+
+impl XYRR<f64> {
+    pub fn dual(&self, duals: &Duals) -> XYRR<D> {
+        let cx = Dual::new(self.c.x, duals[0].clone());
+        let cy = Dual::new(self.c.y, duals[1].clone());
+        let rx = Dual::new(self.r.x, duals[2].clone());
+        let ry = Dual::new(self.r.y, duals[3].clone());
+        let c = R2 { x: cx, y: cy };
+        let r = R2 { x: rx, y: ry };
+        XYRR::from((self.idx, c, r))
+    }
 }
 
 impl<D: RotateArg> XYRR<D> {
@@ -44,6 +58,9 @@ where
     }
 }
 impl XYRR<D> {
+    pub fn n(&self) -> usize {
+        self.c.x.d().len()
+    }
     pub fn unit_intersections(&self) -> Vec<R2<D>> {
         self.cdef().unit_intersections()
     }
