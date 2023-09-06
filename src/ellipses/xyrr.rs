@@ -4,35 +4,9 @@ use derive_more::From;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::{r2::R2, rotate::{Rotate, RotateArg}, dual::{D, Dual}, shape::Duals, transform::{Transform::{Scale, Translate, self}, CanTransform, Projection}, circle, math::AbsArg};
+use crate::{r2::R2, rotate::{Rotate, RotateArg}, dual::{D, Dual}, shape::Duals, transform::{Transform::{Scale, Translate, self}, CanTransform, Projection}};
 
-use super::{xyrrt::XYRRT, cdef::CDEF, quartic::Quartic};
-
-
-pub trait UnitIntersectionsArg:
-    Clone
-    + Add<Output = Self>
-    + Add<f64, Output = Self>
-    + Sub<Output = Self>
-    + Sub<f64, Output = Self>
-    + Mul<Output = Self>
-    + Div<Output = Self>
-{}
-
-impl UnitIntersectionsArg for f64 {}
-impl UnitIntersectionsArg for Dual {}
-
-// impl<
-//     D:
-//     Clone
-//     + Add<Output = D>
-//     + Add<f64, Output = D>
-//     + Sub<Output = D>
-//     + Sub<f64, Output = D>
-//     + Mul<Output = D>
-//     + Div<Output = D>
-// > UnitIntersectionsArg for D
-// {}
+use super::{xyrrt::XYRRT, cdef::{CDEF, self}};
 
 #[derive(Debug, Clone, From, PartialEq, Serialize, Deserialize, Tsify)]
 pub struct XYRR<D> {
@@ -64,17 +38,10 @@ impl<D: RotateArg> XYRR<D> {
     }
 }
 
-impl<
-    D
-    : AbsArg
-    + Display
-    + Quartic
-    + circle::UnitIntersectionsArg
-> XYRR<D>
+impl<D: cdef::UnitIntersectionsArg> XYRR<D>
 where
     f64
-    : Add<D, Output = D>
-    + Sub<D, Output = D>
+    : Sub<D, Output = D>
     + Mul<D, Output = D>
     + Div<D, Output = D>,
 {

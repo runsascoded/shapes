@@ -1,7 +1,7 @@
 
-use std::{fmt::Display, ops::{Div, Add, Mul, Sub}};
+use std::{fmt::Display, ops::{Div, Sub}};
 
-use crate::{math::{Abs, AbsArg}, r2::R2, dual::D, ellipses::quartic::{Root, Quartic}, circle::UnitIntersectionsArg};
+use crate::{math::{Abs, AbsArg}, r2::R2, ellipses::quartic::{Root, Quartic}, circle, dual::Dual};
 
 /// Ellipse where "A" (the x² coefficient) is 1 and "B" (the xy coefficient) is zero:
 ///
@@ -23,20 +23,22 @@ pub struct CDEF<D> {
     pub f: D,
 }
 
+pub trait UnitIntersectionsArg
+: AbsArg
++ Display
++ Quartic
++ circle::UnitIntersectionsArg
+{}
+
+impl UnitIntersectionsArg for f64 {}
+impl UnitIntersectionsArg for Dual {}
+
 // impl<D: UnitIntersectionsArg> CDEF<D>
 // where f64: Mul<D, Output = D> + Div<D, Output = D>
-impl<
-    D
-    : AbsArg
-    + Display
-    + Quartic
-    + UnitIntersectionsArg
-> CDEF<D>
+impl<D: UnitIntersectionsArg> CDEF<D>
 where
     f64
-//     : Add<D, Output = D>
     : Sub<D, Output = D>
-//     + Mul<D, Output = D>
     + Div<D, Output = D>,
 {
     pub fn unit_intersections(&self) -> Vec<R2<D>> {
