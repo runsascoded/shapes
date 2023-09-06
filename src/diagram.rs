@@ -177,7 +177,7 @@ impl Diagram {
                         if duals.len() != 3 {
                             panic!("expected 3 duals for Circle, got {}: {:?}", duals.len(), duals);
                         }
-                        let duals = [ duals[0], duals[1], duals[2] ];
+                        let duals = [ duals[0].clone(), duals[1].clone(), duals[2].clone() ];
                         let [ dx, dy, dr ]: [f64; 3] = duals.map(|d| d.iter().zip(&step_vec).map(|(mask, step)| mask * step).sum());
                         let c = R2 {
                             x: s.c.x + dx,
@@ -189,7 +189,12 @@ impl Diagram {
                         if duals.len() != 4 {
                             panic!("expected 4 duals for XYRR ellipse, got {}: {:?}", duals.len(), duals);
                         }
-                        let duals = [ duals[0], duals[1], duals[2], duals[3] ];
+                        let duals = [
+                            duals[0].clone(),
+                            duals[1].clone(),
+                            duals[2].clone(),
+                            duals[3].clone(),
+                        ];
                         let [ dcx, dcy, drx, dry ]: [f64; 4] = duals.map(|d| d.iter().zip(&step_vec).map(|(mask, step)| mask * step).sum());
                         let c = e.c + R2 { x: dcx, y: dcy, };
                         let r = e.r + R2 { x: drx, y: dry };

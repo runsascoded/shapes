@@ -112,15 +112,15 @@ where
     }
 }
 
-impl<'a, D: 'a + Clone> CanTransform<D> for XYRR<D>
+impl<'a, D: 'a + Clone> CanTransform<'a, D> for XYRR<D>
 where
     R2<D>
-    : Add<&'a R2<D>, Output = R2<D>>
-    + Mul<&'a R2<D>, Output = R2<D>>,
+    : Add<Output = R2<D>>
+    + Mul<Output = R2<D>>,
 {
     type Output = XYRR<D>;
-    fn transform<'b>(&'b self, t: &'b Transform<D>) -> XYRR<D> {
-        match t {
+    fn transform(&self, t: &Transform<D>) -> XYRR<D> {
+        match t.clone() {
             Translate(v) => XYRR {
                 idx: self.idx,
                 c: self.c.clone() + v,
@@ -128,7 +128,7 @@ where
             },
             Scale(v) => XYRR {
                 idx: self.idx,
-                c: self.c.clone() * v,
+                c: self.c.clone() * v.clone(),
                 r: self.r.clone() * v,
             },
             // Rotate(a) => self.rotate(a),

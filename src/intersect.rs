@@ -18,20 +18,13 @@ pub trait Intersect<In, Out> {
 //     }
 // }
 
-impl Intersect<Circle<f64>, f64> for Circle<f64> {
-    fn intersect(&self, o: &Circle<f64>) -> Vec<Intersection<f64>> {
+impl Intersect<Circle<f64>, D> for Circle<f64> {
+    fn intersect(&self, o: &Circle<f64>) -> Vec<Intersection<D>> {
         let c0 = self.dual(&vec![ vec![ 1., 0., 0., 0., 0., 0., ], vec![ 0., 1., 0., 0., 0., 0., ], vec![ 0., 0., 1., 0., 0., 0., ] ]);
         let c1 =    o.dual(&vec![ vec![ 0., 0., 0., 1., 0., 0., ], vec![ 0., 0., 0., 0., 1., 0., ], vec![ 0., 0., 0., 0., 0., 1., ] ]);
         let s0 = Shape::Circle(c0);
         let s1 = Shape::Circle(c1);
-        s0.intersect(&s1).iter().map(|Intersection { x, y, c0idx, c1idx, t0, t1 }| Intersection {
-            x: x.into(),
-            y: y.into(),
-            c0idx: *c0idx,
-            c1idx: *c1idx,
-            t0: t0.into(),
-            t1: t1.into(),
-         }).collect()
+        s0.intersect(&s1)
     }
 }
 
@@ -42,16 +35,16 @@ impl<
     + Trig
     + Neg<Output = D>
     + circle::UnitIntersectionsArg<'a>
-    + PointToThetaArg<'a>
+    + PointToThetaArg
 > Intersect<Shape<D>, D> for Shape<D>
 where
     R2<D>
         : Neg<Output = R2<D>>
-        + CanTransform<D, Output = R2<D>>,
+        + CanTransform<'a, D, Output = R2<D>>,
     Shape<D>
-        : CanTransform<D, Output = Shape<D>>,
+        : CanTransform<'a, D, Output = Shape<D>>,
     f64
-        : Add<&'a D, Output = D>
+        : Add<D, Output = D>
         + Div<D, Output = D>,
 {
     fn intersect(&self, o: &Shape<D>) -> Vec<Intersection<D>> {
@@ -84,7 +77,7 @@ impl<D> UnitCircleIntersections<D> for XYRR<D> {
 
 impl<'a, D: 'a + circle::UnitIntersectionsArg<'a>> UnitCircleIntersections<D> for Shape<D>
 where
-    f64: Add<&'a D, Output = D>
+    f64: Add<D, Output = D>
 {
     fn unit_circle_intersections(&self) -> Vec<R2<D>> {
         match self {
@@ -101,9 +94,8 @@ pub trait PointToTheta<D> {
     fn contains(&self, p: &R2<D>) -> bool;
 }
 
-pub trait PointToThetaArg<'a>
-: 'a
-+ Clone
+pub trait PointToThetaArg
+: Clone
 + Neg<Output = Self>
 + Into<f64>
 + Sqrt
@@ -111,14 +103,14 @@ pub trait PointToThetaArg<'a>
 + PartialOrd
 + Add<Output = Self>
 + Add<f64, Output = Self>
-+ Mul<&'a Self, Output = Self>
++ Mul<Output = Self>
 + Div<f64, Output = Self>
 {}
 
-impl PointToThetaArg<'_> for f64 {}
-impl PointToThetaArg<'_> for Dual {}
+impl PointToThetaArg for f64 {}
+impl PointToThetaArg for Dual {}
 
-impl<'a, D: PointToThetaArg<'a>> PointToTheta<D> for Shape<D>
+impl<D: PointToThetaArg> PointToTheta<D> for Shape<D>
 where
     R2<D>: Neg<Output = R2<D>> + CanProject<D, Output = R2<D>>,
     f64: Div<D, Output = D>,

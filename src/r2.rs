@@ -33,7 +33,7 @@ impl<D: RotateArg> Rotate<D> for R2<D> {
     }
 }
 
-impl<D: Clone + Add<Output = D> + Mul<Output = D>> CanTransform<D> for R2<D> {
+impl<'a, D: 'a + Clone + Add<Output = D> + Mul<Output = D>> CanTransform<'a, D> for R2<D> {
     type Output = R2<D>;
     fn transform(&self, transform: &Transform<D>) -> Self::Output {
         match transform {
@@ -74,9 +74,15 @@ where
     }
 }
 
-impl<'a, D: 'a + Clone + Sqrt + Add<Output = D> + Mul<&'a D, Output = D>> R2<D> {
-    pub fn norm(&'a self) -> D {
-        (self.x.clone() * &self.x + self.y.clone() * &self.y).sqrt()
+impl<
+    D
+    : Clone
+    + Sqrt
+    + Add<Output = D>
+    + Mul<Output = D>
+> R2<D> {
+    pub fn norm(&self) -> D {
+        (self.x.clone() * self.x.clone() + self.y.clone() * self.y.clone()).sqrt()
     }
 }
 
@@ -217,11 +223,10 @@ impl<D: Clone + Mul<Output = D>> Mul<D> for &R2<D> {
 impl<'a, D: 'a + Clone + Mul<Output = D>> Mul<&'a R2<D>> for R2<D> {
     type Output = R2<D>;
     fn mul(self, rhs: &'a R2<D>) -> Self::Output {
-        self * *rhs
-        // R2 {
-        //     x: self.x.clone() * rhs.x.clone(),
-        //     y: self.y.clone() * rhs.y.clone(),
-        // }
+        R2 {
+            x: self.x.clone() * rhs.x.clone(),
+            y: self.y.clone() * rhs.y.clone(),
+        }
     }
 }
 

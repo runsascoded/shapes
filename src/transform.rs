@@ -60,14 +60,14 @@ pub trait CanProject<D> {
     fn apply(&self, projection: &Projection<D>) -> Self::Output;
 }
 
-impl<D, T: Clone + CanTransform<D, Output = T>> CanProject<D> for T {
+impl<'a, D: 'a, T: 'a + Clone + CanTransform<'a, D, Output = T>> CanProject<D> for T {
     type Output = T;
-    fn apply(&self, projection: &Projection<D>) -> Self::Output {
+    fn apply(self, projection: &Projection<D>) -> Self::Output {
         projection.0.iter().fold(self.clone(), |c, t| c.transform(&t))
     }
 }
 
-pub trait CanTransform<D> {
+pub trait CanTransform<'a, D: 'a> {
     type Output;
-    fn transform(&self, transform: &Transform<D>) -> Self::Output;
+    fn transform(&'a self, transform: &'a Transform<D>) -> Self::Output;
 }

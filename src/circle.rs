@@ -67,11 +67,13 @@ pub trait UnitIntersectionsArg<'a>
     + Clone
     + Sqrt
     + Neg<Output = Self>
-    + Add<&'a Self, Output = Self>
-    + Sub<&'a Self, Output = Self>
+    + Add<Output = Self>
+    // + Add<&'a Self, Output = Self>
+    + Sub<Output = Self>
     + Sub<f64, Output = Self>
+    + Mul<Output = Self>
     + Mul<&'a Self, Output = Self>
-    + Div<&'a Self, Output = Self>
+    + Div<Output = Self>
     + Div<f64, Output = Self>
     + Into<f64>
 {}
@@ -81,57 +83,57 @@ impl<'a> UnitIntersectionsArg<'a> for Dual {}
 
 impl<'a, D: 'a + UnitIntersectionsArg<'a>> Circle<D>
 where
-    f64: Add<&'a D, Output = D>
+    f64: Add<D, Output = D>
 {
     pub fn unit_intersections(&self) -> Vec<R2<D>> {
         let cx = self.c.x.clone();
         let cy = self.c.y.clone();
         let r = self.r.clone();
-        let cx2 = cx.clone() * &cx;
-        let cy2 = cy.clone() * &cy;
-        let r2 = r.clone() * &r;
-        let z = (1. + &cx2 + &cy2 - &r2) / 2.;
-        let [ u, v ] = if cx.into() == 0. {
-            [ -cx.clone() / &cy, z.clone() / &cy, ]
+        let cx2 = cx.clone() * cx.clone();
+        let cy2 = cy.clone() * cy.clone();
+        let r2 = r.clone() * r.clone();
+        let z = (1. + cx2.clone() + cy2.clone() - r2.clone()) / 2.;
+        let [ u, v ] = if cx.clone().into() == 0. {
+            [ -cx.clone() / cy.clone(), z.clone() / cy.clone(), ]
         } else {
-            [ -cy.clone() / &cx, z.clone() / &cx, ]
+            [ -cy.clone() / cx.clone(), z.clone() / cx.clone(), ]
         };
-        let a = 1. + &(u * &u);
-        let b = u * &v;
-        let c = v * &v - 1.;
-        let f = -b.clone() / &a;
-        let dsq = f.clone() * &f - &(c.clone() / &a);
+        let a = 1. + u.clone() * u.clone();
+        let b = u.clone() * v.clone();
+        let c = v.clone() * v.clone() - 1.;
+        let f = -b.clone() / a.clone();
+        let dsq = f.clone() * f.clone() - c.clone() / a.clone();
         let d = dsq.clone().sqrt();
         let [ x0, y0, x1, y1 ] = if cx.into() == 0. {
-            let x0 = f.clone() + &d;
-            let x1 = f.clone() - &d;
-            let y0 = u.clone() * &x0 + &v;
-            let y1 = u.clone() * &x1 + &v;
+            let x0 = f.clone() + d.clone();
+            let x1 = f.clone() - d.clone();
+            let y0 = u.clone() * x0.clone() + v.clone();
+            let y1 = u.clone() * x1.clone() + v.clone();
             [ x0, y0, x1, y1 ]
         } else {
-            let y0 = f.clone() + &d;
-            let y1 = f.clone() - &d;
-            let x0 = u.clone() * &y0 + &v;
-            let x1 = u.clone() * &y1 + &v;
+            let y0 = f.clone() + d.clone();
+            let y1 = f.clone() - d.clone();
+            let x0 = u.clone() * y0.clone() + v.clone();
+            let x1 = u.clone() * y1.clone() + v.clone();
             [ x0, y0, x1, y1 ]
         };
         let mut intersections: Vec<R2<D>> = Vec::new();
-        if x0.into().is_normal() && y0.into().is_normal() {
-            intersections.push(R2 { x: x0, y: y0 });
+        if x0.clone().into().is_normal() && y0.clone().into().is_normal() {
+            intersections.push(R2 { x: x0.clone(), y: y0.clone() });
         }
-        if x1.into().is_normal() && y1.into().is_normal() {
-            intersections.push(R2 { x: x1, y: y1 });
+        if x1.clone().into().is_normal() && y1.clone().into().is_normal() {
+            intersections.push(R2 { x: x1.clone(), y: y1.clone() });
         }
         intersections
     }
 }
 
-impl<'a, D: 'a + Clone + PartialEq + Eq + Mul<Output = D> + Mul<&'a D, Output = D>> CanTransform<D> for Circle<D>
+impl<'a, D: 'a + Clone + PartialEq + Mul<Output = D> + Mul<&'a D, Output = D>> CanTransform<'a, D> for Circle<D>
 where
     R2<D>: Add<Output = R2<D>> + Mul<Output = R2<D>> + Mul<&'a R2<D>, Output = R2<D>> + Mul<D, Output = R2<D>>,
 {
     type Output = Shape<D>;
-    fn transform(&self, transform: &Transform<D>) -> Shape<D> {
+    fn transform(&'a self, transform: &'a Transform<D>) -> Shape<D> {
         match transform {
             Translate(v) =>
                 Circle {
@@ -232,6 +234,8 @@ fn r2(x: f64, dx: Vec<f64>, y: f64, dy: Vec<f64>) -> R2<D> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::intersect::Intersect;
 
     fn swap_v(v: Vec<f64>) -> Vec<f64> {
         [&v[3..], &v[..3]].concat()
