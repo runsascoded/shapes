@@ -82,7 +82,7 @@ impl Intersections {
                 };
             }
         }
-
+        println!("{} nodes", nodes.len());
         let mut edges: Vec<E> = Vec::new();
         let mut edges_by_shape: Vec<Vec<E>> = Vec::new();
         let mut total_expected_visits = 0;
@@ -223,6 +223,7 @@ impl Intersections {
             }
         }
 
+        println!("{} edges", edges.len());
         // Graph-traversal will accumulate Regions here
         let mut regions: Vec<Region> = Vec::new();
         // Working list o Segments comprising partial Regions, as they are built up and verified by `traverse`

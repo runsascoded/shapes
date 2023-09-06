@@ -62,6 +62,7 @@ where
     f64: Add<D, Output = D>
 {
     pub fn unit_intersections(&self) -> Vec<R2<D>> {
+        println!("unit_intersecting: {}", self);
         let cx = self.c.x.clone();
         let cy = self.c.y.clone();
         let r = self.r.clone();
@@ -99,6 +100,9 @@ where
         }
         if x1.is_normal() && y1.is_normal() {
             intersections.push(R2 { x: x1.clone(), y: y1.clone() });
+        }
+        for intersection in &intersections {
+            println!("intersection: {}", intersection);
         }
         intersections
     }
@@ -161,6 +165,11 @@ where
         let r = self.r.clone();
         let translate = Translate(-c.clone());
         let scale = Scale(R2 { x: 1. / r.clone(), y: 1. / r.clone() });
+        println!();
+        println!("circle: {}", self);
+        println!("  translate: {}", translate);
+        println!("  scale: {}", scale);
+        println!();
         let transforms = vec![ translate, scale ];
         Projection(transforms)
     }
@@ -234,11 +243,15 @@ mod tests {
         let p0 = intersections[0].p();
         let p1 = intersections[1].p();
 
-        // println!("c0: {}", c0);
-        // println!("c1: {}", c1);
-        // println!("expected0: {}", expected0);
-        // println!("expected1: {}", expected1);
-        // println!();
+        println!("c0: {}", c0);
+        println!("c1: {}", c1);
+        println!("expected0: {}", expected0);
+        println!("expected1: {}", expected1);
+        println!("p0: {}", p0);
+        println!("p1: {}", p1);
+        println!("d0: {}", p0.clone() - expected0.clone());
+        println!("d1: {}", p1.clone() - expected1.clone());
+        println!();
         assert_relative_eq!(p0, expected0, epsilon = 1e-3);
         assert_relative_eq!(p1, expected1, epsilon = 1e-3);
     }

@@ -38,12 +38,17 @@ where
     + Div<D, Output = D>,
 {
     fn intersect(&self, o: &Shape<D>) -> Vec<Intersection<D>> {
+        println!("{} intersect {}", self.idx(), o.idx());
         let projection = o.projection();
         let rev = -projection.clone();
         let projected = self.apply(&projection);
         let unit_circle_intersections = projected.unit_circle_intersections();
+        println!("fwd: {:?}", projection);
+        println!("rev: {:?}", rev);
         let points = unit_circle_intersections.iter().map(|p| p.apply(&rev));
+        println!("{} uci, {} points", unit_circle_intersections.len(), points.len());
         let intersections: Vec<_> = points.map(|p| {
+            println!("point: {}", p);
             let x = p.x.clone();
             let y = p.y.clone();
             let p = R2 { x: x.clone(), y: y.clone() };
@@ -51,6 +56,7 @@ where
             let t1 = o.theta(p.clone());
             Intersection { x, y, c0idx: self.idx(), c1idx: o.idx(), t0, t1, }
         }).collect();
+        println!("{} intersected {}: {} intersections", self.idx(), o.idx(), intersections.len());
         intersections
     }
 }
