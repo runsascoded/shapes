@@ -62,7 +62,6 @@ where
     f64: Add<D, Output = D>
 {
     pub fn unit_intersections(&self) -> Vec<R2<D>> {
-        println!("unit_intersecting: {}", self);
         let cx = self.c.x.clone();
         let cy = self.c.y.clone();
         let r = self.r.clone();
@@ -100,9 +99,6 @@ where
         }
         if x1.is_normal() && y1.is_normal() {
             intersections.push(R2 { x: x1.clone(), y: y1.clone() });
-        }
-        for intersection in &intersections {
-            println!("intersection: {}", intersection);
         }
         intersections
     }
@@ -165,11 +161,6 @@ where
         let r = self.r.clone();
         let translate = Translate(-c.clone());
         let scale = Scale(R2 { x: 1. / r.clone(), y: 1. / r.clone() });
-        println!();
-        println!("circle: {}", self);
-        println!("  translate: {}", translate);
-        println!("  scale: {}", scale);
-        println!();
         let transforms = vec![ translate, scale ];
         Projection(transforms)
     }
@@ -239,19 +230,18 @@ mod tests {
 
     fn check(c0: Circle<f64>, c1: Circle<f64>, expected0: R2<D>, expected1: R2<D>) {
         let intersections = c0.intersect(&c1);
-        // assert_eq!(region.n(), 2);
         let p0 = intersections[0].p();
         let p1 = intersections[1].p();
 
-        println!("c0: {}", c0);
-        println!("c1: {}", c1);
-        println!("expected0: {}", expected0);
-        println!("expected1: {}", expected1);
-        println!("p0: {}", p0);
-        println!("p1: {}", p1);
-        println!("d0: {}", p0.clone() - expected0.clone());
-        println!("d1: {}", p1.clone() - expected1.clone());
-        println!();
+        // println!("c0: {}", c0);
+        // println!("c1: {}", c1);
+        // println!("expected0: {}", expected0);
+        // println!("expected1: {}", expected1);
+        // println!("p0: {}", p0);
+        // println!("p1: {}", p1);
+        // println!("d0: {}", p0.clone() - expected0.clone());
+        // println!("d1: {}", p1.clone() - expected1.clone());
+        // println!();
         assert_relative_eq!(p0, expected0, epsilon = 1e-3);
         assert_relative_eq!(p1, expected1, epsilon = 1e-3);
     }
@@ -260,7 +250,6 @@ mod tests {
         for dx in -1..2 {
             for dy in -1..2 {
                 for scale in 1..3 {
-                    // println!("check: dx: {}, dy: {}, scale: {}", dx, dy, scale);
                     let c0 = c0 * scale + R2 { x: dx, y: dy };
                     let c1 = c1 * scale + R2 { x: dx, y: dy };
                     let R2 { x: e0x, y: e0y } = expected0.clone();

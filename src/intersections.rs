@@ -82,7 +82,8 @@ impl Intersections {
                 };
             }
         }
-        println!("{} nodes", nodes.len());
+
+        // Compute edges between nodes
         let mut edges: Vec<E> = Vec::new();
         let mut edges_by_shape: Vec<Vec<E>> = Vec::new();
         let mut total_expected_visits = 0;
@@ -134,7 +135,8 @@ impl Intersections {
                     containments,
                     expected_visits,
                     visits: 0,
-                 }));
+                }));
+                // println!("edge: {}", edge.borrow());
                 edges.push(edge.clone());
                 shape_edges.push(edge.clone());
                 edge.borrow_mut().i0.borrow_mut().add_edge(edge.clone());
@@ -143,6 +145,7 @@ impl Intersections {
             edges_by_shape.push(shape_edges);
         }
 
+        /// Recursively traverse the graph, accumulating valid Regions in `regions` along the way.
         fn traverse(
             start: &N,
             num_shapes: usize,
@@ -152,6 +155,19 @@ impl Intersections {
         ) {
             let last_segment = segments.last().unwrap();
             let end = last_segment.end();
+            // let indent = String::from_utf8(vec![b' '; 4 * (segments.len() - 2)]).unwrap();
+            // let idxs_str = segments.iter().fold(start.borrow().idx.to_string(), |acc, s| {
+            //     format!("{}→{}", acc, s.end().borrow().idx)
+            // });
+            // let containers_str = container_idxs.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(" ");
+            // println!(
+            //     "{}traverse: {}, {} segments, containers: [{}], {} regions",
+            //     indent,
+            //     idxs_str,
+            //     segments.len(),
+            //     containers_str,
+            //     regions.len(),
+            // );
             if start.borrow().p() == end.borrow().p() {
                 // Back where we started; check whether this is a valid region, push it if so, and return
                 let first_segment = segments.first().unwrap();
@@ -190,6 +206,9 @@ impl Intersections {
             } else {
                 // Attempt to add another Segment to this Region (from among eligible successors of the last Segment)
                 let successors = last_segment.successors();
+                // for successor in successors.clone() {
+                //     println!("{}  {}", indent, successor);
+                // }
                 for successor in successors {
                     // The new Segment should be contained by (or run along the border of) the same shapes as the previous segments, with one exception: the new Segment can run along the border of a shape that doesn't contain the in-progress Region.
                     let nxt = successor.edge.clone();
@@ -223,7 +242,6 @@ impl Intersections {
             }
         }
 
-        println!("{} edges", edges.len());
         // Graph-traversal will accumulate Regions here
         let mut regions: Vec<Region> = Vec::new();
         // Working list o Segments comprising partial Regions, as they are built up and verified by `traverse`
@@ -266,7 +284,6 @@ impl Intersections {
             Some((prefix, suffix)) => {
                 let k0 = format!("{}-{}", prefix, suffix);
                 let k1 = format!("{}{}{}", prefix, prefix.len(), suffix);
-                // println!("Area {} delegating to {} and {}", key, k0, k1);
                 if k0.chars().all(|ch| ch == '-') {
                     return self.area(&k1)
                 } else {
@@ -453,11 +470,11 @@ mod tests {
             }).collect::<Vec<String>>().join(" ");
             format!("{} {}: {:.3} + {:.3} = {}", region.key, path_str, region.polygon_area().v(), region.secant_area().v(), region.area().s(3))
         }).collect::<Vec<String>>();
-        println!("regions:");
-        for a in actual.iter() {
-            println!("{}", a);
-        }
-        println!();
+        // println!("regions:");
+        // for a in actual.iter() {
+        //     println!("{}", a);
+        // }
+        // println!();
         actual.iter().zip(expected.iter()).enumerate().for_each(|(idx, (a, b))| assert_eq!(&a, b, "idx: {}, {} != {}", idx, a, b));
     }
     #[test]

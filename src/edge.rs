@@ -22,7 +22,6 @@ pub struct Edge {
 
 impl Edge {
     pub fn secant_area(&self) -> D {
-        //let r = &self.c.borrow().r.clone();
         let r2 = match &*self.c.borrow() {
             Shape::Circle(c) => c.clone().r * c.clone().r,
             Shape::XYRR(e) => e.r.clone().x * e.clone().r.y,
