@@ -36,9 +36,16 @@ where
     }
 }
 
-impl<D: PointToThetaArg> Distance<XYRR<D>> for Circle<D>
+impl<
+    D
+    : PointToThetaArg
+    + Sub<Output = D>
+> Distance<XYRR<D>> for Circle<D>
 where
-    R2<D>: Neg<Output = R2<D>> + CanProject<D, Output = R2<D>>,
+    R2<D>
+    : Neg<Output = R2<D>>
+    + Sub<Output = R2<D>>
+    + CanProject<D, Output = R2<D>>,
     f64: Div<D, Output = D>,
 {
     type Output = D;
@@ -47,15 +54,31 @@ where
     }
 }
 
-impl<D: PointToThetaArg> Distance<XYRR<D>> for XYRR<D>
+impl<
+    D
+    : PointToThetaArg
+    + Sub<Output = D>
+> Distance<XYRR<D>> for XYRR<D>
 where
-    R2<D>: Neg<Output = R2<D>> + CanProject<D, Output = R2<D>>,
+    R2<D>
+    : Neg<Output = R2<D>>
+    + Sub<Output = R2<D>>
+    + CanProject<D, Output = R2<D>>,
     f64: Div<D, Output = D>,
 {
     type Output = D;
     fn distance(&self, o: &XYRR<D>) -> Option<D> {
         let t0 = Shape::XYRR(self.clone()).theta(o.c.clone());
-        todo!()
+        let distance = (self.c.clone() - o.c.clone()).norm();
+        let p0 = Shape::XYRR(self.clone()).point(t0.clone());
+        let p1 = Shape::XYRR(o.clone()).point(-t0);
+        let radii = (p0.clone() - self.c.clone()).norm() + (p1.clone() - o.c.clone()).norm();
+        let gap = radii - distance;
+        if gap.clone().into() > 0. {
+            Some(gap)
+        } else {
+            None
+        }
     }
 }
 

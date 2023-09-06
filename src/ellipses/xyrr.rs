@@ -4,9 +4,9 @@ use derive_more::From;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::{r2::R2, rotate::{Rotate, RotateArg}, dual::{D, Dual}, shape::Duals, transform::{Transform::{Scale, Translate, self}, CanTransform, Projection}};
+use crate::{r2::R2, rotate::{Rotate, RotateArg}, dual::{D, Dual}, shape::Duals, transform::{Transform::{Scale, Translate, self}, CanTransform, Projection}, circle, math::AbsArg};
 
-use super::{xyrrt::XYRRT, cdef::CDEF};
+use super::{xyrrt::XYRRT, cdef::CDEF, quartic::Quartic};
 
 
 pub trait UnitIntersectionsArg:
@@ -64,9 +64,19 @@ impl<D: RotateArg> XYRR<D> {
     }
 }
 
-impl<D: Display + UnitIntersectionsArg> XYRR<D>
+impl<
+    D
+    : AbsArg
+    + Display
+    + Quartic
+    + circle::UnitIntersectionsArg
+> XYRR<D>
 where
-    f64: Mul<D, Output = D> + Div<D, Output = D>,
+    f64
+    : Add<D, Output = D>
+    + Sub<D, Output = D>
+    + Mul<D, Output = D>
+    + Div<D, Output = D>,
 {
     pub fn cdef(&self) -> CDEF<D> {
         let rx2 = self.r.x.clone() * self.r.x.clone();
@@ -79,6 +89,9 @@ where
             f: self.c.x.clone() * self.c.x.clone() + self.c.y.clone() * self.c.y.clone() * rr2.clone() - rx2.clone(),
         }
     }
+    pub fn unit_intersections(&self) -> Vec<R2<D>> {
+        self.cdef().unit_intersections()
+    }
 }
 
 impl XYRR<D> {
@@ -87,9 +100,6 @@ impl XYRR<D> {
     }
     pub fn n(&self) -> usize {
         self.c.x.d().len()
-    }
-    pub fn unit_intersections(&self) -> Vec<R2<D>> {
-        self.cdef().unit_intersections()
     }
 }
 

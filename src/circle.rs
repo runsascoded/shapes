@@ -67,9 +67,11 @@ pub trait UnitIntersectionsArg
     + Sqrt
     + Neg<Output = Self>
     + Add<Output = Self>
+    + Add<f64, Output = Self>
     + Sub<Output = Self>
     + Sub<f64, Output = Self>
     + Mul<Output = Self>
+    + Mul<f64, Output = Self>
     + Div<Output = Self>
     + Div<f64, Output = Self>
     + Into<f64>
