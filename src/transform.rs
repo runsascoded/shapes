@@ -36,7 +36,7 @@ f64: Div<D, Output = D>,
 {
     type Output = Projection<D>;
     fn neg(self) -> Self {
-        Projection(self.0.into_iter().map(|t| -t).collect())
+        Projection(self.0.into_iter().rev().map(|t| -t).collect())
     }
 }
 
