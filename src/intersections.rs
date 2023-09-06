@@ -329,16 +329,13 @@ impl Intersections {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Ref;
-
     use crate::circle::Circle;
     use crate::deg::Deg;
     use crate::dual::Dual;
-    use crate::edge::Edge;
     use crate::fmt::Fmt;
     use crate::math::round;
     use crate::r2::R2;
-    use crate::region::Segment;
+    use crate::segment::Segment;
 
     use super::*;
 

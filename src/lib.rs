@@ -26,6 +26,7 @@ mod region;
 mod regions;
 mod roots;
 mod rotate;
+mod segment;
 mod shape;
 mod sqrt;
 mod transform;
