@@ -136,7 +136,6 @@ impl Intersections {
                     expected_visits,
                     visits: 0,
                 }));
-                // println!("edge: {}", edge.borrow());
                 edges.push(edge.clone());
                 shape_edges.push(edge.clone());
                 edge.borrow_mut().i0.borrow_mut().add_edge(edge.clone());
