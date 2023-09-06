@@ -64,11 +64,15 @@ impl<
 //     }
 // }
 
-impl<'a, D: 'a + RotateArg> R2<D>
+impl<
+    'a,
+    D
+    : 'a
+    + RotateArg
+> R2<D>
 where
-    R2<D>: Add<&'a R2<D>, Output = R2<D>>,
-    R2<D>: Mul<&'a R2<D>, Output = R2<D>>,
-    R2<D>: Mul<Output = R2<D>>,
+    R2<D>
+    : Mul<&'a R2<D>, Output = R2<D>>,
 {
     pub fn transform(&'a self, t: Transform<D>) -> Self {
         match t {

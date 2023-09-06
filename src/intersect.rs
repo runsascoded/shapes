@@ -29,12 +29,11 @@ impl Intersect<Circle<f64>, D> for Circle<f64> {
 }
 
 impl<
-    'a,
-    D: 'a
-    + Clone
+    D
+    : Clone
     + Trig
     + Neg<Output = D>
-    + circle::UnitIntersectionsArg<'a>
+    + circle::UnitIntersectionsArg
     + PointToThetaArg
 > Intersect<Shape<D>, D> for Shape<D>
 where
@@ -71,11 +70,12 @@ pub trait UnitCircleIntersections<D> {
 
 impl<D> UnitCircleIntersections<D> for XYRR<D> {
     fn unit_circle_intersections(&self) -> Vec<R2<D>> {
-        self.unit_circle_intersections()
+        todo!()
+        // self.unit_circle_intersections()
     }
 }
 
-impl<'a, D: 'a + circle::UnitIntersectionsArg<'a>> UnitCircleIntersections<D> for Shape<D>
+impl<D: circle::UnitIntersectionsArg> UnitCircleIntersections<D> for Shape<D>
 where
     f64: Add<D, Output = D>
 {

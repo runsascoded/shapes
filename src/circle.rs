@@ -62,26 +62,23 @@ impl Circle<D> {
     }
 }
 
-pub trait UnitIntersectionsArg<'a>
-    : 'a
-    + Clone
+pub trait UnitIntersectionsArg
+    : Clone
     + Sqrt
     + Neg<Output = Self>
     + Add<Output = Self>
-    // + Add<&'a Self, Output = Self>
     + Sub<Output = Self>
     + Sub<f64, Output = Self>
     + Mul<Output = Self>
-    + Mul<&'a Self, Output = Self>
     + Div<Output = Self>
     + Div<f64, Output = Self>
     + Into<f64>
 {}
 
-impl<'a> UnitIntersectionsArg<'a> for f64 {}
-impl<'a> UnitIntersectionsArg<'a> for Dual {}
+impl UnitIntersectionsArg for f64 {}
+impl UnitIntersectionsArg for Dual {}
 
-impl<'a, D: 'a + UnitIntersectionsArg<'a>> Circle<D>
+impl<D: UnitIntersectionsArg> Circle<D>
 where
     f64: Add<D, Output = D>
 {
