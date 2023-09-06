@@ -1,6 +1,6 @@
-use std::{fmt::Display, rc::Rc, cell::{RefCell, Ref}, collections::HashSet};
+use std::{fmt::Display, rc::Rc, cell::RefCell, collections::HashSet};
 
-use crate::{circle::C, node::N, dual::D, shape::{S, Shape}};
+use crate::{node::N, dual::D, shape::{S, Shape}};
 
 pub type E = Rc<RefCell<Edge>>;
 

@@ -1,7 +1,6 @@
-use std::{fmt::Display, ops::{Mul, Add, Neg, Div, Sub}, rc::Rc, cell::RefCell, f64::consts::PI};
+use std::{fmt::Display, ops::{Mul, Add, Neg, Div, Sub}};
 
 use derive_more::From;
-use num_traits::Float;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 use crate::{
@@ -16,16 +15,6 @@ pub struct Circle<D> {
     pub r: D,
 }
 
-pub type C = Rc<RefCell<Circle<D>>>;
-
-impl<D: Clone + Float> Circle<D> {
-    pub fn point(&self, t: D) -> R2<D> {
-        let x = self.c.x.clone() + self.r.clone() * t.clone().cos();
-        let y = self.c.y.clone() + self.r.clone() * t.clone().sin();
-        R2 { x, y }
-    }
-}
-
 impl<D: Eq> Eq for Circle<D> {}
 
 impl Circle<f64> {
@@ -35,21 +24,6 @@ impl Circle<f64> {
         let r = Dual::new(self.r  , duals[2].clone());
         let c = R2 { x, y };
         Circle::from((self.idx, c, r))
-    }
-    pub fn arc_midpoint(&self, t0: f64, mut t1: f64) -> R2<f64> {
-        if t1 < t0 {
-            t1 += 2. * PI;
-        }
-        let t = (t0 + t1) / 2.;
-        self.point(t)
-    }
-    pub fn contains(&self, p: &R2<f64>) -> bool {
-        let x = p.x - self.c.x;
-        let y = p.y - self.c.y;
-        let r2 = self.r * self.r;
-        let x2 = x * x;
-        let y2 = y * y;
-        x2 + y2 <= r2
     }
 }
 

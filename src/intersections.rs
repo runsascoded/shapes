@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc, f64::consts::PI, collections::HashSet};
 
-use crate::{circle::{Circle, C}, fmt::Fmt, intersect::{Intersect, PointToTheta}, node::{N, Node}, edge::{self, E}, region::{Region, Segment}, dual::{D, Dual}, shape::{S, Shape, Input}};
+use crate::{intersect::{Intersect, PointToTheta}, node::{N, Node}, edge::{self, E}, region::{Region, Segment}, dual::D, shape::{S, Shape, Input}};
 
 #[derive(Clone, Debug)]
 pub struct Intersections {
@@ -310,9 +310,11 @@ impl Intersections {
 mod tests {
     use std::cell::Ref;
 
+    use crate::circle::Circle;
     use crate::deg::Deg;
     use crate::dual::Dual;
     use crate::edge::Edge;
+    use crate::fmt::Fmt;
     use crate::math::round;
     use crate::r2::R2;
     use crate::region::Segment;
