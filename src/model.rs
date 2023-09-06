@@ -4,7 +4,7 @@ use log::{info, debug};
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::{diagram::{Diagram, Targets}, fmt::Fmt, shape::Input};
+use crate::{diagram::{Diagram, Targets}, shape::Input};
 
 #[derive(Debug, Clone, Tsify, Serialize, Deserialize)]
 pub struct Model {
@@ -69,13 +69,128 @@ impl Model {
 mod tests {
     use std::{env, collections::HashMap};
 
-    use crate::{dual::Dual, circle::Circle, r2::R2, shape::Shape};
+    use crate::{dual::Dual, circle::Circle, fmt::Fmt, r2::R2, shape::Shape, ellipses::xyrr::XYRR};
 
     use super::*;
     use test_log::test;
 
+    fn print_step(diagram: &Diagram, idx: usize) {
+        let total_err = diagram.error.clone();
+        let c1 = match diagram.shapes()[1] {
+            Shape::Circle(c) => c,
+            _ => panic!("Expected Circle"),
+        };
+        let grads = (-total_err.clone()).d();
+        let err = total_err.v();
+        let err_str = if err < 0.001 {
+            format!("{:.3e}", err)
+        } else {
+            format!("{:.5}", err)
+        };
+        println!("(( {:.3}, {:.3} ), {: <9}, ({}, {} )),  // Step {}", c1.c.x, c1.r, err_str, grads[0].s(3), grads[1].s(3), idx);
+    }
+
+    fn is_one_hot(v: &Vec<f64>) -> Option<usize> {
+        let mut idx = None;
+        for (i, x) in v.iter().enumerate() {
+            if *x == 1. {
+                if idx.is_some() {
+                    return None;
+                }
+                idx = Some(i);
+            } else if *x != 0. {
+                return None;
+            }
+        }
+        idx
+    }
+
+    pub struct CoordGetter(pub Box<dyn Fn(Diagram) -> f64>);
+
+    fn test<Expected>(inputs: Vec<Input>, targets: Vec<(&str, f64)>, expecteds: Vec<Expected>) {
+        let targets: HashMap<_, _> = targets.iter().map(|(k, v)| (k.to_string(), *v)).collect();
+        let mut model = Model::new(inputs, targets);
+        model.train(0.8, 100);
+
+        let steps = model.steps;
+
+        let filtered: Vec<(usize, CoordGetter)> = inputs.iter().enumerate().flat_map(
+            |(shape_idx, (shape, duals))| match shape {
+                Shape::Circle(Circle { idx, c: R2 { x, y }, r }) => {
+                    let getters = [
+                        |c: Circle<f64>| c.c.x,
+                        |c: Circle<f64>| c.c.y,
+                        |c: Circle<f64>| c.r,
+                    ];
+                    getters.iter().zip(duals).filter_map(|(getter, dual)| {
+                        is_one_hot(dual).map(|grad_idx| (
+                            grad_idx,
+                            CoordGetter(
+                                Box::new(move |step: Diagram| match step.shapes()[shape_idx] {
+                                    Shape::Circle(c) => getter(c),
+                                    _ => panic!("Expected Circle at idx {}", shape_idx),
+                                })
+                            )
+                        )
+                    )
+                    }).collect::<Vec<_>>()
+                },
+                Shape::XYRR(e) => {
+                    let getters = [
+                        |e: XYRR<f64>| e.c.x,
+                        |e: XYRR<f64>| e.c.y,
+                        |e: XYRR<f64>| e.r.x,
+                        |e: XYRR<f64>| e.r.y,
+                    ];
+                    getters.iter().zip(duals).filter_map(|(getter, dual)| {
+                        is_one_hot(dual).map(|grad_idx| (
+                            grad_idx,
+                            CoordGetter(
+                                Box::new(move |step: Diagram| match step.shapes()[shape_idx] {
+                                    Shape::XYRR(e) => getter(e),
+                                    _ => panic!("Expected XYRR at idx {}", shape_idx),
+                                })
+                            )
+                        )
+                    )
+                    }).collect::<Vec<_>>()
+                },
+        }).collect();
+
+        let generate_vals = env::var("GENERATE_VALS").map(|s| s.parse::<usize>().unwrap()).ok();
+        match generate_vals {
+            Some(_) => {
+                for (idx, step) in steps.iter().enumerate() {
+                    print_step(&step, idx);
+                }
+            }
+            None => {
+                assert_eq!(steps.len(), expecteds.len());
+                for (idx, (step, expected)) in steps.iter().zip(expecteds.iter()).enumerate() {
+                    let c1 = match step.shapes()[1] {
+                        Shape::Circle(c) => c,
+                        _ => panic!("Expected Circle"),
+                    };
+                    assert_relative_eq!(c1.c.x, *e_cx, epsilon = 1e-3);
+                    assert_relative_eq!(c1.r, *e_cr, epsilon = 1e-3);
+
+                    let total_err = (&step).error.clone();
+                    let expected_err = Dual::new(*e_err, vec![-*e_grad0, -*e_grad1]);
+                    assert_relative_eq!(total_err, expected_err, epsilon = 1e-3);
+
+                    let actual_err = total_err.v();
+                    let abs_err_diff = (*e_err - actual_err).abs();
+                    let relative_err = abs_err_diff / *e_err;
+                    assert!(relative_err < 1e-3, "relative_err {} >= 1e-3: actual err {}, expected {}", relative_err, actual_err, *e_err);
+
+                    print_step(&step, idx);
+                }
+            }
+        }
+    }
+
     #[test]
-    fn simple() {
+    fn fizz_buzz_circles() {
         // 2 Circles, only the 2nd circle's x and r can move:
         // - 1st circle is fixed unit circle at origin
         // - 2nd circle's center is fixed on x-axis (y=0)
@@ -93,7 +208,7 @@ mod tests {
         let targets: HashMap<_, _> = targets.iter().map(|(k, v)| (k.to_string(), *v)).collect();
         let mut model = Model::new(inputs, targets);
         model.train(0.8, 100);
-        // let mut diagram = Diagram::new(inputs, targets, None);
+
         let os = env::consts::OS;
         let macos = vec![
             (( 1.000, 1.000 ), 0.38587  , ( 0.426, -1.456 )),  // Step 0
@@ -169,22 +284,6 @@ mod tests {
 
         let steps = model.steps;
 
-        let print_step = |diagram: &Diagram, idx: usize| {
-            let total_err = diagram.error.clone();
-            let c1 = match diagram.shapes()[1] {
-                Shape::Circle(c) => c,
-                _ => panic!("Expected Circle"),
-            };
-            let grads = (-total_err.clone()).d();
-            let err = total_err.v();
-            let err_str = if err < 0.001 {
-                format!("{:.3e}", err)
-            } else {
-                format!("{:.5}", err)
-            };
-            println!("(( {:.3}, {:.3} ), {: <9}, ({}, {} )),  // Step {}", c1.c.x, c1.r, err_str, grads[0].s(3), grads[1].s(3), idx);
-        };
-
         let generate_vals = env::var("GENERATE_VALS").map(|s| s.parse::<usize>().unwrap()).ok();
         match generate_vals {
             Some(_) => {
@@ -215,5 +314,36 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn fizz_buzz_circle_ellipse() {
+        let inputs: Vec<Input> = vec![
+            (
+                Shape::Circle(Circle { idx: 0, c: R2 { x: 0., y: 0. }, r: 1. }),
+                vec![
+                    vec![0., 0., 0.],
+                    vec![0., 0., 0.],
+                    vec![0., 0., 0.],
+                ]),
+            (
+                Shape::XYRR(XYRR { idx: 1, c: R2 { x: 1., y: 0. }, r: R2 { x: 1., y: 1. } }),
+                vec![
+                    vec![1., 0., 0.],
+                    vec![0., 0., 0.],
+                    vec![0., 1., 0.],
+                    vec![0., 0., 1.],
+                ]),
+        ];
+        // Fizz Buzz example:
+        let targets = [
+            ("0*", 1. /  3.),  // Fizz (multiples of 3)
+            ("*1", 1. /  5.),  // Buzz (multiples of 5)
+            ("01", 1. / 15.),  // Fizz Buzz (multiples of both 3 and 5)
+        ];
+        let targets: HashMap<_, _> = targets.iter().map(|(k, v)| (k.to_string(), *v)).collect();
+        let mut model = Model::new(inputs, targets);
+        model.train(0.7, 100);
+
     }
 }
