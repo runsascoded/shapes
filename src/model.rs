@@ -63,8 +63,8 @@ impl Model {
             diagram = nxt;
         }
     }
-    pub fn n(&self) -> usize {
-        self.steps[0].n()
+    pub fn grad_size(&self) -> usize {
+        self.steps[0].grad_size()
     }
 }
 
@@ -77,22 +77,49 @@ mod tests {
     use super::*;
     use test_log::test;
 
-    fn get_actual(step: &Diagram, getters: Vec<CoordGetter>) -> ExpectedStep {
-        let error = step.error;
-        let error_v = error.v();
-        let coord_vals: Vec<_> = getters.iter().enumerate().map(|(coord_idx, getter)| {
-            let val: f64 = getter.0(step.clone());
-            let error_d = error.d();
-            let err_grad = error_d[coord_idx];
-            (val, err_grad)
-        }).collect();
-        ExpectedStep(error_v, coord_vals)
+    pub struct ExpectedStep {
+        vals: Vec<f64>,
+        err: f64,
+        grads: Vec<f64>,
+    }
+    impl ExpectedStep {
+        pub fn dual(&self) -> Dual {
+            Dual::new(self.err, self.grads.clone())
+        }
+    }
+    impl From<([f64; 2], f64, [f64; 2])> for ExpectedStep {
+        fn from((vals, err, grads): ([f64; 2], f64, [f64; 2])) -> Self {
+            ExpectedStep { vals: vals.to_vec(), err, grads: grads.to_vec() }
+        }
+    }
+    pub trait To<T1> {
+        fn to(self) -> T1;
+    }
+    impl<T0, T1: From<T0>> To<Vec<T1>> for Vec<T0> {
+        fn to(self: Self) -> Vec<T1> {
+            self.into_iter().map(|x| x.into()).collect()
+        }
     }
 
-    fn print_step(diagram: &Diagram, idx: usize, getters: Vec<CoordGetter>) {
+    fn get_actual(step: &Diagram, getters: &Vec<CoordGetter>) -> ExpectedStep {
+        let error = step.error.clone();
+        let err = error.v();
+        let mut vals: Vec<f64> = Vec::new();
+        let mut grads: Vec<f64> = Vec::new();
+        getters.iter().enumerate().for_each(|(coord_idx, getter)| {
+            let val: f64 = getter.0(step.clone());
+            vals.push(val);
+            let error_d = error.d();
+            let err_grad = error_d[coord_idx];
+            grads.push(-err_grad);
+        });
+        ExpectedStep { vals, err, grads }
+    }
+
+    fn print_step(diagram: &Diagram, idx: usize, getters: &Vec<CoordGetter>) {
         let actual = get_actual(diagram, getters);
-        let vals_str = actual.vals().iter().map(|g| g.s(3)).collect::<Vec<_>>().join(", ");
-        let grads_str = actual.grads().iter().map(|g| g.s(3)).collect::<Vec<_>>().join(", ");
+        let vals_str = actual.vals.iter().map(|g| g.s(3)).collect::<Vec<_>>().join(",");
+        let grads_str = actual.grads.iter().map(|g| g.s(3)).collect::<Vec<_>>().join(", ");
 
         let total_err = diagram.error.clone();
         let err = total_err.v();
@@ -101,7 +128,7 @@ mod tests {
         } else {
             format!("{:.5}", err)
         };
-        println!("(( {} ), {: <9}, ( {} )),  // Step {}", vals_str, err_str, grads_str, idx);
+        println!("([{} ], {: <9}, [{} ]),  // Step {}", vals_str, err_str, grads_str, idx);
     }
 
     fn is_one_hot(v: &Vec<f64>) -> Option<usize> {
@@ -117,16 +144,6 @@ mod tests {
             }
         }
         idx
-    }
-
-    pub struct ExpectedStep(pub f64, pub Vec<(f64, f64)>);
-    impl ExpectedStep {
-        pub fn vals(&self) -> Vec<f64> {
-            self.1.iter().map(|(val, _)| *val).collect()
-        }
-        pub fn grads(&self) -> Vec<f64> {
-            self.1.iter().map(|(_, grad)| *grad).collect()
-        }
     }
 
     pub struct CoordGetter(pub Box<dyn Fn(Diagram) -> f64>);
@@ -179,7 +196,7 @@ mod tests {
                 },
         }).collect();
         coord_getters.sort_by(|(a, _), (b, _)| a.cmp(b));
-        assert_eq!(model.n(), coord_getters.len());
+        assert_eq!(model.grad_size(), coord_getters.len());
         let coord_getters: Vec<_> = coord_getters.into_iter().map(|(_, getter)| getter).collect();
         // println!("coord_getters: {:?}", coord_getters.iter().map(|(idx, _)| idx).collect::<Vec<_>>());
 
@@ -188,32 +205,28 @@ mod tests {
         match generate_vals {
             Some(_) => {
                 for (idx, step) in steps.iter().enumerate() {
-                    print_step(&step, idx, coord_getters);
+                    print_step(&step, idx, &coord_getters);
                 }
             }
             None => {
                 assert_eq!(steps.len(), expecteds.len());
                 for (idx, (step, expected)) in steps.iter().zip(expecteds.iter()).enumerate() {
-                    let actual = get_actual(step, coord_getters);
-                    let a_vals = actual.vals();
-                    let e_vals = expected.vals();
-                    assert_eq!(a_vals.len(), e_vals.len());
-                    for (a_val, e_val) in a_vals.iter().zip(e_vals.iter()) {
+                    let actual = get_actual(step, &coord_getters);
+                    assert_eq!(actual.vals.len(), expected.vals.len());
+                    for (a_val, e_val) in actual.vals.iter().zip(expected.vals.iter()) {
                         assert_relative_eq!(a_val, e_val, epsilon = 1e-3);
                     }
+                    assert_relative_eq!(actual.dual(), expected.dual(), epsilon = 1e-3);
 
-                    let total_err = (&step).error.clone();
-                    let grads: Vec<f64> = expected.grads().iter().map(|e| -e).collect();
-                    let e_err = expected.0;
-                    let expected_err = Dual::new(e_err, grads);
-                    assert_relative_eq!(total_err, expected_err, epsilon = 1e-3);
-
-                    let a_err = total_err.v();
+                    // assert_relative_eq trivially false-positives when the provided "expected" value is larger than the "actual" value, because it checks |A - B| / max(A, B).
+                    // TODO: factor out and use a better relative-equality macro.
+                    let a_err = actual.err;
+                    let e_err = expected.err;
                     let abs_err_diff = (e_err - a_err).abs();
                     let relative_err = abs_err_diff / e_err;
                     assert!(relative_err < 1e-3, "relative_err {} >= 1e-3: actual err {}, expected {}", relative_err, a_err, e_err);
 
-                    print_step(&step, idx, coord_getters);
+                    print_step(&step, idx, &coord_getters);
                 }
             }
         }
@@ -230,122 +243,86 @@ mod tests {
             (Shape::Circle(Circle { idx: 1, c: R2 { x: 1., y: 0. }, r: 1. }), vec![ vec![1., 0.], vec![0., 0.], vec![0., 1.], ]),
         ];
         // Fizz Buzz example:
-        let targets0 = [
+        let targets = vec![
             ("0*", 1. /  3.),  // Fizz (multiples of 3)
             ("*1", 1. /  5.),  // Buzz (multiples of 5)
             ("01", 1. / 15.),  // Fizz Buzz (multiples of both 3 and 5)
         ];
-        let targets: HashMap<_, _> = targets0.iter().map(|(k, v)| (k.to_string(), *v)).collect();
-        let mut model = Model::new(inputs.clone(), targets);
-        model.train(0.8, 100);
 
         let os = env::consts::OS;
         let macos = vec![
-            (( 1.000, 1.000 ), 0.38587  , ( 0.426, -1.456 )),  // Step 0
-            (( 1.087, 0.704 ), 0.10719  , (-0.228,  1.615 )),  // Step 1
-            (( 1.075, 0.789 ), 0.03504  , ( 0.741, -0.551 )),  // Step 2
-            (( 1.097, 0.772 ), 0.00966  , ( 0.448,  1.048 )),  // Step 3
-            (( 1.100, 0.779 ), 0.01118  , ( 0.716, -0.544 )),  // Step 4
-            (( 1.107, 0.774 ), 0.00336  , ( 0.443,  1.047 )),  // Step 5
-            (( 1.108, 0.776 ), 0.00378  , ( 0.708, -0.541 )),  // Step 6
-            (( 1.111, 0.774 ), 0.001167 , ( 0.441,  1.046 )),  // Step 7
-            (( 1.111, 0.775 ), 0.001298 , ( 0.705, -0.540 )),  // Step 8
-            (( 1.112, 0.774 ), 4.052e-4 , ( 0.440,  1.046 )),  // Step 9
-            (( 1.112, 0.775 ), 4.491e-4 , ( 0.704, -0.540 )),  // Step 10
-            (( 1.112, 0.775 ), 1.406e-4 , ( 0.440,  1.046 )),  // Step 11
-            (( 1.112, 0.775 ), 1.557e-4 , ( 0.704, -0.540 )),  // Step 12
-            (( 1.113, 0.775 ), 4.880e-5 , ( 0.440,  1.046 )),  // Step 13
-            (( 1.113, 0.775 ), 5.400e-5 , ( 0.704, -0.540 )),  // Step 14
-            (( 1.113, 0.775 ), 1.693e-5 , ( 0.440,  1.046 )),  // Step 15
-            (( 1.113, 0.775 ), 1.874e-5 , ( 0.704, -0.540 )),  // Step 16
-            (( 1.113, 0.775 ), 5.877e-6 , ( 0.440,  1.046 )),  // Step 17
-            (( 1.113, 0.775 ), 6.501e-6 , ( 0.704, -0.540 )),  // Step 18
-            (( 1.113, 0.775 ), 2.039e-6 , ( 0.440,  1.046 )),  // Step 19
-            (( 1.113, 0.775 ), 2.256e-6 , ( 0.704, -0.540 )),  // Step 20
-            (( 1.113, 0.775 ), 7.076e-7 , ( 0.440,  1.046 )),  // Step 21
-            (( 1.113, 0.775 ), 7.828e-7 , ( 0.704, -0.540 )),  // Step 22
-            (( 1.113, 0.775 ), 2.456e-7 , ( 0.440,  1.046 )),  // Step 23
-            (( 1.113, 0.775 ), 2.716e-7 , ( 0.704, -0.540 )),  // Step 24
-            (( 1.113, 0.775 ), 8.521e-8 , ( 0.440,  1.046 )),  // Step 25
-            (( 1.113, 0.775 ), 9.427e-8 , ( 0.704, -0.540 )),  // Step 26
-            (( 1.113, 0.775 ), 2.957e-8 , ( 0.440,  1.046 )),  // Step 27
-            (( 1.113, 0.775 ), 3.271e-8 , ( 0.704, -0.540 )),  // Step 28
-            (( 1.113, 0.775 ), 1.026e-8 , ( 0.440,  1.046 )),  // Step 29
-            (( 1.113, 0.775 ), 1.135e-8 , ( 0.704, -0.540 )),  // Step 30
-            (( 1.113, 0.775 ), 3.561e-9 , ( 0.440,  1.046 )),  // Step 31
-            (( 1.113, 0.775 ), 3.939e-9 , ( 0.704, -0.540 )),  // Step 32
-            (( 1.113, 0.775 ), 1.236e-9 , ( 0.440,  1.046 )),  // Step 33
-            (( 1.113, 0.775 ), 1.367e-9 , ( 0.704, -0.540 )),  // Step 34
-            (( 1.113, 0.775 ), 4.288e-10, ( 0.440,  1.046 )),  // Step 35
-            (( 1.113, 0.775 ), 4.743e-10, ( 0.704, -0.540 )),  // Step 36
-            (( 1.113, 0.775 ), 1.488e-10, ( 0.440,  1.046 )),  // Step 37
-            (( 1.113, 0.775 ), 1.646e-10, ( 0.704, -0.540 )),  // Step 38
-            (( 1.113, 0.775 ), 5.163e-11, ( 0.440,  1.046 )),  // Step 39
-            (( 1.113, 0.775 ), 5.712e-11, ( 0.704, -0.540 )),  // Step 40
-            (( 1.113, 0.775 ), 1.792e-11, ( 0.440,  1.046 )),  // Step 41
-            (( 1.113, 0.775 ), 1.982e-11, ( 0.704, -0.540 )),  // Step 42
-            (( 1.113, 0.775 ), 6.217e-12, ( 0.440,  1.046 )),  // Step 43
-            (( 1.113, 0.775 ), 6.878e-12, ( 0.704, -0.540 )),  // Step 44
-            (( 1.113, 0.775 ), 2.157e-12, ( 0.440,  1.046 )),  // Step 45
-            (( 1.113, 0.775 ), 2.387e-12, ( 0.704, -0.540 )),  // Step 46
-            (( 1.113, 0.775 ), 7.487e-13, ( 0.440,  1.046 )),  // Step 47
-            (( 1.113, 0.775 ), 8.283e-13, ( 0.704, -0.540 )),  // Step 48
-            (( 1.113, 0.775 ), 2.598e-13, ( 0.440,  1.046 )),  // Step 49
-            (( 1.113, 0.775 ), 2.872e-13, ( 0.704, -0.540 )),  // Step 50
-            (( 1.113, 0.775 ), 9.023e-14, ( 0.440,  1.046 )),  // Step 51
-            (( 1.113, 0.775 ), 9.948e-14, ( 0.704, -0.540 )),  // Step 52
-            (( 1.113, 0.775 ), 3.120e-14, ( 0.440,  1.046 )),  // Step 53
-            (( 1.113, 0.775 ), 3.486e-14, ( 0.704, -0.540 )),  // Step 54
-            (( 1.113, 0.775 ), 1.105e-14, ( 0.440,  1.046 )),  // Step 55
-            (( 1.113, 0.775 ), 1.199e-14, ( 0.704, -0.540 )),  // Step 56
-            (( 1.113, 0.775 ), 3.691e-15, ( 0.440,  1.046 )),  // Step 57
-            (( 1.113, 0.775 ), 4.219e-15, ( 0.704, -0.540 )),  // Step 58
-            (( 1.113, 0.775 ), 1.360e-15, ( 0.440,  1.046 )),  // Step 59
-            (( 1.113, 0.775 ), 1.499e-15, ( 0.704, -0.540 )),  // Step 60
-            (( 1.113, 0.775 ), 6.661e-16, ( 0.440,  1.046 )),  // Step 61
-            (( 1.113, 0.775 ), 6.939e-16, ( 0.704, -0.540 )),  // Step 62
-            (( 1.113, 0.775 ), 5.551e-17, ( 0.440,  1.046 )),  // Step 63
-            (( 1.113, 0.775 ), 5.551e-17, ( 0.440,  1.046 )),  // Step 64
+            ([ 1.000, 1.000 ], 0.38587  , [ 0.426, -1.456 ]),  // Step 0
+            ([ 1.087, 0.704 ], 0.10719  , [-0.228,  1.615 ]),  // Step 1
+            ([ 1.075, 0.789 ], 0.03504  , [ 0.741, -0.551 ]),  // Step 2
+            ([ 1.097, 0.772 ], 0.00966  , [ 0.448,  1.048 ]),  // Step 3
+            ([ 1.100, 0.779 ], 0.01118  , [ 0.716, -0.544 ]),  // Step 4
+            ([ 1.107, 0.774 ], 0.00336  , [ 0.443,  1.047 ]),  // Step 5
+            ([ 1.108, 0.776 ], 0.00378  , [ 0.708, -0.541 ]),  // Step 6
+            ([ 1.111, 0.774 ], 0.001167 , [ 0.441,  1.046 ]),  // Step 7
+            ([ 1.111, 0.775 ], 0.001298 , [ 0.705, -0.540 ]),  // Step 8
+            ([ 1.112, 0.774 ], 4.052e-4 , [ 0.440,  1.046 ]),  // Step 9
+            ([ 1.112, 0.775 ], 4.491e-4 , [ 0.704, -0.540 ]),  // Step 10
+            ([ 1.112, 0.775 ], 1.406e-4 , [ 0.440,  1.046 ]),  // Step 11
+            ([ 1.112, 0.775 ], 1.557e-4 , [ 0.704, -0.540 ]),  // Step 12
+            ([ 1.113, 0.775 ], 4.880e-5 , [ 0.440,  1.046 ]),  // Step 13
+            ([ 1.113, 0.775 ], 5.400e-5 , [ 0.704, -0.540 ]),  // Step 14
+            ([ 1.113, 0.775 ], 1.693e-5 , [ 0.440,  1.046 ]),  // Step 15
+            ([ 1.113, 0.775 ], 1.874e-5 , [ 0.704, -0.540 ]),  // Step 16
+            ([ 1.113, 0.775 ], 5.877e-6 , [ 0.440,  1.046 ]),  // Step 17
+            ([ 1.113, 0.775 ], 6.501e-6 , [ 0.704, -0.540 ]),  // Step 18
+            ([ 1.113, 0.775 ], 2.039e-6 , [ 0.440,  1.046 ]),  // Step 19
+            ([ 1.113, 0.775 ], 2.256e-6 , [ 0.704, -0.540 ]),  // Step 20
+            ([ 1.113, 0.775 ], 7.076e-7 , [ 0.440,  1.046 ]),  // Step 21
+            ([ 1.113, 0.775 ], 7.828e-7 , [ 0.704, -0.540 ]),  // Step 22
+            ([ 1.113, 0.775 ], 2.456e-7 , [ 0.440,  1.046 ]),  // Step 23
+            ([ 1.113, 0.775 ], 2.716e-7 , [ 0.704, -0.540 ]),  // Step 24
+            ([ 1.113, 0.775 ], 8.521e-8 , [ 0.440,  1.046 ]),  // Step 25
+            ([ 1.113, 0.775 ], 9.427e-8 , [ 0.704, -0.540 ]),  // Step 26
+            ([ 1.113, 0.775 ], 2.957e-8 , [ 0.440,  1.046 ]),  // Step 27
+            ([ 1.113, 0.775 ], 3.271e-8 , [ 0.704, -0.540 ]),  // Step 28
+            ([ 1.113, 0.775 ], 1.026e-8 , [ 0.440,  1.046 ]),  // Step 29
+            ([ 1.113, 0.775 ], 1.135e-8 , [ 0.704, -0.540 ]),  // Step 30
+            ([ 1.113, 0.775 ], 3.561e-9 , [ 0.440,  1.046 ]),  // Step 31
+            ([ 1.113, 0.775 ], 3.939e-9 , [ 0.704, -0.540 ]),  // Step 32
+            ([ 1.113, 0.775 ], 1.236e-9 , [ 0.440,  1.046 ]),  // Step 33
+            ([ 1.113, 0.775 ], 1.367e-9 , [ 0.704, -0.540 ]),  // Step 34
+            ([ 1.113, 0.775 ], 4.288e-10, [ 0.440,  1.046 ]),  // Step 35
+            ([ 1.113, 0.775 ], 4.743e-10, [ 0.704, -0.540 ]),  // Step 36
+            ([ 1.113, 0.775 ], 1.488e-10, [ 0.440,  1.046 ]),  // Step 37
+            ([ 1.113, 0.775 ], 1.646e-10, [ 0.704, -0.540 ]),  // Step 38
+            ([ 1.113, 0.775 ], 5.163e-11, [ 0.440,  1.046 ]),  // Step 39
+            ([ 1.113, 0.775 ], 5.712e-11, [ 0.704, -0.540 ]),  // Step 40
+            ([ 1.113, 0.775 ], 1.792e-11, [ 0.440,  1.046 ]),  // Step 41
+            ([ 1.113, 0.775 ], 1.982e-11, [ 0.704, -0.540 ]),  // Step 42
+            ([ 1.113, 0.775 ], 6.217e-12, [ 0.440,  1.046 ]),  // Step 43
+            ([ 1.113, 0.775 ], 6.878e-12, [ 0.704, -0.540 ]),  // Step 44
+            ([ 1.113, 0.775 ], 2.157e-12, [ 0.440,  1.046 ]),  // Step 45
+            ([ 1.113, 0.775 ], 2.387e-12, [ 0.704, -0.540 ]),  // Step 46
+            ([ 1.113, 0.775 ], 7.487e-13, [ 0.440,  1.046 ]),  // Step 47
+            ([ 1.113, 0.775 ], 8.283e-13, [ 0.704, -0.540 ]),  // Step 48
+            ([ 1.113, 0.775 ], 2.598e-13, [ 0.440,  1.046 ]),  // Step 49
+            ([ 1.113, 0.775 ], 2.872e-13, [ 0.704, -0.540 ]),  // Step 50
+            ([ 1.113, 0.775 ], 9.023e-14, [ 0.440,  1.046 ]),  // Step 51
+            ([ 1.113, 0.775 ], 9.948e-14, [ 0.704, -0.540 ]),  // Step 52
+            ([ 1.113, 0.775 ], 3.120e-14, [ 0.440,  1.046 ]),  // Step 53
+            ([ 1.113, 0.775 ], 3.486e-14, [ 0.704, -0.540 ]),  // Step 54
+            ([ 1.113, 0.775 ], 1.105e-14, [ 0.440,  1.046 ]),  // Step 55
+            ([ 1.113, 0.775 ], 1.199e-14, [ 0.704, -0.540 ]),  // Step 56
+            ([ 1.113, 0.775 ], 3.691e-15, [ 0.440,  1.046 ]),  // Step 57
+            ([ 1.113, 0.775 ], 4.219e-15, [ 0.704, -0.540 ]),  // Step 58
+            ([ 1.113, 0.775 ], 1.360e-15, [ 0.440,  1.046 ]),  // Step 59
+            ([ 1.113, 0.775 ], 1.499e-15, [ 0.704, -0.540 ]),  // Step 60
+            ([ 1.113, 0.775 ], 6.661e-16, [ 0.440,  1.046 ]),  // Step 61
+            ([ 1.113, 0.775 ], 6.939e-16, [ 0.704, -0.540 ]),  // Step 62
+            ([ 1.113, 0.775 ], 5.551e-17, [ 0.440,  1.046 ]),  // Step 63
+            ([ 1.113, 0.775 ], 5.551e-17, [ 0.440,  1.046 ]),  // Step 64
         ];
         let mut linux = macos.clone();
-        linux[53] = (( 1.113, 0.775 ), 3.114e-14, ( 0.440,  1.046 ));  // Step 53
+        linux[53] = ([ 1.113, 0.775 ], 3.114e-14, [ 0.440,  1.046 ]);  // Step 53
 
         let expecteds = if os == "macos" { macos } else { linux };
 
-        let steps = model.steps;
-
-        test(inputs, targets0.into(), expecteds.clone());
-
-        let generate_vals = env::var("GENERATE_VALS").map(|s| s.parse::<usize>().unwrap()).ok();
-        match generate_vals {
-            Some(_) => {
-                for (idx, step) in steps.iter().enumerate() {
-                    print_step(&step, idx);
-                }
-            }
-            None => {
-                assert_eq!(steps.len(), expecteds.len());
-                for (idx, (step, ((e_cx, e_cr), e_err, (e_grad0, e_grad1)))) in steps.iter().zip(expecteds.iter()).enumerate() {
-                    let c1 = match step.shapes()[1] {
-                        Shape::Circle(c) => c,
-                        _ => panic!("Expected Circle"),
-                    };
-                    assert_relative_eq!(c1.c.x, *e_cx, epsilon = 1e-3);
-                    assert_relative_eq!(c1.r, *e_cr, epsilon = 1e-3);
-
-                    let total_err = (&step).error.clone();
-                    let expected_err = Dual::new(*e_err, vec![-*e_grad0, -*e_grad1]);
-                    assert_relative_eq!(total_err, expected_err, epsilon = 1e-3);
-
-                    let actual_err = total_err.v();
-                    let abs_err_diff = (*e_err - actual_err).abs();
-                    let relative_err = abs_err_diff / *e_err;
-                    assert!(relative_err < 1e-3, "relative_err {} >= 1e-3: actual err {}, expected {}", relative_err, actual_err, *e_err);
-
-                    print_step(&step, idx);
-                }
-            }
-        }
+        test(inputs, targets, expecteds.to());
     }
 
     #[test]
@@ -368,14 +345,13 @@ mod tests {
                 ]),
         ];
         // Fizz Buzz example:
-        let targets = [
+        let targets = vec![
             ("0*", 1. /  3.),  // Fizz (multiples of 3)
             ("*1", 1. /  5.),  // Buzz (multiples of 5)
             ("01", 1. / 15.),  // Fizz Buzz (multiples of both 3 and 5)
         ];
-        let targets: HashMap<_, _> = targets.iter().map(|(k, v)| (k.to_string(), *v)).collect();
-        let mut model = Model::new(inputs, targets);
-        model.train(0.7, 100);
 
+        let expecteds: Vec<ExpectedStep> = vec![];
+        test(inputs, targets, expecteds)
     }
 }

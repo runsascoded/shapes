@@ -124,6 +124,10 @@ impl Diagram {
         self.shapes().len()
     }
 
+    pub fn grad_size(&self) -> usize {
+        self.error.1
+    }
+
     pub fn compute_errors(intersections: &Intersections, targets: &Targets, total_target_area: &f64, total_area: &Dual) -> Errors {
         let n = intersections.len();
         let all_key = String::from_utf8(vec![b'*'; n]).unwrap();
