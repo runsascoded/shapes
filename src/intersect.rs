@@ -40,9 +40,9 @@ impl<
 where
     R2<D>
         : Neg<Output = R2<D>>
-        + CanTransform<'a, D, Output = R2<D>>,
+        + CanTransform<D, Output = R2<D>>,
     Shape<D>
-        : CanTransform<'a, D, Output = Shape<D>>,
+        : CanTransform<D, Output = Shape<D>>,
     f64
         : Add<D, Output = D>
         + Div<D, Output = D>,

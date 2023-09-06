@@ -33,7 +33,12 @@ impl<D: RotateArg> Rotate<D> for R2<D> {
     }
 }
 
-impl<'a, D: 'a + Clone + Add<Output = D> + Mul<Output = D>> CanTransform<'a, D> for R2<D> {
+impl<
+    D
+    : Clone
+    + Add<Output = D>
+    + Mul<Output = D>
+> CanTransform<D> for R2<D> {
     type Output = R2<D>;
     fn transform(&self, transform: &Transform<D>) -> Self::Output {
         match transform {

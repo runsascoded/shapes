@@ -112,7 +112,7 @@ where
     }
 }
 
-impl<'a, D: 'a + Clone> CanTransform<'a, D> for XYRR<D>
+impl<D: Clone> CanTransform<D> for XYRR<D>
 where
     R2<D>
     : Add<Output = R2<D>>

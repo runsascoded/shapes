@@ -108,6 +108,7 @@ impl Shape<D> {
     // }
 }
 
+// TODO: use this instead of the special cases below
 // impl<'a, D: 'a + Clone + PartialEq + Eq + Mul<Output = D> + Mul<&'a D, Output = D>> CanTransform<'a, D> for Shape<D>
 // where
 //     R2<D>:
@@ -126,7 +127,7 @@ impl Shape<D> {
 //     }
 // }
 
-impl<'a> CanTransform<'a, D> for Shape<D> {
+impl<'a> CanTransform<D> for Shape<D> {
     type Output = Shape<D>;
     fn transform(&self, transform: &Transform<D>) -> Shape<D> {
         match self {
@@ -136,7 +137,7 @@ impl<'a> CanTransform<'a, D> for Shape<D> {
     }
 }
 
-impl<'a> CanTransform<'a, f64> for Shape<f64> {
+impl<'a> CanTransform<f64> for Shape<f64> {
     type Output = Shape<f64>;
     fn transform(&self, transform: &Transform<f64>) -> Shape<f64> {
         match self {

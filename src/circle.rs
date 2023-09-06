@@ -128,12 +128,23 @@ where
     }
 }
 
-impl<'a, D: 'a + Clone + PartialEq + Mul<Output = D> + Mul<&'a D, Output = D>> CanTransform<'a, D> for Circle<D>
+impl<
+    'a,
+    D
+    : 'a
+    + Clone
+    + PartialEq
+    + Mul<Output = D>
+    + Mul<&'a D, Output = D>> CanTransform<D> for Circle<D>
 where
-    R2<D>: Add<Output = R2<D>> + Mul<Output = R2<D>> + Mul<&'a R2<D>, Output = R2<D>> + Mul<D, Output = R2<D>>,
+    R2<D>
+    : Add<Output = R2<D>>
+    + Mul<Output = R2<D>>
+    + Mul<&'a R2<D>, Output = R2<D>>
+    + Mul<D, Output = R2<D>>,
 {
     type Output = Shape<D>;
-    fn transform(&'a self, transform: &'a Transform<D>) -> Shape<D> {
+    fn transform(&self, transform: &Transform<D>) -> Shape<D> {
         match transform {
             Translate(v) =>
                 Circle {
@@ -142,11 +153,11 @@ where
                     r: self.r.clone()
                 }.into(),
             Scale(s) => {
-                let R2 { x, y } = s;
+                let R2 { x, y } = s.clone();
                 if x == y {
                     Circle {
                         idx: self.idx,
-                        c: self.c.clone() * x,
+                        c: self.c.clone() * x.clone(),
                         r: self.r.clone() * x,
                     }.into()
                 } else {
