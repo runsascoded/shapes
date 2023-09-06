@@ -8,7 +8,7 @@ pub trait Sqrt {
 
 impl Sqrt for f64 {
     fn sqrt(&self) -> f64 {
-        self.sqrt()
+        f64::sqrt(*self)
     }
 }
 
