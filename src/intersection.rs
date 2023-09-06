@@ -19,8 +19,15 @@ pub struct Intersection<D> {
 }
 
 impl Intersection<D> {
-    pub fn v(&self) -> R2<f64> {
-        R2 { x: self.x.v(), y: self.y.v() }
+    pub fn v(&self) -> Intersection<f64> {
+        Intersection {
+            x: self.x.v(),
+            y: self.y.v(),
+            c0idx: self.c0idx,
+            c1idx: self.c1idx,
+            t0: self.t0.v(),
+            t1: self.t1.v(),
+        }
     }
 }
 
@@ -41,7 +48,7 @@ impl<D: Clone> Intersection<D> {
 
 impl<D: Deg + Display + Fmt> Display for Intersection<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "I({:.3}, {:.3}, C{}({})/C{}({}))", self.x, self.y, self.c0idx, self.t0.deg().s(0), self.c1idx, self.t1.deg().s(0))
+        write!(f, "I({}, {}, C{}({})/C{}({}))", self.x.s(3), self.y.s(3), self.c0idx, self.t0.deg_str(), self.c1idx, self.t1.deg_str())
     }
 }
 

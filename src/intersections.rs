@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc, f64::consts::PI, collections::HashSet};
 
-use crate::{intersect::{Intersect, PointToTheta}, node::{N, Node}, edge::{self, E}, region::{Region, Segment}, dual::D, shape::{S, Shape, Input}};
+use crate::{intersect::{Intersect, PointToTheta}, node::{N, Node}, edge::{self, E}, region::Region, dual::D, shape::{S, Shape, Input}, segment::Segment};
 
 #[derive(Clone, Debug)]
 pub struct Intersections {
@@ -393,60 +393,30 @@ mod tests {
             check(idx, x, y, *c0idx, *deg0v, *deg0d, *c1idx, *deg1v, *deg1d);
         }
 
-        // println!();
-        // for (idx, nodes) in shapes.nodes_by_shape.iter().enumerate() {
-        //     println!("nodes_by_shape[{}]: {}", idx, nodes.len());
-        //     for node in nodes.iter() {
-        //         println!("  {}", node.borrow());
-        //     }
-        // }
-        // println!();
-        // for (idx, shapes_nodes) in shapes.nodes_by_shapes.iter().enumerate() {
-        //     println!("nodes_by_shapes[{}]:", idx);
-        //     for (jdx, nodes) in shapes_nodes.iter().enumerate() {
-        //         println!("  nodes_by_shapes[{}][{}]: {}", idx, jdx, nodes.len());
-        //         for node in nodes.iter() {
-        //             println!("    {}", node.borrow());
-        //         }
-        //     }
-        // }
-
-        fn edge_str(edge: Ref<Edge>) -> String {
-            let containers: Vec<String> = edge.containers.iter().map(|c| format!("{}", c.borrow().idx())).collect();
-            format!(
-                "C{}: {}({}) → {}({}), containers: [{}], expected_visits: {}",
-                edge.c.borrow().idx(),
-                edge.t0.v().deg_str(), edge.c0.borrow().idx(),
-                edge.t1.v().deg_str(), edge.c1.borrow().idx(),
-                containers.join(","),
-                edge.expected_visits,
-            )
-        }
-
         assert_eq!(shapes.edges.len(), 12);
-        println!("edges:");
-        for edge in shapes.edges.iter() {
-            println!("{}", edge_str(edge.borrow()));
-        }
-        println!();
+        // println!("edges:");
+        // for edge in shapes.edges.iter() {
+        //     println!("{}", edge.borrow());
+        // }
+        // println!();
 
         let is_connected = shapes.is_connected;
-        println!("is_connected:");
-        for row in is_connected {
-            for col in row {
-                print!("{}", if col { "1" } else { "0" });
-            }
-            println!();
-        }
-        println!();
+        // println!("is_connected:");
+        // for row in is_connected {
+        //     for col in row {
+        //         print!("{}", if col { "1" } else { "0" });
+        //     }
+        //     println!();
+        // }
+        // println!();
 
         let segment = Segment { edge: shapes.edges[0].clone(), fwd: true };
         let successors = segment.successors();
-        println!("successors:");
-        for successor in successors {
-            println!("  {} (fwd: {})", edge_str(successor.edge.borrow()), successor.fwd);
-        }
-        println!();
+        // println!("successors:");
+        // for successor in successors {
+        //     println!("  {}", successor);
+        // }
+        // println!();
 
         assert_eq!(shapes.regions.len(), 7);
         assert_eq!(shapes.total_expected_visits, 21);

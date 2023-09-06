@@ -79,9 +79,6 @@ impl<'de> Deserialize<'de> for Dual {
 }
 
 impl Dual {
-    pub fn fmt(f: &f64, n: usize) -> String {
-        format!("{}{}", if f < &0. {""} else {" "}, format!("{:.1$}", f, n))
-    }
     pub fn is_normal(&self) -> bool {
         let v = self.v();
         (v.is_normal() || v.is_zero()) && self.d().iter().all(|d| d.is_normal() || d.is_zero())

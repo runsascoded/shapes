@@ -4,7 +4,7 @@ use log::{info, debug};
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::{diagram::{Diagram, Targets}, shape::Input};
+use crate::{diagram::{Diagram, Targets}, fmt::Fmt, shape::Input};
 
 #[derive(Debug, Clone, Tsify, Serialize, Deserialize)]
 pub struct Model {
@@ -69,7 +69,7 @@ impl Model {
 mod tests {
     use std::{env, collections::HashMap};
 
-    use crate::{dual::{Dual, D}, circle::Circle, r2::R2, shape::Shape};
+    use crate::{dual::Dual, circle::Circle, r2::R2, shape::Shape};
 
     use super::*;
     use test_log::test;
@@ -182,7 +182,7 @@ mod tests {
             } else {
                 format!("{:.5}", err)
             };
-            println!("(( {:.3}, {:.3} ), {: <9}, ({}, {} )),  // Step {}", c1.c.x, c1.r, err_str, Dual::fmt(&grads[0], 3), Dual::fmt(&grads[1], 3), idx);
+            println!("(( {:.3}, {:.3} ), {: <9}, ({}, {} )),  // Step {}", c1.c.x, c1.r, err_str, grads[0].s(3), grads[1].s(3), idx);
         };
 
         let generate_vals = env::var("GENERATE_VALS").map(|s| s.parse::<usize>().unwrap()).ok();

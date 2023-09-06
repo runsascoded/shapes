@@ -1,6 +1,6 @@
 use std::{fmt::Display, rc::Rc, cell::RefCell, collections::HashSet};
 
-use crate::{node::N, dual::D, shape::{S, Shape}};
+use crate::{deg::Deg, node::N, dual::D, shape::{S, Shape}};
 
 pub type E = Rc<RefCell<Edge>>;
 
@@ -54,6 +54,15 @@ impl Edge {
 
 impl Display for Edge {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "E({}, {}, {})", self.c.borrow(), self.i0.borrow(), self.i1.borrow())
+        let containers: Vec<String> = self.containers.iter().map(|c| format!("{}", c.borrow().idx())).collect();
+        write!(
+            f,
+            "C{}: {}({}@{}) → {}({}@{}), containers: [{}], expected_visits: {}",
+            self.c.borrow().idx(),
+            self.i0.borrow().idx, self.c0.borrow().idx(), self.t0.v().deg_str(),
+            self.i1.borrow().idx, self.c1.borrow().idx(), self.t1.v().deg_str(),
+            containers.join(","),
+            self.expected_visits,
+        )
     }
 }

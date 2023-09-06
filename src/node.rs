@@ -35,7 +35,7 @@ impl Node {
         self.i.p()
     }
     pub fn v(&self) -> R2<f64> {
-        self.i.v()
+        self.i.v().p()
     }
     pub fn other(&self, cidx: usize) -> usize {
         self.i.other(cidx)
