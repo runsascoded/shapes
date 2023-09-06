@@ -38,6 +38,7 @@ impl Circle<D> {
 
 pub trait UnitIntersectionsArg
     : Clone
+    + Display
     + Sqrt
     + Neg<Output = Self>
     + Add<Output = Self>
