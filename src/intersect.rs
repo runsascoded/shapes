@@ -1,4 +1,4 @@
-use std::{ops::{Div, Neg, Add, Mul}, f64::consts::PI};
+use std::{ops::{Div, Neg, Add, Mul}, f64::consts::PI, fmt::Display};
 
 use crate::{intersection::Intersection, circle::{Circle, self}, dual::{D, Dual}, ellipses::xyrr::XYRR, r2::R2, transform::{CanProject, CanTransform, HasProjection}, shape::Shape, trig::Trig, sqrt::Sqrt};
 
@@ -96,6 +96,7 @@ pub trait PointToTheta<D> {
 
 pub trait PointToThetaArg
 : Clone
++ Display
 + Neg<Output = Self>
 + Into<f64>
 + Sqrt

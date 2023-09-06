@@ -1,4 +1,4 @@
-use std::{fmt::Display, ops::{Mul, Add, Neg, Div, Sub}};
+use std::{fmt::{Display, self}, ops::{Mul, Add, Neg, Div, Sub}};
 
 use derive_more::From;
 use serde::{Deserialize, Serialize};
@@ -38,6 +38,7 @@ impl Circle<D> {
 
 pub trait UnitIntersectionsArg
     : Clone
+    + fmt::Debug
     + Display
     + Sqrt
     + Neg<Output = Self>
@@ -149,7 +150,7 @@ where
     }
 }
 
-impl<D: Clone> Circle<D>
+impl<D: Clone + Display> Circle<D>
 where
     R2<D>: Neg<Output = R2<D>>,
     f64: Div<D, Output = D>,

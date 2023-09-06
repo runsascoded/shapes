@@ -1,8 +1,10 @@
-use std::ops::{Neg, Div};
+use std::{ops::{Neg, Div}, fmt};
+
+use derive_more::Display;
 
 use crate::{r2::R2, shape::Shape};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Display, Clone)]
 pub enum Transform<D> {
     Translate(R2<D>),
     Scale(R2<D>),
@@ -24,7 +26,7 @@ f64: Div<D, Output = D>,
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Display, Clone)]
 pub struct Projection<D>(pub Vec<Transform<D>>);
 
 impl<D: Neg<Output = D>> Neg for Projection<D>
@@ -42,7 +44,7 @@ pub trait HasProjection<D> {
     fn projection(&self) -> Projection<D>;
 }
 
-impl<D: Clone> HasProjection<D> for Shape<D>
+impl<D: Clone + fmt::Display> HasProjection<D> for Shape<D>
 where
     R2<D>: Neg<Output = R2<D>>,
     f64: Div<D, Output = D>,
