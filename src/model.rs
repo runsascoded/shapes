@@ -63,6 +63,9 @@ impl Model {
             diagram = nxt;
         }
     }
+    pub fn n(&self) -> usize {
+        self.steps[0].n()
+    }
 }
 
 #[cfg(test)]
@@ -74,20 +77,31 @@ mod tests {
     use super::*;
     use test_log::test;
 
-    fn print_step(diagram: &Diagram, idx: usize) {
+    fn get_actual(step: &Diagram, getters: Vec<CoordGetter>) -> ExpectedStep {
+        let error = step.error;
+        let error_v = error.v();
+        let coord_vals: Vec<_> = getters.iter().enumerate().map(|(coord_idx, getter)| {
+            let val: f64 = getter.0(step.clone());
+            let error_d = error.d();
+            let err_grad = error_d[coord_idx];
+            (val, err_grad)
+        }).collect();
+        ExpectedStep(error_v, coord_vals)
+    }
+
+    fn print_step(diagram: &Diagram, idx: usize, getters: Vec<CoordGetter>) {
+        let actual = get_actual(diagram, getters);
+        let vals_str = actual.vals().iter().map(|g| g.s(3)).collect::<Vec<_>>().join(", ");
+        let grads_str = actual.grads().iter().map(|g| g.s(3)).collect::<Vec<_>>().join(", ");
+
         let total_err = diagram.error.clone();
-        let c1 = match diagram.shapes()[1] {
-            Shape::Circle(c) => c,
-            _ => panic!("Expected Circle"),
-        };
-        let grads = (-total_err.clone()).d();
         let err = total_err.v();
         let err_str = if err < 0.001 {
             format!("{:.3e}", err)
         } else {
             format!("{:.5}", err)
         };
-        println!("(( {:.3}, {:.3} ), {: <9}, ({}, {} )),  // Step {}", c1.c.x, c1.r, err_str, grads[0].s(3), grads[1].s(3), idx);
+        println!("(( {} ), {: <9}, ( {} )),  // Step {}", vals_str, err_str, grads_str, idx);
     }
 
     fn is_one_hot(v: &Vec<f64>) -> Option<usize> {
@@ -105,24 +119,32 @@ mod tests {
         idx
     }
 
+    pub struct ExpectedStep(pub f64, pub Vec<(f64, f64)>);
+    impl ExpectedStep {
+        pub fn vals(&self) -> Vec<f64> {
+            self.1.iter().map(|(val, _)| *val).collect()
+        }
+        pub fn grads(&self) -> Vec<f64> {
+            self.1.iter().map(|(_, grad)| *grad).collect()
+        }
+    }
+
     pub struct CoordGetter(pub Box<dyn Fn(Diagram) -> f64>);
 
-    fn test<Expected>(inputs: Vec<Input>, targets: Vec<(&str, f64)>, expecteds: Vec<Expected>) {
+    fn test(inputs: Vec<Input>, targets: Vec<(&str, f64)>, expecteds: Vec<ExpectedStep>) {
         let targets: HashMap<_, _> = targets.iter().map(|(k, v)| (k.to_string(), *v)).collect();
-        let mut model = Model::new(inputs, targets);
+        let mut model = Model::new(inputs.clone(), targets);
         model.train(0.8, 100);
 
-        let steps = model.steps;
-
-        let filtered: Vec<(usize, CoordGetter)> = inputs.iter().enumerate().flat_map(
+        let mut coord_getters: Vec<(usize, CoordGetter)> = inputs.iter().enumerate().flat_map(
             |(shape_idx, (shape, duals))| match shape {
-                Shape::Circle(Circle { idx, c: R2 { x, y }, r }) => {
+                Shape::Circle(_) => {
                     let getters = [
                         |c: Circle<f64>| c.c.x,
                         |c: Circle<f64>| c.c.y,
                         |c: Circle<f64>| c.r,
                     ];
-                    getters.iter().zip(duals).filter_map(|(getter, dual)| {
+                    getters.into_iter().zip(duals).filter_map(|(getter, dual)| {
                         is_one_hot(dual).map(|grad_idx| (
                             grad_idx,
                             CoordGetter(
@@ -135,18 +157,18 @@ mod tests {
                     )
                     }).collect::<Vec<_>>()
                 },
-                Shape::XYRR(e) => {
+                Shape::XYRR(_) => {
                     let getters = [
                         |e: XYRR<f64>| e.c.x,
                         |e: XYRR<f64>| e.c.y,
                         |e: XYRR<f64>| e.r.x,
                         |e: XYRR<f64>| e.r.y,
                     ];
-                    getters.iter().zip(duals).filter_map(|(getter, dual)| {
+                    getters.into_iter().zip(duals).filter_map(|(getter, dual)| {
                         is_one_hot(dual).map(|grad_idx| (
                             grad_idx,
                             CoordGetter(
-                                Box::new(move |step: Diagram| match step.shapes()[shape_idx] {
+                                Box::new(move |step: Diagram| match step.shapes()[shape_idx].clone() {
                                     Shape::XYRR(e) => getter(e),
                                     _ => panic!("Expected XYRR at idx {}", shape_idx),
                                 })
@@ -156,34 +178,42 @@ mod tests {
                     }).collect::<Vec<_>>()
                 },
         }).collect();
+        coord_getters.sort_by(|(a, _), (b, _)| a.cmp(b));
+        assert_eq!(model.n(), coord_getters.len());
+        let coord_getters: Vec<_> = coord_getters.into_iter().map(|(_, getter)| getter).collect();
+        // println!("coord_getters: {:?}", coord_getters.iter().map(|(idx, _)| idx).collect::<Vec<_>>());
 
+        let steps = model.steps;
         let generate_vals = env::var("GENERATE_VALS").map(|s| s.parse::<usize>().unwrap()).ok();
         match generate_vals {
             Some(_) => {
                 for (idx, step) in steps.iter().enumerate() {
-                    print_step(&step, idx);
+                    print_step(&step, idx, coord_getters);
                 }
             }
             None => {
                 assert_eq!(steps.len(), expecteds.len());
                 for (idx, (step, expected)) in steps.iter().zip(expecteds.iter()).enumerate() {
-                    let c1 = match step.shapes()[1] {
-                        Shape::Circle(c) => c,
-                        _ => panic!("Expected Circle"),
-                    };
-                    assert_relative_eq!(c1.c.x, *e_cx, epsilon = 1e-3);
-                    assert_relative_eq!(c1.r, *e_cr, epsilon = 1e-3);
+                    let actual = get_actual(step, coord_getters);
+                    let a_vals = actual.vals();
+                    let e_vals = expected.vals();
+                    assert_eq!(a_vals.len(), e_vals.len());
+                    for (a_val, e_val) in a_vals.iter().zip(e_vals.iter()) {
+                        assert_relative_eq!(a_val, e_val, epsilon = 1e-3);
+                    }
 
                     let total_err = (&step).error.clone();
-                    let expected_err = Dual::new(*e_err, vec![-*e_grad0, -*e_grad1]);
+                    let grads: Vec<f64> = expected.grads().iter().map(|e| -e).collect();
+                    let e_err = expected.0;
+                    let expected_err = Dual::new(e_err, grads);
                     assert_relative_eq!(total_err, expected_err, epsilon = 1e-3);
 
-                    let actual_err = total_err.v();
-                    let abs_err_diff = (*e_err - actual_err).abs();
-                    let relative_err = abs_err_diff / *e_err;
-                    assert!(relative_err < 1e-3, "relative_err {} >= 1e-3: actual err {}, expected {}", relative_err, actual_err, *e_err);
+                    let a_err = total_err.v();
+                    let abs_err_diff = (e_err - a_err).abs();
+                    let relative_err = abs_err_diff / e_err;
+                    assert!(relative_err < 1e-3, "relative_err {} >= 1e-3: actual err {}, expected {}", relative_err, a_err, e_err);
 
-                    print_step(&step, idx);
+                    print_step(&step, idx, coord_getters);
                 }
             }
         }
@@ -200,13 +230,13 @@ mod tests {
             (Shape::Circle(Circle { idx: 1, c: R2 { x: 1., y: 0. }, r: 1. }), vec![ vec![1., 0.], vec![0., 0.], vec![0., 1.], ]),
         ];
         // Fizz Buzz example:
-        let targets = [
+        let targets0 = [
             ("0*", 1. /  3.),  // Fizz (multiples of 3)
             ("*1", 1. /  5.),  // Buzz (multiples of 5)
             ("01", 1. / 15.),  // Fizz Buzz (multiples of both 3 and 5)
         ];
-        let targets: HashMap<_, _> = targets.iter().map(|(k, v)| (k.to_string(), *v)).collect();
-        let mut model = Model::new(inputs, targets);
+        let targets: HashMap<_, _> = targets0.iter().map(|(k, v)| (k.to_string(), *v)).collect();
+        let mut model = Model::new(inputs.clone(), targets);
         model.train(0.8, 100);
 
         let os = env::consts::OS;
@@ -280,9 +310,11 @@ mod tests {
         let mut linux = macos.clone();
         linux[53] = (( 1.113, 0.775 ), 3.114e-14, ( 0.440,  1.046 ));  // Step 53
 
-        let expected_errs = if os == "macos" { macos } else { linux };
+        let expecteds = if os == "macos" { macos } else { linux };
 
         let steps = model.steps;
+
+        test(inputs, targets0.into(), expecteds.clone());
 
         let generate_vals = env::var("GENERATE_VALS").map(|s| s.parse::<usize>().unwrap()).ok();
         match generate_vals {
@@ -292,8 +324,8 @@ mod tests {
                 }
             }
             None => {
-                assert_eq!(steps.len(), expected_errs.len());
-                for (idx, (step, ((e_cx, e_cr), e_err, (e_grad0, e_grad1)))) in steps.iter().zip(expected_errs.iter()).enumerate() {
+                assert_eq!(steps.len(), expecteds.len());
+                for (idx, (step, ((e_cx, e_cr), e_err, (e_grad0, e_grad1)))) in steps.iter().zip(expecteds.iter()).enumerate() {
                     let c1 = match step.shapes()[1] {
                         Shape::Circle(c) => c,
                         _ => panic!("Expected Circle"),
