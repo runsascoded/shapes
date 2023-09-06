@@ -108,10 +108,7 @@ where
     f64: Div<D, Output = D>,
 {
     fn theta(&self, p: R2<D>) -> D {
-        match self {
-            Shape::Circle(c) => p.apply(&c.projection()).atan2(),
-            Shape::XYRR(e) => p.apply(&e.projection()).atan2(),
-        }
+        p.apply(&self.projection()).atan2()
     }
     fn point(&self, t: D) -> R2<D> {
         let unit_point = R2 { x: t.cos(), y: t.sin() };

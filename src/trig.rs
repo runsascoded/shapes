@@ -20,8 +20,9 @@ impl Trig for Dual {
     }
     fn atan2(&self, o: &Dual) -> Dual {
         assert!(self.1 == o.1);
-        let x = self.0.clone();
-        let z = x.atan2(o.0.clone());
+        let y = self.0.clone();
+        let x = o.0.clone();
+        let z = y.atan2(x);
         Dual(z, self.1)
     }
 }

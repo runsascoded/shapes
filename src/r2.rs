@@ -103,7 +103,7 @@ impl R2<Dual> {
 
 impl<D: Trig> R2<D> {
     pub fn atan2(&self) -> D {
-        self.x.atan2(&self.y)
+        self.y.atan2(&self.x)
     }
 }
 
