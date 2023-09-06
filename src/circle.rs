@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 use crate::{
     dual::{D, Dual},
-    r2::R2, shape::{Duals, Shape}, transform::{Projection, CanTransform}, transform::Transform::{Scale, Translate, self}, ellipses::xyrr::XYRR, sqrt::Sqrt,
+    r2::R2, shape::{Duals, Shape}, transform::{Projection, CanTransform}, transform::Transform::{Scale, Translate, self}, ellipses::xyrr::XYRR, sqrt::Sqrt, math::IsNormal
 };
 
 #[derive(Debug, Clone, Copy, From, PartialEq, Tsify, Serialize, Deserialize)]
@@ -40,6 +40,8 @@ pub trait UnitIntersectionsArg
     : Clone
     + fmt::Debug
     + Display
+    + Into<f64>
+    + IsNormal
     + Sqrt
     + Neg<Output = Self>
     + Add<Output = Self>
@@ -50,7 +52,6 @@ pub trait UnitIntersectionsArg
     + Mul<f64, Output = Self>
     + Div<Output = Self>
     + Div<f64, Output = Self>
-    + Into<f64>
 {}
 
 impl UnitIntersectionsArg for f64 {}
@@ -93,10 +94,10 @@ where
             [ x0, y0, x1, y1 ]
         };
         let mut intersections: Vec<R2<D>> = Vec::new();
-        if x0.clone().into().is_normal() && y0.clone().into().is_normal() {
+        if x0.is_normal() && y0.is_normal() {
             intersections.push(R2 { x: x0.clone(), y: y0.clone() });
         }
-        if x1.clone().into().is_normal() && y1.clone().into().is_normal() {
+        if x1.is_normal() && y1.is_normal() {
             intersections.push(R2 { x: x1.clone(), y: y1.clone() });
         }
         intersections
