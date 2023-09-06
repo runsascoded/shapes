@@ -1,10 +1,10 @@
-use std::{rc::Rc, cell::RefCell, ops::{Mul, Add}, fmt::Display};
+use std::{rc::Rc, cell::RefCell, ops::{Mul, Add}};
 
 use derive_more::{From, Display};
 use serde::{Deserialize, Serialize};
 use tsify::declare;
 
-use crate::{dual::D, circle, ellipses::xyrr, zero::Zero, transform::{HasProjection, Transform, CanProject, CanTransform}, r2::R2, intersection::Intersection};
+use crate::{dual::D, circle, ellipses::xyrr, zero::Zero, transform::{HasProjection, Transform, CanProject, CanTransform}, r2::R2};
 
 #[declare]
 pub type Duals = Vec<Vec<f64>>;
@@ -109,22 +109,17 @@ impl Shape<D> {
 }
 
 impl<
-    'a,
     D
-    : 'a
-    + Clone
+    : Clone
     + PartialEq
     + Eq
     + Mul<Output = D>
-    + Mul<&'a D, Output = D>
 > CanTransform<D> for Shape<D>
 where
     R2<D>
     :
     Add<Output = R2<D>>
-    + Add<&'a R2<D>, Output = R2<D>>
     + Mul<Output = R2<D>>
-    + Mul<&'a R2<D>, Output = R2<D>>
     + Mul<D, Output = R2<D>>,
 {
     type Output = Shape<D>;

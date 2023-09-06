@@ -129,18 +129,15 @@ where
 }
 
 impl<
-    'a,
     D
-    : 'a
-    + Clone
+    : Clone
     + PartialEq
     + Mul<Output = D>
-    + Mul<&'a D, Output = D>> CanTransform<D> for Circle<D>
+> CanTransform<D> for Circle<D>
 where
     R2<D>
     : Add<Output = R2<D>>
     + Mul<Output = R2<D>>
-    + Mul<&'a R2<D>, Output = R2<D>>
     + Mul<D, Output = R2<D>>,
 {
     type Output = Shape<D>;
