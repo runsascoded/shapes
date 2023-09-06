@@ -151,7 +151,11 @@ impl Intersections {
             regions: &mut Vec<Region>,
             segments: &mut Vec<Segment>,
             container_idxs: &mut HashSet<usize>,
+            max_edges: usize,
         ) {
+            if segments.len() > max_edges {
+                panic!("segments.len() ({}) > edges.len() ({})", segments.len(), max_edges);
+            }
             let last_segment = segments.last().unwrap();
             let end = last_segment.end();
             // let indent = String::from_utf8(vec![b' '; 4 * (segments.len() - 2)]).unwrap();
@@ -235,7 +239,7 @@ impl Intersections {
                         }
                     }
                     segments.push(successor.clone());
-                    traverse(&start, num_shapes, regions, segments, &mut both);
+                    traverse(&start, num_shapes, regions, segments, &mut both, max_edges);
                     segments.pop();
                 }
             }
@@ -262,7 +266,7 @@ impl Intersections {
                 let nxt_idxs = nxt.borrow().all_idxs();
                 let mut both = container_idxs.intersection(&nxt_idxs).cloned().collect::<HashSet<usize>>();
                 // Recursively traverse the graph, trying to add each eligible Segment to the list we've seeded here, accumulating valid Regions in `regions` along the way.
-                traverse(&start, n, &mut regions, &mut segments, &mut both);
+                traverse(&start, n, &mut regions, &mut segments, &mut both, edges.len());
                 assert_eq!(segments.len(), 2);
                 segments.pop();
             }
