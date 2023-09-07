@@ -1,4 +1,4 @@
-use std::ops::{Mul, Add};
+use std::ops::Mul;
 
 use log::warn;
 use roots::find_roots_quartic;
@@ -25,7 +25,6 @@ impl Quartic for f64 {
             let x2 = x * x;
             d_3 * x2 * x + d_2 * x2 + d_1 * x + d_0
         };
-        // let n = c_4.1;
         let mut roots: Vec<Root<f64>> = vec![];
         for root in roots0.as_ref() {
             let fd = fp(*root);
@@ -74,7 +73,6 @@ impl Quartic for Dual {
         let [ a_0, a_1, a_2, a_3, a_4 ] = coeffs;
         let roots = Quartic::quartic_roots(a_4, a_3, a_2, a_1, a_0);
 
-        // let roots = find_roots_quartic(a_4, a_3, a_2, a_1, a_0);
         let d_3: f64 = f64::mul(a_4, 4.);
         let d_2: f64 = f64::mul(a_3, 3.);
         let d_1: f64 = f64::mul(a_2, 2.);
@@ -95,46 +93,10 @@ impl Quartic for Dual {
                 y_d += coeff.0.clone().eps.clone() * -root_pow / fd;
             }
             y.0.eps = y_d;
-            println!("root: {}", y.clone());
+            // println!("root: {}", y.clone());
             dual_roots.push(Root(y, double_root));
         }
         dual_roots
-        // let mut ys: Vec<Root<D>> = vec![];
-        // for root in roots.as_ref() {
-        //     let fd = fp(*root);
-        //     let mut double_root = false;
-        //     if fd == 0. {
-        //         // Multiple root
-        //         let e_2: f64 = 3. * d_3;
-        //         let e_1: f64 = 2. * d_2;
-        //         let e_0: f64 = d_1;
-        //         let fpp = |x: f64| e_2 * x * x + e_1 * x + e_0;
-        //         let fdd = fpp(*root);
-        //         if fdd == 0. {
-        //             let f_1 = 2. * e_2;
-        //             let f_0 = e_1;
-        //             let fppp = |x: f64| f_1 * x + f_0;
-        //             let fddd = fppp(*root);
-        //             let order = if fddd == 0. { 4 } else { 3 };
-        //             warn!("Skipping multiple root {} ({})", root, order);
-        //             continue;
-        //         } else {
-        //             double_root = true;
-        //         }
-        //     }
-        //     let root2 = root * root;
-        //     let root_pows = [ 1., *root, root2, root2 * root, root2 * root2 ];
-        //     // let mut dual_root_d: Vec<f64> = repeat(0.).take(n).collect();
-        //     let mut y: D = Zero::zero(&c_4) + (*root);
-        //     let mut y_d = y.0.eps;
-        //     for (coeff, root_pow) in coeff_duals.into_iter().zip(root_pows.iter()).rev() {
-        //         y_d += coeff.0.clone().eps.clone() * -root_pow / fd;
-        //     }
-        //     y.0.eps = y_d;
-        //     println!("root: {}", y.clone());
-        //     ys.push(Root(y, double_root));
-        // }
-        // ys
     }
 }
 

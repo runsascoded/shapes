@@ -42,10 +42,10 @@ where
     + Div<D, Output = D>,
 {
     pub fn unit_intersections(&self) -> Vec<R2<D>> {
-        println!("c: {}", self.c);
-        println!("d: {}", self.d);
-        println!("e: {}", self.e);
-        println!("f: {}", self.f);
+        // println!("c: {}", self.c);
+        // println!("d: {}", self.d);
+        // println!("e: {}", self.e);
+        // println!("f: {}", self.f);
         let rd = -1. / self.d.clone();
         let c_2 = (self.c.clone() - 1.) * rd.clone();
         let c_1 = self.e.clone() * rd.clone();
