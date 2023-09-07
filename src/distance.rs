@@ -73,7 +73,7 @@ where
         let p0 = Shape::XYRR(self.clone()).point(t0.clone());
         let p1 = Shape::XYRR(o.clone()).point(-t0);
         let radii = (p0.clone() - self.c.clone()).norm() + (p1.clone() - o.c.clone()).norm();
-        let gap = radii - distance;
+        let gap = distance - radii;
         if gap.clone().into() > 0. {
             Some(gap)
         } else {
