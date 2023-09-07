@@ -97,7 +97,7 @@ impl Diagram {
                                 // disjoint_penalties.push(
                                 //     DisjointPenalty { i, j, gap: gap.clone(), target: target.clone() }
                                 // );
-                                debug!("  disjoint penalty: {}: {} * {}", key, &gap, target);
+                                debug!("  disjoint penalty! {}: {} * {}", key, &gap, target);
                                 total_disjoint_penalty += gap * target;
                             },
                             None => (),

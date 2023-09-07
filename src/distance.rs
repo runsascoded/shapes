@@ -1,5 +1,7 @@
 use std::ops::{Sub, Mul, Add, Div, Neg};
 
+use log::debug;
+
 use crate::{circle::Circle, ellipses::xyrr::XYRR, r2::R2, sqrt::Sqrt, shape::Shape, intersect::{PointToTheta, PointToThetaArg}, transform::CanProject};
 
 pub trait Distance<O> {
@@ -73,7 +75,8 @@ where
         let p0 = Shape::XYRR(self.clone()).point(t0.clone());
         let p1 = Shape::XYRR(o.clone()).point(-t0);
         let radii = (p0.clone() - self.c.clone()).norm() + (p1.clone() - o.c.clone()).norm();
-        let gap = distance - radii;
+        let gap = distance.clone() - radii.clone();
+        debug!("distance: {} - {} = {}", distance, radii, gap.clone());
         if gap.clone().into() > 0. {
             Some(gap)
         } else {

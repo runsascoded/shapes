@@ -83,6 +83,12 @@ impl Intersections {
             }
         }
 
+        // println!("{} nodes", (&nodes).len());
+        // for node in &nodes {
+        //     println!("  {}", node.borrow());
+        // }
+        // println!();
+
         // Compute edges between nodes
         let mut edges: Vec<E> = Vec::new();
         let mut edges_by_shape: Vec<Vec<E>> = Vec::new();
@@ -273,6 +279,12 @@ impl Intersections {
             segments.pop();
         }
 
+        // println!("{} regions", (&regions).len());
+        // for region in &regions {
+        //     println!("  {}", region);
+        // }
+        // println!();
+
         // Verify that all Edges have been visited the expected number of times
         let total_visits = edges.iter().map(|e| e.borrow().visits).sum::<usize>();
         if total_visits != total_expected_visits {
@@ -359,9 +371,9 @@ mod tests {
         ];
         let shapes = Intersections::new(&inputs);
 
-        for node in shapes.nodes.iter() {
-            println!("{}", node.borrow());
-        }
+        // for node in shapes.nodes.iter() {
+        //     println!("{}", node.borrow());
+        // }
 
         let check = |idx: usize, x: Dual, y: Dual, c0idx: usize, deg0v: i64, deg0d: [i64; 9], c1idx: usize, deg1v: i64, deg1d: [i64; 9]| {
             let n = shapes.nodes[idx].borrow();

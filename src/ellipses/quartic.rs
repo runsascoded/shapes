@@ -1,10 +1,12 @@
 use std::ops::Mul;
 
+use derive_more::Display;
 use log::warn;
 use roots::find_roots_quartic;
 
-use crate::{dual::{D, Dual}, zero::Zero};
+use crate::{dual::{D, Dual}, fmt::Fmt, zero::Zero};
 
+#[derive(Debug, Clone)]
 pub struct Root<D>(pub D, pub bool);  // (root, double_root
 
 pub trait Quartic
@@ -96,6 +98,10 @@ impl Quartic for Dual {
             // println!("root: {}", y.clone());
             dual_roots.push(Root(y, double_root));
         }
+        // println!("Roots:");
+        // for root in &dual_roots {
+        //     println!("  Root: {}, double? {}", root.0.s(2), root.1);
+        // }
         dual_roots
     }
 }

@@ -120,7 +120,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_unit_intersections() {
+    fn test_unit_intersections_1_1_2_3() {
         let e = XYRR {
             idx: 0,
             c: R2 { x: Dual::new(1., vec![1.,0.,0.,0.]),
@@ -129,8 +129,44 @@ mod tests {
                     y: Dual::new(3., vec![0.,0.,0.,1.]), },
         };
         let us = e.unit_intersections();
-        for p in us {
-            println!("{}", p);
-        }
+        // for p in &us {
+        //     println!("{}", p);
+        // }
+
+        let expected = [
+            R2 { x: Dual::new(-0.600, vec![ 1.600,  0.800, -1.280, -0.480]),
+                 y: Dual::new(-0.800, vec![-1.200, -0.600,  0.960,  0.360]), },
+            R2 { x: Dual::new(-0.948, vec![ 0.684,  0.106, -0.666, -0.024]),
+                 y: Dual::new( 0.319, vec![ 2.033,  0.316, -1.980, -0.072]), },
+        ];
+        assert_eq!(us.len(), expected.len());
+        assert_relative_eq!(us[0], expected[0], epsilon = 1e-3);
+        assert_relative_eq!(us[1], expected[1], epsilon = 1e-3);
+    }
+
+    #[test]
+    fn test_unit_intersections_1_n1_1_1() {
+        let e = XYRR {
+            idx: 0,
+            c: R2 { x: Dual::new( 1., vec![1.,0.,0.,0.]),
+                    y: Dual::new(-1., vec![0.,1.,0.,0.]), },
+            r: R2 { x: Dual::new( 1., vec![0.,0.,1.,0.]),
+                    y: Dual::new( 1., vec![0.,0.,0.,1.]), },
+        };
+        let us = e.unit_intersections();
+        // for p in &us {
+        //     println!("{}", p.x);
+        //     println!("{}", p.y);
+        // }
+
+        let expected = [
+            R2 { x: Dual::new( 0.000, vec![ 1.000,  0.000, -1.000,  0.000]),
+                 y: Dual::new(-1.000, vec![ 0.000,  0.000,  0.000,  0.000]), },
+            R2 { x: Dual::new( 1.000, vec![ 0.000,  0.000,  0.000,  0.000]),
+                 y: Dual::new( 0.000, vec![ 0.000,  1.000,  0.000,  1.000]), },
+        ];
+        assert_eq!(us.len(), expected.len());
+        assert_relative_eq!(us[0], expected[0], epsilon = 1e-3);
+        assert_relative_eq!(us[1], expected[1], epsilon = 1e-3);
     }
 }

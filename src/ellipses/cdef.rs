@@ -1,7 +1,7 @@
 
 use std::{fmt::Display, ops::{Div, Sub}};
 
-use crate::{math::{Abs, AbsArg}, r2::R2, ellipses::quartic::{Root, Quartic}, circle, dual::Dual};
+use crate::{math::AbsArg, r2::R2, ellipses::quartic::{Root, Quartic}, circle, dual::Dual};
 
 /// Ellipse where "A" (the x² coefficient) is 1 and "B" (the xy coefficient) is zero:
 ///
@@ -33,8 +33,6 @@ pub trait UnitIntersectionsArg
 impl UnitIntersectionsArg for f64 {}
 impl UnitIntersectionsArg for Dual {}
 
-// impl<D: UnitIntersectionsArg> CDEF<D>
-// where f64: Mul<D, Output = D> + Div<D, Output = D>
 impl<D: UnitIntersectionsArg> CDEF<D>
 where
     f64
@@ -56,24 +54,15 @@ where
         let a_2 = c_1.clone() * c_1.clone() + c_2.clone() * c_0.clone() * 2. + 1.;
         let a_1 = c_1.clone() * c_0.clone() * 2.;
         let a_0 = c_0.clone() * c_0.clone() - 1.;
-        // let ys = quartic_roots(a_4, a_3, a_2, a_1, a_0);
         let ys = Quartic::quartic_roots(a_4, a_3, a_2, a_1, a_0);
-
-        let f = |x: f64, y: f64| {
-            self.c.clone() * y * y + x * x + self.d.clone() * x + self.e.clone() * y + self.f.clone()
-        };
         let mut dual_roots: Vec<R2<D>> = Vec::new();
         for Root(y, double_root) in ys {
-            let x0 = (1. - y.clone() * y.clone()).sqrt();
-            let x1 = -x0.clone();
-            let fx0 = f(x0.clone().into(), y.clone().into());
-            let fx1 = f(x1.clone().into(), y.clone().into());
+            let x = c_2.clone() * y.clone() * y.clone() + c_1.clone() * y.clone() + c_0.clone();
             if double_root {
-                dual_roots.push(R2 { x: x0, y: y.clone() });
-                dual_roots.push(R2 { x: x1, y: y.clone() });
+                dual_roots.push(R2 { x:  x.clone(), y: y.clone() });
+                dual_roots.push(R2 { x: -x, y: y.clone() });
             } else {
-                let x = if fx0.abs() < fx1.abs() { x0 } else { x1 };
-                dual_roots.push(R2 { x: x, y: y.clone() });
+                dual_roots.push(R2 { x, y: y.clone() });
             }
         }
         dual_roots
