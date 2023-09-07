@@ -42,65 +42,10 @@ export function expand_areas(targets: any): any;
 * @returns {any}
 */
 export function xyrr_unit(xyrr: any): any;
-export interface R2<D> {
-    x: D;
-    y: D;
-}
-
-export interface Error {
-    key: string;
-    actual_area: Dual | null;
-    actual_frac: Dual;
-    target_area: number;
-    total_target_area: number;
-    target_frac: number;
-    error: Dual;
-}
-
-export interface Diagram {
-    inputs: Input[];
-    regions: Regions;
-    targets: Targets;
-    total_target_area: number;
-    total_area: Dual;
-    errors: Errors;
-    error: Dual;
-}
-
-export type Errors = Record<string, Error>;
-
-export type Targets = Record<string, number>;
-
-export type D = Dual;
-
-export interface Model {
-    steps: Diagram[];
-    repeat_idx: number | null;
-    min_idx: number;
-    min_error: number;
-}
-
-export type Shape<D> = { Circle: Circle<D> } | { XYRR: XYRR<D> };
-
-export type Input = [Shape<number>, Duals];
-
-export type Duals = number[][];
-
 export interface Circle<D> {
     idx: number;
     c: R2<D>;
     r: D;
-}
-
-export interface Dual {
-    v: number;
-    d: number[];
-}
-
-export interface XYRR<D> {
-    idx: number;
-    c: R2<D>;
-    r: R2<D>;
 }
 
 export interface Regions {
@@ -138,6 +83,36 @@ export interface Point {
     edge_idxs: number[];
 }
 
+export interface Error {
+    key: string;
+    actual_area: Dual | null;
+    actual_frac: Dual;
+    target_area: number;
+    total_target_area: number;
+    target_frac: number;
+    error: Dual;
+}
+
+export interface Diagram {
+    inputs: Input[];
+    regions: Regions;
+    targets: Targets;
+    total_target_area: number;
+    total_area: Dual;
+    errors: Errors;
+    error: Dual;
+}
+
+export type Errors = Record<string, Error>;
+
+export type Targets = Record<string, number>;
+
+export interface XYRR<D> {
+    idx: number;
+    c: R2<D>;
+    r: R2<D>;
+}
+
 export interface Intersection<D> {
     x: D;
     y: D;
@@ -145,6 +120,31 @@ export interface Intersection<D> {
     c1idx: number;
     t0: D;
     t1: D;
+}
+
+export type D = Dual;
+
+export type Shape<D> = { Circle: Circle<D> } | { XYRR: XYRR<D> };
+
+export type Input = [Shape<number>, Duals];
+
+export type Duals = number[][];
+
+export interface Model {
+    steps: Diagram[];
+    repeat_idx: number | null;
+    min_idx: number;
+    min_error: number;
+}
+
+export interface Dual {
+    v: number;
+    d: number[];
+}
+
+export interface R2<D> {
+    x: D;
+    y: D;
 }
 
 
