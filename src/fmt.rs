@@ -6,7 +6,8 @@ pub trait Fmt {
 
 impl Fmt for f64 {
     fn s(&self, n: usize) -> String {
-        format!("{}{}", if self < &0. {""} else {" "}, format!("{:.1$}", self, n))
+        let rendered = format!("{:.1$}", self, n);
+        format!("{}{}", if rendered.starts_with('-') { "" } else { " " }, rendered)
     }
 }
 
