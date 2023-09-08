@@ -1,8 +1,8 @@
-use std::{cell::RefCell, rc::Rc, f64::consts::TAU, collections::HashSet, ops::{Neg, Add, Sub, Mul, Div}, fmt::Display, iter::Sum};
+use std::{cell::RefCell, rc::Rc, f64::consts::TAU, collections::HashSet, ops::{Neg, Add, Sub, Mul, Div}, fmt::Display};
 
 use ordered_float::OrderedFloat;
 
-use crate::{node::{N, Node}, edge::{self, E, EdgeArg}, region::{Region, RegionArg}, shape::{S, Shape}, segment::Segment, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::CanTransform, intersection::Intersection, dual::Dual, to::To};
+use crate::{node::{N, Node}, edge::{self, E}, region::{Region, RegionArg}, shape::{S, Shape}, segment::Segment, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::CanTransform, intersection::Intersection, dual::Dual, to::To};
 
 #[derive(Clone, Debug)]
 pub struct Intersections<D> {
@@ -384,7 +384,6 @@ mod tests {
     use crate::fmt::Fmt;
     use crate::math::round;
     use crate::r2::R2;
-    use crate::segment::Segment;
 
     use super::*;
 

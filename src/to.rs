@@ -13,18 +13,3 @@ impl To<f64> for f64 {
         self
     }
 }
-
-// impl<T> To<T> for T {
-//     fn to(self: Self) -> T {
-//         self
-//     }
-// }
-
-// impl<I, O> To<O> for I
-// where
-//     O: From<I>,
-// {
-//     fn to(self: Self) -> O {
-//         self.into()
-//     }
-// }
