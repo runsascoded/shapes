@@ -46,6 +46,12 @@ where
         let projection = o.projection();
         let rev = -projection.clone();
         let projected = self.apply(&projection);
+        // println!("Intersecting:");
+        // println!("  self: {:?}", self);
+        // println!("  other: {:?}", o);
+        // println!("  projection: {:?}", projection);
+        // println!("  projected: {:?}", projected);
+        // println!();
         let unit_circle_intersections = projected.unit_circle_intersections();
         let points = unit_circle_intersections.iter().map(|p| p.apply(&rev));
         points.map(|p| {

@@ -100,7 +100,27 @@ where
         if x1.is_normal() && y1.is_normal() {
             intersections.push(R2 { x: x1.clone(), y: y1.clone() });
         }
+        println!("{}: {} intersections", self, intersections.len());
         intersections
+    }
+}
+
+impl<O, I: To<O>> To<Circle<O>> for Circle<I> {
+    fn to(self) -> Circle<O> {
+        Circle { idx: self.idx, c: self.c.to(), r: self.r.to() }
+    }
+}
+
+impl<D: Clone> To<XYRR<D>> for Circle<D> {
+    fn to(self) -> XYRR<D> {
+        XYRR {
+            idx: self.idx,
+            c: self.c,
+            r: R2 {
+                x: self.r.clone(),
+                y: self.r.clone(),
+            }
+        }
     }
 }
 
@@ -223,16 +243,15 @@ impl Add<R2<i64>> for Circle<f64> {
     }
 }
 
-fn r2(x: f64, dx: Vec<f64>, y: f64, dy: Vec<f64>) -> R2<D> {
-    R2 { x: Dual::new(x, dx), y: Dual::new(y, dy) }
-}
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     use crate::intersect::Intersect;
+
+    pub fn r2(x: f64, dx: Vec<f64>, y: f64, dy: Vec<f64>) -> R2<D> {
+        R2 { x: Dual::new(x, dx), y: Dual::new(y, dy) }
+    }
 
     fn swap_v(v: Vec<f64>) -> Vec<f64> {
         [&v[3..], &v[..3]].concat()

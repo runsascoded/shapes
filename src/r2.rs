@@ -106,7 +106,7 @@ impl<'a, D: 'a + Clone + Add<Output = D> + Mul<&'a D, Output = D> + ComplexField
     }
 }
 
-impl AbsDiffEq for R2<Dual> {
+impl<D: AbsDiffEq<Epsilon = f64>> AbsDiffEq for R2<D> {
     type Epsilon = f64;
     fn default_epsilon() -> Self::Epsilon {
         Dual::default_epsilon()
@@ -116,7 +116,7 @@ impl AbsDiffEq for R2<Dual> {
     }
 }
 
-impl RelativeEq for R2<Dual> {
+impl<D: RelativeEq<Epsilon = f64>> RelativeEq for R2<D> {
     fn default_max_relative() -> Self::Epsilon {
         Dual::default_max_relative()
     }

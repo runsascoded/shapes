@@ -49,8 +49,6 @@ where
     pub fn new(shapes: Vec<Shape<D>>) -> Intersections<D> {
         let n = (&shapes).len();
         let duals: Vec<S<D>> = shapes.clone().into_iter().map(|s| Rc::new(RefCell::new(s))).collect();
-        // let shapes: Vec<Shape<f64>> = inputs.iter().map(|(c, _duals)| c.clone()).collect();
-        // let duals: Vec<S> = inputs.iter().map(|(c, duals)| Rc::new(RefCell::new(c.dual(duals)))).collect();
         let mut nodes: Vec<N<D>> = Vec::new();
         let mut nodes_by_shape: Vec<Vec<N<D>>> = Vec::new();
         let mut nodes_by_shapes: Vec<Vec<Vec<N<D>>>> = Vec::new();
@@ -65,7 +63,6 @@ where
         for (idx, dual) in duals.iter().enumerate() {
             for jdx in (idx + 1)..n {
                 let intersections = dual.borrow().intersect(&duals[jdx].borrow());
-                // let ns = intersections.iter_mut().map(|i| Rc::new(RefCell::new(i.clone())));
                 for i in intersections {
                     let node = Node {
                         idx: nodes.len(),
@@ -178,6 +175,12 @@ where
             edges_by_shape.push(shape_edges);
         }
 
+        // println!("{} edges", (&edges).len());
+        // for edge in &edges {
+            // println!("  {}", edge.borrow());
+        // }
+        // println!();
+
         // Graph-traversal will accumulate Regions here
         let mut regions: Vec<Region<D>> = Vec::new();
         // Working list o Segments comprising partial Regions, as they are built up and verified by `traverse`
@@ -262,6 +265,11 @@ where
         container_idxs: &mut HashSet<usize>,
         max_edges: usize,
     ) {
+        // println!("traverse, segments:");
+        // for segment in segments.clone() {
+        //     println!("  {}", segment);
+        // }
+        // println!();
         if segments.len() > max_edges {
             panic!("segments.len() ({}) > edges.len() ({})", segments.len(), max_edges);
         }

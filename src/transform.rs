@@ -14,8 +14,8 @@ pub enum Transform<D> {
 
 impl<D: Neg<Output = D>> Neg for Transform<D>
 where
-R2<D>: Neg<Output = R2<D>>,
-f64: Div<D, Output = D>,
+    R2<D>: Neg<Output = R2<D>>,
+    f64: Div<D, Output = D>,
 {
     type Output = Transform<D>;
     fn neg(self) -> Self {

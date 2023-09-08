@@ -44,27 +44,55 @@ where
         // println!("d: {}", self.d);
         // println!("e: {}", self.e);
         // println!("f: {}", self.f);
-        let rd = -1. / self.d.clone();
-        let c_2 = (self.c.clone() - 1.) * rd.clone();
-        let c_1 = self.e.clone() * rd.clone();
-        let c_0 = (self.f.clone() + 1.) * rd;
+        let d_zero = self.d.clone().into() == 0.;
+        // println!("d_zero: {}", d_zero);
+        let [ c_2, c_1, c_0 ] = if d_zero {
+            let re = -1. / self.e.clone();
+            [
+                (1. - self.c.clone()) * re.clone(),
+                self.d.clone() * re.clone(),
+                (self.c.clone() + self.f.clone()) * re,
+            ]
+        } else {
+            let rd = -1. / self.d.clone();
+            [
+                (self.c.clone() - 1.) * rd.clone(),
+                self.e.clone() * rd.clone(),
+                (self.f.clone() + 1.) * rd,
+            ]
+        };
+        // println!("c_2: {}", c_2);
+        // println!("c_1: {}", c_1);
+        // println!("c_0: {}", c_0);
 
         let a_4 = c_2.clone() * c_2.clone();
         let a_3 = c_2.clone() * c_1.clone() * 2.;
         let a_2 = c_1.clone() * c_1.clone() + c_2.clone() * c_0.clone() * 2. + 1.;
         let a_1 = c_1.clone() * c_0.clone() * 2.;
         let a_0 = c_0.clone() * c_0.clone() - 1.;
-        let ys = Quartic::quartic_roots(a_4, a_3, a_2, a_1, a_0);
+        // println!("a_4: {}", a_4);
+        // println!("a_3: {}", a_3);
+        // println!("a_2: {}", a_2);
+        // println!("a_1: {}", a_1);
+        // println!("a_0: {}", a_0);
+        let roots = Quartic::quartic_roots(a_4, a_3, a_2, a_1, a_0);
         let mut dual_roots: Vec<R2<D>> = Vec::new();
-        for Root(y, double_root) in ys {
-            let x = c_2.clone() * y.clone() * y.clone() + c_1.clone() * y.clone() + c_0.clone();
-            if double_root {
-                dual_roots.push(R2 { x:  x.clone(), y: y.clone() });
-                dual_roots.push(R2 { x: -x, y: y.clone() });
+        for Root(r0, double_root) in &roots {
+            let r1 = c_2.clone() * r0.clone() * r0.clone() + c_1.clone() * r0.clone() + c_0.clone();
+            let [ x, y ] = if d_zero {
+                [ r0.clone(), r1 ]
             } else {
-                dual_roots.push(R2 { x, y: y.clone() });
+                [ r1, r0.clone() ]
+            };
+            if *double_root {
+                dual_roots.push(R2 { x:  x.clone(), y: y.clone() });
+                dual_roots.push(R2 { x: -x.clone(), y: y.clone() });
+            } else {
+                dual_roots.push(R2 { x, y });
             }
         }
+        // println!("roots: {:?}", &roots);
+        // println!("dual_roots: {:?}", dual_roots);
         dual_roots
     }
 }

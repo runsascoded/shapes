@@ -130,9 +130,23 @@ where R2<D>: TransformR2<D>,
 
 #[cfg(test)]
 mod tests {
-    use crate::dual::Dual;
+    use crate::{dual::Dual, circle::Circle, to::To};
 
     use super::*;
+
+    #[test]
+    fn test_unit_intersections_d() {
+        let e: XYRR<f64> = Circle { idx: 0, c: R2 { x: 0., y: -1. }, r: 1. }.to();
+        let points = e.unit_intersections();
+        // println!("points: {:?}", points);
+        let expected = [
+            R2 { x: -0.866, y: -0.5 },
+            R2 { x:  0.866, y: -0.5 },
+        ];
+        assert_eq!(points.len(), expected.len());
+        assert_relative_eq!(points[0], expected[0], epsilon = 1e-3);
+        assert_relative_eq!(points[1], expected[1], epsilon = 1e-3);
+    }
 
     #[test]
     fn test_unit_intersections_1_1_2_3() {
