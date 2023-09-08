@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 use crate::{
     dual::{D, Dual},
-    r2::R2, shape::{Duals, Shape}, transform::{Projection, CanTransform}, transform::Transform::{Scale, Translate, self}, ellipses::xyrr::XYRR, sqrt::Sqrt, math::IsNormal
+    r2::R2, shape::{Duals, Shape}, transform::{Projection, CanTransform}, transform::Transform::{Scale, ScaleXY, Translate, self}, ellipses::xyrr::XYRR, sqrt::Sqrt, math::IsNormal, to::To
 };
 
 #[derive(Debug, Clone, Copy, From, PartialEq, Tsify, Serialize, Deserialize)]
@@ -104,17 +104,30 @@ where
     }
 }
 
-impl<
-    D
-    : Clone
-    + PartialEq
-    + Mul<Output = D>
-> CanTransform<D> for Circle<D>
-where
-    R2<D>
-    : Add<Output = R2<D>>
-    + Mul<Output = R2<D>>
-    + Mul<D, Output = R2<D>>,
+impl Mul<R2<f64>> for R2<Dual> {
+    type Output = R2<Dual>;
+    fn mul(self, rhs: R2<f64>) -> Self::Output {
+        R2 { x: self.x * rhs.x, y: self.y * rhs.y }
+    }
+}
+pub trait TransformD
+: Clone
++ Mul<Output = Self>
++ Mul<f64, Output = Self>
+{}
+impl TransformD for f64 {}
+impl TransformD for Dual {}
+pub trait TransformR2<D>
+: Add<R2<D>, Output = R2<D>>
++ Mul<R2<D>, Output = R2<D>>
++ Mul<D, Output = R2<D>>
++ To<R2<f64>>
+{}
+impl TransformR2<f64> for R2<f64> {}
+impl TransformR2<Dual> for R2<Dual> {}
+
+impl<D: TransformD> CanTransform<D> for Circle<D>
+where R2<D>: TransformR2<D>,
 {
     type Output = Shape<D>;
     fn transform(&self, transform: &Transform<D>) -> Shape<D> {
@@ -126,20 +139,20 @@ where
                     r: self.r.clone()
                 }.into(),
             Scale(s) => {
-                let R2 { x, y } = s.clone();
-                if x == y {
-                    Circle {
-                        idx: self.idx,
-                        c: self.c.clone() * x.clone(),
-                        r: self.r.clone() * x,
-                    }.into()
-                } else {
-                    XYRR {
-                        idx: self.idx,
-                        c: s.clone() * self.c.clone(),
-                        r: s.clone() * self.r.clone(),
-                    }.into()
-                }
+                let r = &self.r;
+                Circle {
+                    idx: self.idx,
+                    c: self.c.clone() * s.clone(),
+                    r: r.clone() * s.clone(),
+                }.into()
+            }
+            ScaleXY(s) => {
+                let r = &self.r;
+                XYRR {
+                    idx: self.idx,
+                    c: self.c.clone() * s.clone(),
+                    r: s * r.clone(),
+                }.into()
             },
             // Rotate(a) => {
             //     let c = rotate::Rotate::rotate(&self.c.clone(), a);
@@ -160,7 +173,7 @@ where
         let c = self.c.clone();
         let r = self.r.clone();
         let translate = Translate(-c.clone());
-        let scale = Scale(R2 { x: 1. / r.clone(), y: 1. / r.clone() });
+        let scale = Scale(1. / r.clone());
         let transforms = vec![ translate, scale ];
         Projection(transforms)
     }

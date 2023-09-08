@@ -1,16 +1,29 @@
-use std::fmt::{Formatter, Display, self};
+use std::{fmt::{Formatter, Display, self}, ops::Add, iter::Sum};
 
-use crate::{dual::D, segment::Segment};
+use crate::{segment::Segment, intersection::Intersection, edge::{Edge, EdgeArg}, math::{Abs, AbsArg}, r2::R2, to::To, dual::Dual};
 
 #[derive(Debug, Clone)]
-pub struct Region {
+pub struct Region<D> {
     pub key: String,
-    pub segments: Vec<Segment>,
+    pub segments: Vec<Segment<D>>,
     pub container_idxs: Vec<usize>,
     pub container_bmp: Vec<bool>,
 }
 
-impl Region {
+pub trait RegionArg
+: EdgeArg
++ AbsArg
++ Sum
++ Add<Output = Self>
+{}
+impl RegionArg for f64 {}
+impl RegionArg for Dual {}
+
+impl<D: RegionArg> Region<D>
+where
+    Intersection<D>: Display,
+    R2<D>: To<R2<f64>>,
+{
     pub fn len(&self) -> usize {
         self.segments.len()
     }
@@ -44,7 +57,10 @@ impl Region {
     }
 }
 
-impl Display for Region {
+impl<D: Display> Display for Region<D>
+where
+    Edge<D>: Display
+{
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f, "R({})",

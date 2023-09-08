@@ -57,6 +57,9 @@ impl Shape<D> {
             Shape::XYRR(e) => e.n(),
         }
     }
+}
+
+impl<D: Zero> Shape<D> {
     pub fn zero(&self) -> D {
         match self {
             Shape::Circle(c) => Zero::zero(&c.r),
@@ -65,19 +68,11 @@ impl Shape<D> {
     }
 }
 
-impl<
-    D
-    : Clone
-    + PartialEq
-    + Eq
-    + Mul<Output = D>
-> CanTransform<D> for Shape<D>
+impl<D: circle::TransformD> CanTransform<D> for Shape<D>
 where
     R2<D>
-    :
-    Add<Output = R2<D>>
-    + Mul<Output = R2<D>>
-    + Mul<D, Output = R2<D>>,
+    : circle::TransformR2<D>
+    + xyrr::TransformR2<D>,
 {
     type Output = Shape<D>;
     fn transform(&self, transform: &Transform<D>) -> Shape<D> {
@@ -88,4 +83,4 @@ where
     }
 }
 
-pub type S = Rc<RefCell<Shape<D>>>;
+pub type S<D> = Rc<RefCell<Shape<D>>>;

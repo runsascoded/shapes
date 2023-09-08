@@ -2,7 +2,7 @@ use std::ops::{Sub, Mul, Add, Div, Neg};
 
 use log::debug;
 
-use crate::{circle::Circle, ellipses::xyrr::XYRR, r2::R2, sqrt::Sqrt, shape::Shape, intersect::{PointToTheta, PointToThetaArg}, transform::CanProject};
+use crate::{circle::Circle, ellipses::xyrr::XYRR, r2::R2, sqrt::Sqrt, shape::Shape, theta_points::{ThetaPoints, ThetaPointsArg}, transform::CanProject};
 
 pub trait Distance<O> {
     type Output;
@@ -40,7 +40,7 @@ where
 
 impl<
     D
-    : PointToThetaArg
+    : ThetaPointsArg
     + Sub<Output = D>
 > Distance<XYRR<D>> for Circle<D>
 where
@@ -58,7 +58,7 @@ where
 
 impl<
     D
-    : PointToThetaArg
+    : ThetaPointsArg
     + Sub<Output = D>
 > Distance<XYRR<D>> for XYRR<D>
 where
@@ -89,7 +89,7 @@ impl<
     'a,
     D
     : 'a
-    + PointToThetaArg
+    + ThetaPointsArg
     // + Clone
     // + Into<f64>
     // + Sqrt

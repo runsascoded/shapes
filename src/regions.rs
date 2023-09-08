@@ -50,7 +50,7 @@ pub struct Regions {
 }
 
 impl Regions {
-    pub fn new(intersections: &Intersections) -> Self {
+    pub fn new(intersections: &Intersections<D>) -> Self {
         let shapes = intersections.shapes.clone();
         let points = intersections.nodes.iter().map(|n| Point {
             i: n.borrow().i.clone(),
@@ -78,7 +78,7 @@ impl Regions {
             container_bmp: r.container_bmp.clone(),
         }).collect();
         Regions {
-            shapes,
+            shapes: shapes.iter().map(|s| s.v()).collect(),
             points,
             edges,
             regions,

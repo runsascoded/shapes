@@ -1,7 +1,7 @@
 use std::{fmt::{Debug, Display}, iter::{Sum, repeat}, ops::{Add, AddAssign, Deref, Div, Mul, Neg, Sub, SubAssign}};
 
 use approx::{AbsDiffEq, RelativeEq};
-use crate::fmt::Fmt;
+use crate::{fmt::Fmt, to::To};
 use nalgebra::{ComplexField, Dyn, Matrix, RealField, U1};
 use num_dual::{Derivative, DualDVec64};
 use num_traits::Zero;
@@ -170,6 +170,12 @@ impl RelativeEq for Dual {
 
     fn relative_eq(&self, other: &Self, epsilon: Self::Epsilon, max_relative: Self::Epsilon) -> bool {
         self.v().relative_eq(&other.v(), epsilon, max_relative) && self.d().relative_eq(&other.d(), epsilon, max_relative)
+    }
+}
+
+impl To<f64> for Dual {
+    fn to(self) -> f64 {
+        self.v()
     }
 }
 

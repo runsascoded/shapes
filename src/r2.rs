@@ -1,14 +1,14 @@
 use std::{ops::{Sub, Mul, Add, Div}, fmt::{Display, Formatter, self}};
 use approx::{AbsDiffEq, RelativeEq};
 
-use derive_more::Neg;
-use nalgebra::{ComplexField, RealField};
+use derive_more::{Neg, From};
+use nalgebra::ComplexField;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::{dual::{Dual, D}, rotate::{Rotate, RotateArg}, transform::{Transform::{self, Translate, Scale}, CanTransform}, sqrt::Sqrt, trig::Trig};
+use crate::{dual::Dual, rotate::{Rotate, RotateArg}, transform::{Transform::{self, Translate, Scale, ScaleXY}, CanTransform}, sqrt::Sqrt, trig::Trig, to::To};
 
-#[derive(Debug, Copy, Clone, Neg, PartialEq, Tsify, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, From, Neg, PartialEq, Tsify, Serialize, Deserialize)]
 pub struct R2<D> {
     pub x: D,
     pub y: D,
@@ -44,44 +44,30 @@ impl<
         match transform {
             Translate(v) => self.clone() + v,
             Scale(v) => self.clone() * v,
+            ScaleXY(v) => self.clone() * v,
             // Transform::Rotate(a) => self.rotate(&a),
         }
     }
 }
 
-// impl<D: Clone + Trig + Add<Output = D> + Sub<Output = D> + Mul<Output = D>> R2<D>
-// impl<D: CanRotate> R2<D>
+// impl<
+//     'a,
+//     D
+//     : 'a
+//     + RotateArg
+// > R2<D>
+// where
+//     R2<D>
+//     : Mul<&'a R2<D>, Output = R2<D>>,
 // {
-//     pub fn rotate(&self, theta: &D) -> R2<D> {
-//         let c = theta.cos();
-//         let s = theta.sin();
-//         let x = &self.x;
-//         let y = &self.y;
-//         R2 {
-//             x: x.clone() * c.clone() - y.clone() * s.clone(),
-//             y: x.clone() * s + y.clone() * c,
+//     pub fn transform(&'a self, t: Transform<D>) -> Self {
+//         match t {
+//             Transform::Translate(v) => v + self,
+//             Transform::ScaleXY(v) => v * self,
+//             // Transform::Rotate(a) => self.rotate(&a),
 //         }
 //     }
 // }
-
-impl<
-    'a,
-    D
-    : 'a
-    + RotateArg
-> R2<D>
-where
-    R2<D>
-    : Mul<&'a R2<D>, Output = R2<D>>,
-{
-    pub fn transform(&'a self, t: Transform<D>) -> Self {
-        match t {
-            Transform::Translate(v) => v + self,
-            Transform::Scale(v) => v * self,
-            // Transform::Rotate(a) => self.rotate(&a),
-        }
-    }
-}
 
 impl<
     D
@@ -101,17 +87,17 @@ impl R2<Dual> {
     }
 }
 
+impl<O, D: To<O>> To<R2<O>> for R2<D> {
+    fn to(self) -> R2<O> {
+        R2 { x: self.x.to(), y: self.y.to() }
+    }
+}
+
 impl<D: Trig> R2<D> {
     pub fn atan2(&self) -> D {
         self.y.atan2(&self.x)
     }
 }
-
-// impl<D: RealField> R2<D> {
-//     pub fn atan2(&self) -> D {
-//         self.x.atan2(self.y)
-//     }
-// }
 
 impl<'a, D: 'a + Clone + Add<Output = D> + Mul<&'a D, Output = D> + ComplexField> R2<D>
 {

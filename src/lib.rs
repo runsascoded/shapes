@@ -29,6 +29,8 @@ mod rotate;
 mod segment;
 mod shape;
 mod sqrt;
+mod theta_points;
+mod to;
 mod transform;
 mod trig;
 mod zero;

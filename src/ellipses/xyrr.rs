@@ -4,7 +4,7 @@ use derive_more::From;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::{r2::R2, rotate::{Rotate, RotateArg}, dual::{D, Dual}, shape::Duals, transform::{Transform::{Scale, Translate, self}, CanTransform, Projection}};
+use crate::{r2::R2, rotate::{Rotate, RotateArg}, dual::{D, Dual}, shape::Duals, transform::{Transform::{Scale, ScaleXY, Translate, self}, CanTransform, Projection}};
 
 use super::{xyrrt::XYRRT, cdef::{CDEF, self}};
 
@@ -84,16 +84,26 @@ where
     pub fn projection(&self) -> Projection<D> {
         Projection(vec![
             Translate(-self.c.clone()),
-            Scale(1. / self.r.clone()),
+            ScaleXY(1. / self.r.clone()),
         ])
     }
 }
 
+// pub trait TransformR2
+// : Add<Output = Self>
+// + Mul<Output = Self>
+// {}
+
+pub trait TransformR2<D>
+: Add<R2<D>, Output = R2<D>>
++ Mul<R2<D>, Output = R2<D>>
++ Mul<D, Output = R2<D>>
+{}
+impl TransformR2<f64> for R2<f64> {}
+impl TransformR2<Dual> for R2<Dual> {}
+
 impl<D: Clone> CanTransform<D> for XYRR<D>
-where
-    R2<D>
-    : Add<Output = R2<D>>
-    + Mul<Output = R2<D>>,
+where R2<D>: TransformR2<D>,
 {
     type Output = XYRR<D>;
     fn transform(&self, t: &Transform<D>) -> XYRR<D> {
@@ -104,6 +114,11 @@ where
                 r: self.r.clone(),
             },
             Scale(v) => XYRR {
+                idx: self.idx,
+                c: self.c.clone() * v.clone(),
+                r: self.r.clone() * v,
+            },
+            ScaleXY(v) => XYRR {
                 idx: self.idx,
                 c: self.c.clone() * v.clone(),
                 r: self.r.clone() * v,

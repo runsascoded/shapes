@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display, cell::Ref};
+use std::{collections::HashMap, fmt::Display};
 
 use log::{info, debug};
 use serde::{Deserialize, Serialize};
@@ -58,7 +58,9 @@ impl Display for Error {
 
 impl Diagram {
     pub fn new(inputs: Vec<Input>, targets: Targets, total_target_area: Option<f64>) -> Diagram {
-        let intersections = Intersections::new(&inputs);
+        let shapes: Vec<Shape<D>> = inputs.iter().map(|(c, duals)| c.dual(duals)).collect();
+        let intersections = Intersections::new(shapes);
+        let shapes = &intersections.shapes;
         // let duals = intersections.duals;
         let all_key = String::from_utf8(vec![b'*'; intersections.len()]).unwrap();
         let mut expanded_targets = targets.clone();
@@ -75,14 +77,13 @@ impl Diagram {
         // Optional/Alternate loss function based on per-region squared errors, weights errors by region size:
         // let error = errors.values().into_iter().map(|e| e.error.clone() * &e.error).sum::<D>().sqrt();
         let regions = Regions::new(&intersections);
-        let duals = &intersections.duals;
 
         // Include penalties for erroneously-disjoint shapes
         // let mut disjoint_penalties = Vec::<DisjointPenalty>::new();
         let mut total_disjoint_penalty = Dual::zero(error.d().len());
         let n = inputs.len();
         for i in 0..(n - 1) {
-            let ci = duals[i].clone();
+            let ci = shapes[i].clone();
             for j in (i + 1)..n {
                 let mut key = String::from_utf8(vec![b'*'; n]).unwrap();
                 let chi = char::to_string(&char::from_digit(i as u32, 10).unwrap());
@@ -92,7 +93,7 @@ impl Diagram {
                 let target = expanded_targets.get(&key);
                 match target {
                     Some(target) => {
-                        match ci.borrow().distance(&*duals[j].borrow()) {
+                        match ci.distance(&shapes[j]) {
                             Some(gap) => {
                                 // disjoint_penalties.push(
                                 //     DisjointPenalty { i, j, gap: gap.clone(), target: target.clone() }
@@ -128,7 +129,7 @@ impl Diagram {
         self.error.1
     }
 
-    pub fn compute_errors(intersections: &Intersections, targets: &Targets, total_target_area: &f64, total_area: &Dual) -> Errors {
+    pub fn compute_errors(intersections: &Intersections<D>, targets: &Targets, total_target_area: &f64, total_area: &Dual) -> Errors {
         let n = intersections.len();
         let all_key = String::from_utf8(vec![b'*'; n]).unwrap();
         let none_key = String::from_utf8(vec![b'-'; n]).unwrap();

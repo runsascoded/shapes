@@ -7,7 +7,8 @@ use crate::{r2::R2, shape::Shape};
 #[derive(Debug, Display, Clone)]
 pub enum Transform<D> {
     Translate(R2<D>),
-    Scale(R2<D>),
+    Scale(D),
+    ScaleXY(R2<D>),
     // Rotate(D),
 }
 
@@ -20,7 +21,8 @@ f64: Div<D, Output = D>,
     fn neg(self) -> Self {
         match self {
             Transform::Translate(v) => Transform::Translate(-v),
-            Transform::Scale(v) => Transform::Scale(R2 { x: 1. / v.x, y: 1. / v.y }),
+            Transform::Scale(v) => Transform::Scale(1. / v),
+            Transform::ScaleXY(v) => Transform::ScaleXY(R2 { x: 1. / v.x, y: 1. / v.y }),
             // Transform::Rotate(a) => Transform::Rotate(-a),
         }
     }
