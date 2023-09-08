@@ -377,6 +377,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use crate::circle::Circle;
     use crate::deg::Deg;
     use crate::dual::Dual;
@@ -535,11 +537,41 @@ mod tests {
         let r2sqrt = f64::sqrt(1. + r2);
         let c0 = 1. / r2sqrt;
         let c1 = r2 * c0;
-        let ellipses = [
+        let ellipses = vec![
             Shape::XYRR(XYRR { idx: 0, c: R2 { x:      c0, y:      c1, }, r: R2 { x: 1., y: r , }, }),
             Shape::XYRR(XYRR { idx: 1, c: R2 { x: 1. + c0, y:      c1, }, r: R2 { x: 1., y: r , }, }),
-            Shape::XYRR(XYRR { idx: 2, c: R2 { x:      c1, y:      c0, }, r: R2 { x: r , y: 1., }, }),
-            Shape::XYRR(XYRR { idx: 3, c: R2 { x:      c1, y: 1. + c0, }, r: R2 { x: r , y: 1., }, }),
+            Shape::XYRR(XYRR { idx: 2, c: R2 { x:      c1, y: 1. + c0, }, r: R2 { x: r , y: 1., }, }),
+            Shape::XYRR(XYRR { idx: 3, c: R2 { x:      c1, y:      c0, }, r: R2 { x: r , y: 1., }, }),
         ];
+        let intersections = Intersections::new(ellipses);
+        assert_eq!(intersections.nodes.len(), 14);
+        assert_eq!(intersections.edges.len(), 28);
+        let mut regions = intersections.regions;
+        regions.sort_by_cached_key(|r| OrderedFloat(r.area()));
+
+        let expected: HashMap<&str, f64> = [
+            ("01-3", 0.15744583391178074),
+            ("0-23", 0.15744583391178418),
+            ("-1-3", 0.5830467212121324),
+            ("0-2-", 0.5830467212121349),
+            ("0123", 0.632711280011059),
+            ("01--", 0.691115932721805),
+            ("--23", 0.6911159327218149),
+            ("0--3", 0.8415779241718238),
+            ("012-", 0.9754663505728484),
+            ("-123", 0.9754663505728542),
+            ("-12-", 1.0010372353827393),
+            ("-1--", 1.2668956027943268),
+            ("--2-", 1.2668956027943343),
+            ("---3", 2.9962283967742938),
+            ("0---", 2.9962674848728885),
+        ].into();
+        assert_eq!(regions.len(), expected.len());
+        for region in regions {
+            let key = region.key.clone();
+            let area = region.area();
+            assert_eq!(area, *expected.get(key.as_str()).unwrap());
+            // println!("{}: {}", key, area);
+        }
     }
 }
