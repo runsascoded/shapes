@@ -93,6 +93,24 @@ mod tests {
         ( "012",  1. ),  // 1 / 105
     ];
 
+    static VARIANT_CALLERS: [ (&str, f64); 15 ] = [
+        ( "0---", 633. ),
+        ( "-1--", 618. ),
+        ( "--2-", 187. ),
+        ( "---3", 319. ),
+        ( "01--", 112. ),
+        ( "0-2-",   0. ),
+        ( "0--3",  13. ),
+        ( "-12-",  14. ),
+        ( "-1-3",  55. ),
+        ( "--23",  21. ),
+        ( "012-",   1. ),
+        ( "01-3",  17. ),
+        ( "0-23",   0. ),
+        ( "-123",   9. ),
+        ( "0123",  36. ),
+    ];
+
     #[derive(Clone)]
     pub struct ExpectedStep {
         vals: Vec<f64>,
@@ -702,5 +720,25 @@ mod tests {
         ].to();
 
         test(inputs, FIZZ_BUZZ_BAZZ.into(), expecteds, 0.7, 100)
+    }
+
+    use crate::intersections::tests::ellipses4;
+
+    #[test]
+    fn variant_callers() {
+        let ellipses = ellipses4(2.);
+        let [ e0, e1, e2, e3 ] = ellipses;
+        let zs = || vec![0.; 12];
+        let ds = |i: usize| one_hot(i, 12);
+        let inputs: Vec<Input> = vec![
+            ( e0, vec![ zs( ), zs( ), zs(  ), zs(  ), ] ),
+            ( e1, vec![ ds(0), ds(1), ds( 2), ds( 3), ] ),
+            ( e2, vec![ ds(4), ds(5), ds( 6), ds( 7), ] ),
+            ( e3, vec![ ds(8), ds(9), ds(10), ds(11), ] ),
+        ];
+        let expected: Vec<ExpectedStep> = vec![
+
+        ];
+        test(inputs, VARIANT_CALLERS.into(), expected, 0.01, 1)
     }
 }

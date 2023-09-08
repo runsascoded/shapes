@@ -376,7 +376,7 @@ where
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use std::collections::HashMap;
 
     use crate::circle::Circle;
@@ -530,20 +530,22 @@ mod tests {
         println!();
     }
 
-    #[test]
-    fn test_4_ellipses() {
-        let r = 2.;
+    pub fn ellipses4(r: f64) -> [Shape<f64>; 4] {
         let r2 = r * r;
-        let r2sqrt = f64::sqrt(1. + r2);
+        let r2sqrt = (1. + r2).sqrt();
         let c0 = 1. / r2sqrt;
         let c1 = r2 * c0;
-        let ellipses = vec![
+        [
             Shape::XYRR(XYRR { idx: 0, c: R2 { x:      c0, y:      c1, }, r: R2 { x: 1., y: r , }, }),
             Shape::XYRR(XYRR { idx: 1, c: R2 { x: 1. + c0, y:      c1, }, r: R2 { x: 1., y: r , }, }),
             Shape::XYRR(XYRR { idx: 2, c: R2 { x:      c1, y: 1. + c0, }, r: R2 { x: r , y: 1., }, }),
             Shape::XYRR(XYRR { idx: 3, c: R2 { x:      c1, y:      c0, }, r: R2 { x: r , y: 1., }, }),
-        ];
-        let intersections = Intersections::new(ellipses);
+        ]
+    }
+
+    #[test]
+    fn test_4_ellipses() {
+        let intersections = Intersections::new(ellipses4(2.).into());
         assert_eq!(intersections.nodes.len(), 14);
         assert_eq!(intersections.edges.len(), 28);
         let mut regions = intersections.regions;
