@@ -93,6 +93,7 @@ mod tests {
         ( "012",  1. ),  // 1 / 105
     ];
 
+    #[derive(Clone)]
     pub struct ExpectedStep {
         vals: Vec<f64>,
         err: f64,
@@ -332,7 +333,7 @@ mod tests {
             ([ 1.113, 0.775 ], 5.551e-17, [ 0.440,  1.046 ]),  // Step 64
         ];
         let mut linux = macos.clone();
-        linux[53] = ([ 1.113, 0.775 ], 3.114e-14, [ 0.440,  1.046 ]);  // Step 53
+        linux[53] = ([ 1.113, 0.775 ], 3.1197e-14, [ 0.440,  1.046 ]);  // Step 53
 
         let expecteds = if os == "macos" { macos } else { linux };
 
@@ -359,7 +360,8 @@ mod tests {
                 ]),
         ];
 
-        let expecteds: Vec<ExpectedStep> = vec![
+        let os = env::consts::OS;
+        let macos = vec![
             ([ 1.000, 1.000, 1.000 ], 0.38587  , [ 0.426, -0.834, -0.622 ]),  // Step 0
             ([ 1.117, 0.771, 0.829 ], 0.03439  , [-0.436, -0.431, -0.614 ]),  // Step 1
             ([ 1.103, 0.757, 0.810 ], 0.01255  , [ 0.274, -0.884, -0.696 ]),  // Step 2
@@ -416,6 +418,10 @@ mod tests {
             // ([ 1.100, 0.749, 0.801 ], 2.498e-16, [-0.719,  0.452,  0.083 ]),  // Step 52
             // ([ 1.100, 0.749, 0.801 ], 1.943e-16, [ 0.719, -0.452, -0.083 ]),  // Step 53
         ].to();
+        let mut linux: Vec<ExpectedStep> = macos.clone();
+        linux[39] = ([ 1.100, 0.749, 0.801 ], 1.974e-13, [-0.719,  0.452,  0.083 ]).into();  // Step 39
+        linux[40] = ([ 1.100, 0.749, 0.801 ], 1.550e-13, [-0.449, -0.433, -0.617 ]).into();  // Step 40
+        let expecteds = if os == "macos" { macos } else { linux };
 
         test(inputs, FIZZ_BUZZ.into(), expecteds, 0.8, 40)
     }
