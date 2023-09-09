@@ -1,4 +1,4 @@
-use std::ops::{Div, Neg, Add, Mul, Sub};
+use std::{ops::{Div, Neg, Add, Mul, Sub}, fmt::Display};
 
 use crate::{intersection::Intersection, circle::{Circle, self}, dual::{D, Dual}, ellipses::cdef, r2::R2, transform::{CanProject, CanTransform, HasProjection}, shape::Shape, trig::Trig, theta_points::{ThetaPoints, ThetaPointsArg}};
 
@@ -18,6 +18,7 @@ impl Intersect<Circle<f64>, D> for Circle<f64> {
 
 pub trait IntersectShapesArg
 : Clone
++ Display
 + PartialOrd
 + Trig
 + Neg<Output = Self>

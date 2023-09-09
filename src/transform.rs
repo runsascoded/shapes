@@ -1,4 +1,4 @@
-use std::ops::{Neg, Div};
+use std::{ops::{Neg, Div}, fmt};
 
 use derive_more::Display;
 
@@ -12,7 +12,7 @@ pub enum Transform<D> {
     // Rotate(D),
 }
 
-impl<D: Neg<Output = D>> Neg for Transform<D>
+impl<D: Clone + fmt::Display + Neg<Output = D>> Neg for Transform<D>
 where
     R2<D>: Neg<Output = R2<D>>,
     f64: Div<D, Output = D>,
@@ -31,7 +31,7 @@ where
 #[derive(Debug, Display, Clone)]
 pub struct Projection<D>(pub Vec<Transform<D>>);
 
-impl<D: Neg<Output = D>> Neg for Projection<D>
+impl<D: Clone + fmt::Display + Neg<Output = D>> Neg for Projection<D>
 where
 R2<D>: Neg<Output = R2<D>>,
 f64: Div<D, Output = D>,

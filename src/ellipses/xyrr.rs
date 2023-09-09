@@ -102,7 +102,10 @@ pub trait TransformR2<D>
 impl TransformR2<f64> for R2<f64> {}
 impl TransformR2<Dual> for R2<Dual> {}
 
-impl<D: Clone> CanTransform<D> for XYRR<D>
+pub trait TransformD: Clone + Display {}
+impl<D: Clone + Display> TransformD for D {}
+
+impl<D: TransformD> CanTransform<D> for XYRR<D>
 where R2<D>: TransformR2<D>,
 {
     type Output = XYRR<D>;

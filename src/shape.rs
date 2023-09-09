@@ -83,7 +83,11 @@ where
     }
 }
 
-impl<D: circle::TransformD> CanTransform<D> for Shape<D>
+impl<
+    D
+    : circle::TransformD
+    + xyrr::TransformD
+> CanTransform<D> for Shape<D>
 where
     R2<D>
     : circle::TransformR2<D>

@@ -4,6 +4,8 @@ extern crate console_error_panic_hook;
 
 mod areas;
 mod circle;
+mod complex;
+mod cubic;
 mod d5;
 mod deg;
 mod diagram;
