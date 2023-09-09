@@ -1,8 +1,8 @@
-use std::{ops::{Neg, Div}, fmt};
+use std::ops::{Neg, Div};
 
 use derive_more::Display;
 
-use crate::{r2::R2, shape::Shape};
+use crate::r2::R2;
 
 #[derive(Debug, Display, Clone)]
 pub enum Transform<D> {
@@ -44,19 +44,6 @@ f64: Div<D, Output = D>,
 
 pub trait HasProjection<D> {
     fn projection(&self) -> Projection<D>;
-}
-
-impl<D: Clone + fmt::Display> HasProjection<D> for Shape<D>
-where
-    R2<D>: Neg<Output = R2<D>>,
-    f64: Div<D, Output = D>,
-{
-    fn projection(&self) -> Projection<D> {
-        match self {
-            Shape::Circle(c) => c.projection(),
-            Shape::XYRR(e) => e.projection(),
-        }
-    }
 }
 
 pub trait CanProject<D> {

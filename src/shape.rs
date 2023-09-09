@@ -1,15 +1,17 @@
-use std::{rc::Rc, cell::RefCell, ops::{Mul, Add}};
+use std::{rc::Rc, cell::RefCell, ops::{Neg, Div}, fmt};
 
 use derive_more::{From, Display};
 use serde::{Deserialize, Serialize};
 use tsify::{declare, Tsify};
 
-use crate::{dual::D, circle, ellipses::xyrr, zero::Zero, transform::{Transform, CanTransform}, r2::R2};
+use crate::{dual::D, circle, ellipses::xyrr, zero::Zero, transform::{Transform, CanTransform, HasProjection, Projection}, r2::R2};
 
 #[declare]
 pub type Duals = Vec<Vec<f64>>;
 #[declare]
 pub type Input = (Shape<f64>, Duals);
+
+pub type S<D> = Rc<RefCell<Shape<D>>>;
 
 #[derive(Debug, Display, Clone, From, PartialEq, Serialize, Deserialize, Tsify)]
 pub enum Shape<D> {
@@ -68,6 +70,19 @@ impl<D: Zero> Shape<D> {
     }
 }
 
+impl<D: Clone + fmt::Display> HasProjection<D> for Shape<D>
+where
+    R2<D>: Neg<Output = R2<D>>,
+    f64: Div<D, Output = D>,
+{
+    fn projection(&self) -> Projection<D> {
+        match self {
+            Shape::Circle(c) => c.projection(),
+            Shape::XYRR(e) => e.projection(),
+        }
+    }
+}
+
 impl<D: circle::TransformD> CanTransform<D> for Shape<D>
 where
     R2<D>
@@ -82,5 +97,3 @@ where
         }
     }
 }
-
-pub type S<D> = Rc<RefCell<Shape<D>>>;

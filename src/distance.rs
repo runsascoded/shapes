@@ -76,8 +76,8 @@ where
         let p1 = Shape::XYRR(o.clone()).point(-t0);
         let radii = (p0.clone() - self.c.clone()).norm() + (p1.clone() - o.c.clone()).norm();
         let gap = distance.clone() - radii.clone();
-        debug!("distance: {} - {} = {}", distance, radii, gap.clone());
         if gap.clone().into() > 0. {
+            debug!("gap {}-{}: {} - {} = {}", self.idx, o.idx, distance, radii, gap.clone());
             Some(gap)
         } else {
             None
@@ -90,12 +90,7 @@ impl<
     D
     : 'a
     + ThetaPointsArg
-    // + Clone
-    // + Into<f64>
-    // + Sqrt
-    // + Add<Output = D>
     + Sub<Output = D>
-    // + Mul<Output = D>
 > Distance<Shape<D>> for Shape<D>
 where
     R2<D>

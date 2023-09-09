@@ -16,7 +16,7 @@ pub struct R2<D> {
 
 impl<D: Display> Display for R2<D> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "({:.3}, {:.3})", self.x, self.y)
+        write!(f, "({:.6}, {:.6})", self.x, self.y)
     }
 }
 

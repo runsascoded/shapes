@@ -14,13 +14,6 @@ pub type Targets = HashMap<String, f64>;
 #[declare]
 pub type Errors = HashMap<String, Error>;
 
-pub struct DisjointPenalty {
-    pub i: usize,
-    pub j: usize,
-    pub gap: Dual,
-    pub target: f64,
-}
-
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
 pub struct Diagram {
     pub inputs: Vec<Input>,
@@ -95,9 +88,6 @@ impl Diagram {
                     Some(target) => {
                         match ci.distance(&shapes[j]) {
                             Some(gap) => {
-                                // disjoint_penalties.push(
-                                //     DisjointPenalty { i, j, gap: gap.clone(), target: target.clone() }
-                                // );
                                 debug!("  disjoint penalty! {}: {} * {}", key, &gap, target);
                                 total_disjoint_penalty += gap * target;
                             },
@@ -210,7 +200,7 @@ impl Diagram {
             )
         }).collect::<Vec<Input>>();
         for (cur, (nxt, _)) in shapes.iter().zip(new_inputs.iter()) {
-            debug!("  {} -> {}", cur, nxt);
+            debug!("  {} -> {:?}", cur, nxt);
         }
         Diagram::new(new_inputs, self.targets.clone(), Some(self.total_target_area))
     }

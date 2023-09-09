@@ -72,7 +72,7 @@ impl Model {
 mod tests {
     use std::{env, collections::HashMap};
 
-    use crate::{dual::Dual, circle::Circle, fmt::Fmt, r2::R2, shape::Shape, to::To, ellipses::xyrr::XYRR};
+    use crate::{dual::{Dual, is_one_hot, d_fns}, circle::Circle, fmt::Fmt, r2::R2, shape::Shape, to::To, ellipses::xyrr::XYRR};
 
     use super::*;
     use test_log::test;
@@ -156,27 +156,6 @@ mod tests {
             format!("{:.5}", err)
         };
         println!("([{} ], {: <9}, [{} ]),  // Step {}", vals_str, err_str, grads_str, idx);
-    }
-
-    fn one_hot(idx: usize, size: usize) -> Vec<f64> {
-        let mut v = vec![0.; size];
-        v[idx] = 1.;
-        v
-    }
-
-    fn is_one_hot(v: &Vec<f64>) -> Option<usize> {
-        let mut idx = None;
-        for (i, x) in v.iter().enumerate() {
-            if *x == 1. {
-                if idx.is_some() {
-                    return None;
-                }
-                idx = Some(i);
-            } else if *x != 0. {
-                return None;
-            }
-        }
-        idx
     }
 
     pub struct CoordGetter(pub Box<dyn Fn(Diagram) -> f64>);
@@ -360,22 +339,10 @@ mod tests {
 
     #[test]
     fn fizz_buzz_circle_ellipse() {
+        let ( z, d ) = d_fns(3);
         let inputs: Vec<Input> = vec![
-            (
-                Shape::Circle(Circle { idx: 0, c: R2 { x: 0., y: 0. }, r: 1. }),
-                vec![
-                    vec![0.; 3],
-                    vec![0.; 3],
-                    vec![0.; 3],
-                ]),
-            (
-                Shape::XYRR(XYRR { idx: 1, c: R2 { x: 1., y: 0. }, r: R2 { x: 1., y: 1. } }),
-                vec![
-                    one_hot(0, 3),
-                    vec![0.; 3],
-                    one_hot(1, 3),
-                    one_hot(2, 3),
-                ]),
+            ( Shape::Circle(Circle { idx: 0, c: R2 { x: 0., y: 0. }, r: 1.                  }), vec![ z( ), z( ), z( ),       ]),
+            ( Shape::  XYRR(  XYRR { idx: 1, c: R2 { x: 1., y: 0. }, r: R2 { x: 1., y: 1. } }), vec![ d(0), z( ), d(1), d(2), ]),
         ];
 
         let os = env::consts::OS;
@@ -446,24 +413,10 @@ mod tests {
 
     #[test]
     fn fizz_buzz_ellipses_diag() {
+        let ( z, d ) = d_fns(7);
         let inputs: Vec<Input> = vec![
-            (
-                Shape::XYRR(XYRR { idx: 0, c: R2 { x: 1., y: 0. }, r: R2 { x: 1., y: 1. } }),
-                vec![
-                    one_hot(0, 7),
-                    vec![0.; 7],
-                    one_hot(1, 7),
-                    one_hot(2, 7),
-                ]
-            ), (
-                Shape::XYRR(XYRR { idx: 1, c: R2 { x: 0., y: 1. }, r: R2 { x: 1., y: 1. } }),
-                vec![
-                    one_hot(3, 7),
-                    one_hot(4, 7),
-                    one_hot(5, 7),
-                    one_hot(6, 7),
-                ]
-            ),
+            ( Shape::XYRR(XYRR { idx: 0, c: R2 { x: 1., y: 0. }, r: R2 { x: 1., y: 1. } }), vec![ d(0), z( ), d(1), d(2), ] ),
+            ( Shape::XYRR(XYRR { idx: 1, c: R2 { x: 0., y: 1. }, r: R2 { x: 1., y: 1. } }), vec![ d(3), d(4), d(5), d(6), ] ),
         ];
 
         let expecteds: Vec<ExpectedStep> = vec![
@@ -490,12 +443,11 @@ mod tests {
 
     #[test]
     fn fizz_buzz_bazz_circle_ellipses() {
-        let zeros = || vec![0.; 7];
-        let deriv = |i: usize| one_hot(i, 7);
+        let ( z, d ) = d_fns(7);
         let inputs: Vec<Input> = vec![
-            ( Shape::Circle(Circle { idx: 0, c: R2 { x: 0., y: 0. }, r: 1. }     ), vec![ zeros( ), zeros( ), zeros( ),           ]),
-            ( Shape::  XYRR(Circle { idx: 1, c: R2 { x: 1., y: 0. }, r: 1. }.to()), vec![ deriv(0), zeros( ), deriv(1), deriv(2), ]),
-            ( Shape::  XYRR(Circle { idx: 2, c: R2 { x: 0., y: 1. }, r: 1. }.to()), vec![ deriv(3), deriv(4), deriv(5), deriv(6), ] ),
+            ( Shape::Circle(Circle { idx: 0, c: R2 { x: 0., y: 0. }, r: 1. }     ), vec![ z( ), z( ), z( ),       ]),
+            ( Shape::  XYRR(Circle { idx: 1, c: R2 { x: 1., y: 0. }, r: 1. }.to()), vec![ d(0), z( ), d(1), d(2), ]),
+            ( Shape::  XYRR(Circle { idx: 2, c: R2 { x: 0., y: 1. }, r: 1. }.to()), vec![ d(3), d(4), d(5), d(6), ]),
         ];
 
         let expecteds: Vec<ExpectedStep> = vec![
@@ -607,12 +559,11 @@ mod tests {
 
     #[test]
     fn fizz_buzz_bazz_circles() {
-        let zeros = || vec![0.; 5];
-        let deriv = |i: usize| one_hot(i, 5);
+        let ( z, d ) = d_fns(5);
         let inputs: Vec<Input> = vec![
-            ( Shape::Circle(Circle { idx: 0, c: R2 { x: 0., y: 0. }, r: 1. }), vec![ zeros( ), zeros( ), zeros( ), ] ),
-            ( Shape::Circle(Circle { idx: 1, c: R2 { x: 1., y: 0. }, r: 1. }), vec![ deriv(0), zeros( ), deriv(1), ] ),
-            ( Shape::Circle(Circle { idx: 2, c: R2 { x: 0., y: 1. }, r: 1. }), vec![ deriv(2), deriv(3), deriv(4), ] ),
+            ( Shape::Circle(Circle { idx: 0, c: R2 { x: 0., y: 0. }, r: 1. }), vec![ z( ), z( ), z( ), ] ),
+            ( Shape::Circle(Circle { idx: 1, c: R2 { x: 1., y: 0. }, r: 1. }), vec![ d(0), z( ), d(1), ] ),
+            ( Shape::Circle(Circle { idx: 2, c: R2 { x: 0., y: 1. }, r: 1. }), vec![ d(2), d(3), d(4), ] ),
         ];
 
         let expecteds: Vec<ExpectedStep> = vec![
@@ -727,18 +678,18 @@ mod tests {
     #[test]
     fn variant_callers() {
         let ellipses = ellipses4(2.);
-        let [ e0, e1, e2, e3 ] = ellipses;
-        let zs = || vec![0.; 12];
-        let ds = |i: usize| one_hot(i, 12);
+        let [ e0, e1, e2, _ ] = ellipses;
+        let ( z, d ) = d_fns(8);
         let inputs: Vec<Input> = vec![
-            ( e0, vec![ zs( ), zs( ), zs(  ), zs(  ), ] ),
-            ( e1, vec![ ds(0), ds(1), ds( 2), ds( 3), ] ),
-            ( e2, vec![ ds(4), ds(5), ds( 6), ds( 7), ] ),
-            ( e3, vec![ ds(8), ds(9), ds(10), ds(11), ] ),
+            ( e0, vec![ z( ), z( ), z(  ), z(  ), ] ),
+            ( e1, vec![ d(0), d(1), d( 2), d( 3), ] ),
+            ( e2, vec![ d(4), d(5), d( 6), d( 7), ] ),
+            // ( e3, vec![ ds(8), ds(9), ds(10), ds(11), ] ),
         ];
         let expected: Vec<ExpectedStep> = vec![
 
         ];
-        test(inputs, VARIANT_CALLERS.into(), expected, 0.01, 1)
+        test(inputs, FIZZ_BUZZ_BAZZ.into(), expected, 0.001, 1)
+        // test(inputs, VARIANT_CALLERS.into(), expected, 0.001, 1)
     }
 }

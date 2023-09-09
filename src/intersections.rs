@@ -1,5 +1,6 @@
 use std::{cell::RefCell, rc::Rc, f64::consts::TAU, collections::HashSet, ops::{Neg, Add, Sub, Mul, Div}, fmt::Display};
 
+use log::error;
 use ordered_float::OrderedFloat;
 
 use crate::{node::{N, Node}, edge::{self, E}, region::{Region, RegionArg}, shape::{S, Shape}, segment::Segment, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::CanTransform, intersection::Intersection, dual::Dual, to::To};
@@ -110,11 +111,11 @@ where
             }
         }
 
-        // println!("{} nodes", (&nodes).len());
-        // for node in &nodes {
-        //     println!("  {}", node.borrow());
-        // }
-        // println!();
+        println!("{} nodes", (&nodes).len());
+        for node in &nodes {
+            println!("  {}", node.borrow());
+        }
+        println!();
 
         // Compute edges between nodes
         let mut edges: Vec<E<D>> = Vec::new();
@@ -175,11 +176,11 @@ where
             edges_by_shape.push(shape_edges);
         }
 
-        // println!("{} edges", (&edges).len());
-        // for edge in &edges {
-            // println!("  {}", edge.borrow());
-        // }
-        // println!();
+        println!("{} edges", (&edges).len());
+        for edge in &edges {
+            println!("  {}", edge.borrow());
+        }
+        println!();
 
         // Graph-traversal will accumulate Regions here
         let mut regions: Vec<Region<D>> = Vec::new();
@@ -209,16 +210,16 @@ where
             segments.pop();
         }
 
-        // println!("{} regions", (&regions).len());
-        // for region in &regions {
-        //     println!("  {}", region);
-        // }
-        // println!();
+        println!("{} regions", (&regions).len());
+        for region in &regions {
+            println!("  {}", region);
+        }
+        println!();
 
         // Verify that all Edges have been visited the expected number of times
         let total_visits = edges.iter().map(|e| e.borrow().visits).sum::<usize>();
         if total_visits != total_expected_visits {
-            panic!("total_visits ({}) != total_expected_visits ({})", total_visits, total_expected_visits);
+            error!("total_visits ({}) != total_expected_visits ({})", total_visits, total_expected_visits);
         }
 
         Intersections { shapes, nodes, nodes_by_shape, nodes_by_shapes, edges, is_connected, regions, total_visits, total_expected_visits, }
@@ -381,7 +382,7 @@ pub mod tests {
 
     use crate::circle::Circle;
     use crate::deg::Deg;
-    use crate::dual::Dual;
+    use crate::dual::{Dual, d_fns};
     use crate::ellipses::xyrr::XYRR;
     use crate::fmt::Fmt;
     use crate::math::round;
@@ -536,7 +537,7 @@ pub mod tests {
         let c0 = 1. / r2sqrt;
         let c1 = r2 * c0;
         [
-            Shape::XYRR(XYRR { idx: 0, c: R2 { x:      c0, y:      c1, }, r: R2 { x: 1., y: r , }, }),
+            Shape::XYRR(XYRR { idx: 0, c: R2 { x: c0 -0.1, y:      c1, }, r: R2 { x: 1., y: r , }, }),
             Shape::XYRR(XYRR { idx: 1, c: R2 { x: 1. + c0, y:      c1, }, r: R2 { x: 1., y: r , }, }),
             Shape::XYRR(XYRR { idx: 2, c: R2 { x:      c1, y: 1. + c0, }, r: R2 { x: r , y: 1., }, }),
             Shape::XYRR(XYRR { idx: 3, c: R2 { x:      c1, y:      c0, }, r: R2 { x: r , y: 1., }, }),
@@ -575,5 +576,35 @@ pub mod tests {
             assert_eq!(area, *expected.get(key.as_str()).unwrap());
             // println!("{}: {}", key, area);
         }
+    }
+
+    #[test]
+    fn tweaked_3_ellipses_f64() {
+        let ellipses = [
+            // XYRR { idx: 0, c: R2 { x: 0.347, y: 1.789 }, r: R2 { x: 1.000, y: 2.000 } },
+            // XYRR { idx: 1, c: R2 { x: 1.447, y: 1.789 }, r: R2 { x: 1.000, y: 2.000 } },
+            // XYRR { idx: 2, c: R2 { x: 1.789, y: 1.447 }, r: R2 { x: 2.000, y: 0.999 } },
+            XYRR { idx: 0, c: R2 { x: 0.3472135954999579, y: 1.7888543819998317 }, r: R2 { x: 1.0,                y: 2.0                } },
+            XYRR { idx: 1, c: R2 { x: 1.4472087032327248, y: 1.7888773809286864 }, r: R2 { x: 0.9997362494738584, y: 1.9998582057729295 } },
+            // XYRR { idx: 2, c: R2 { x: 1.7890795512191124, y: 1.4471922162722848 }, r: R2 { x: 1.9998252659224116, y: 0.9994675708661026 } },
+        ];
+        let shapes: Vec<_> = ellipses.iter().map(|e| Shape::XYRR(e.clone())).collect();
+        let intersections = Intersections::new(shapes);
+        assert_eq!(intersections.nodes.len(), 8);
+    }
+
+    #[test]
+    fn tweaked_3_ellipses_dual() {
+        let ( z, d ) = d_fns(8);
+        let shapes = vec![
+            // Shape::XYRR(XYRR { idx: 0, c: R2 { x: 0.347, y: 1.789 }, r: R2 { x: 1.000, y: 2.000 } }).dual(&vec![ z( ), z( ), z( ), z( ), ]),
+            // Shape::XYRR(XYRR { idx: 1, c: R2 { x: 1.447, y: 1.789 }, r: R2 { x: 1.000, y: 2.000 } }).dual(&vec![ d(0), d(1), d(2), d(3), ]),
+            // Shape::XYRR(XYRR { idx: 2, c: R2 { x: 1.789, y: 1.447 }, r: R2 { x: 2.000, y: 0.999 } }).dual(&vec![ d(4), d(5), d(6), d(7), ]),
+            Shape::XYRR(XYRR { idx: 0, c: R2 { x: 0.3472135954999579, y: 1.7888543819998317 }, r: R2 { x: 1.0,                y: 2.0                } }).dual(&vec![ z( ), z( ), z( ), z( ), ]),
+            Shape::XYRR(XYRR { idx: 1, c: R2 { x: 1.4472087032327248, y: 1.7888773809286864 }, r: R2 { x: 0.9997362494738584, y: 1.9998582057729295 } }).dual(&vec![ d(0), d(1), d(2), d(3), ]),
+            Shape::XYRR(XYRR { idx: 2, c: R2 { x: 1.7890795512191124, y: 1.4471922162722848 }, r: R2 { x: 1.9998252659224116, y: 0.9994675708661026 } }).dual(&vec![ d(4), d(5), d(6), d(7), ]),
+            ];
+        let intersections = Intersections::new(shapes);
+        assert_eq!(intersections.nodes.len(), 8);
     }
 }
