@@ -213,35 +213,59 @@ mod tests {
         let [ a3, a2, a1, a0 ] = coeffs;
         // let f = |x: f64| a3 * x * x * x + a2 * x * x + a1 * x + a0;
         let roots = cubic::<f64>(a3, a2, a1, a0);
-        let ε = 1e-8;
+        let ε = 1e-5;
         let actual = crate::math::roots::Roots(roots.all());
-        let expected = crate::math::roots::Roots([ r0, r1, r2 ].into_iter().map(Complex::re).collect());
-        assert_relative_eq!(actual, expected, max_relative = ε);
-        // if r0 == r1 && r1 == r2 {
-        //     let expected = Mixed( r0, Complex { re: r0 / -2., im: r0 * Sqrt::sqrt(&3.) / 2. });
-        //     assert_relative_eq!(expected, roots, max_relative = ε);
-        // } else {
-        //     let expected_roots = [ r0, r1, r2 ];
-        //     assert_relative_eq!(Reals(expected_roots), roots, max_relative = ε);
-        // }
+        let expected_reals = crate::math::roots::Roots([ r0, r1, r2 ].into_iter().map(Complex::re).collect());
+        if r0 == r1 && r1 == r2 {
+            let r = r0;
+            let r2 = r / -2.;
+            let r32 = r2 * Sqrt::sqrt(&3.);
+            // Some triple-roots can be found precisely in f64, e.g. integers.
+            // x³ + 30x² + 300x + 1000 has a triple-root at -10., which this library has been observed to find, returning 3 roots of unity
+            // (scaled by some f64, in this case cbrt(-10)).
+            let expected_triple_root = crate::math::roots::Roots(vec![ Complex::re(r), Complex { re: r2, im: r32 }, Complex { re: r2, im: -r32 }]);
+            if !relative_eq!(actual, expected_triple_root, max_relative = ε) {
+                // In other cases, we can end up with 3 (possibly complex!) numbers clustered around the triple-root.
+                // 1000x³ + 300x² + 30x + 1 has a triple-root at -0.1, and at time of writing `actual` looks like:
+                // Roots([
+                //     Complex { re: -0.09999939922090205, im: 0.0 },
+                //     Complex { re: -0.10000030092628585, im: 5.193569712504013e-7 },
+                //     Complex { re: -0.10000030092628585, im: -5.193569712504013e-7 }
+                // ])
+                // Those are legitimately 3 values where the polynomial is very close to 0. Presumably similar
+                // clusters exist around the two imaginary roots as well, though. I think it makes more sense to
+                // represent them, but otoh there are inputs (very close to this one, I think, but it's worth
+                // investigating further) where the "cluster around -0.1" is a better answer. ε above is currently
+                // 1e-5, that's about the accuracy limit here. Putting tolerance into the algorithm  is an option:
+                // double/triple root detection code paths can accept "discrimants" `< 1e-7` instead of `== 0.`. I did
+                // some of that in these JS and Scala quartic-solver implementations:
+                //
+                // - https://github.com/runsascoded/apvd/blob/adf1aeddd32c022a086d203f6e0ef452109a5495/src/quartic.ts#L28
+                // - https://github.com/runsascoded/apvd/blob/1cde548d962ca7548c88bc5baed97b24298e55e0/cubic/shared/src/main/scala/cubic/DepressedCubic.scala#L17
+                assert_relative_eq!(actual, expected_reals, max_relative = ε);
+            }
+        } else {
+            assert_relative_eq!(actual, expected_reals, max_relative = ε);
+        }
     }
 
     #[test]
     fn sweep() {
         // let vals = [-10., -1., -0.1, 0., 0.1, 1., 10., ];
-        check(-1., -1., -0.1, 1.);
-        // let vals = [ -10., -1., -0.1, ];
-        // let n = vals.len();
-        // for i0 in 0..n {
-        //     let r0 = vals[i0];
-        //     for i1 in i0..n {
-        //         let r1 = vals[i1];
-        //         for i2 in i1..n {
-        //             let r2 = vals[i2];
-        //             let scale = 1.;
-        //             check(r0, r1, r2, scale);
-        //         }
-        //     }
-        // }
+        // check(-1., -1., -0.1, 1.);
+        // check(-10., -10., -10., 1.);
+        let vals = [ -10., -1., -0.1, ];
+        let n = vals.len();
+        for i0 in 0..n {
+            let r0 = vals[i0];
+            for i1 in i0..n {
+                let r1 = vals[i1];
+                for i2 in i1..n {
+                    let r2 = vals[i2];
+                    let scale = 1.;
+                    check(r0, r1, r2, scale);
+                }
+            }
+        }
     }
 }
