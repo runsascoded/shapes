@@ -3,7 +3,7 @@ use std::fmt::Display;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 use crate::{
-    deg::Deg,
+    math::deg::Deg,
     dual::D,
     r2::R2, fmt::Fmt,
 };

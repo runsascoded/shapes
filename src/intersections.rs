@@ -381,11 +381,10 @@ pub mod tests {
     use std::collections::HashMap;
 
     use crate::circle::Circle;
-    use crate::deg::Deg;
+    use crate::math::{deg::Deg, round::round};
     use crate::dual::{Dual, d_fns};
     use crate::ellipses::xyrr::XYRR;
     use crate::fmt::Fmt;
-    use crate::math::round;
     use crate::r2::R2;
 
     use super::*;

@@ -1,3 +1,7 @@
+use std::ops::Neg;
+
+use crate::{zero::Zero, dual::Dual};
+
 pub trait Abs {
     fn abs(&self) -> Self;
 }

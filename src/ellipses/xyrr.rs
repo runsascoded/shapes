@@ -110,7 +110,10 @@ where R2<D>: TransformR2<D>,
 {
     type Output = XYRR<D>;
     fn transform(&self, t: &Transform<D>) -> XYRR<D> {
-        match t.clone() {
+        println!("Transform XYRR:");
+        println!("self: {}", self);
+        println!("transform: {}", t);
+        let rv = match t.clone() {
             Translate(v) => XYRR {
                 idx: self.idx,
                 c: self.c.clone() + v,
@@ -127,7 +130,10 @@ where R2<D>: TransformR2<D>,
                 r: self.r.clone() * v,
             },
             // Rotate(a) => self.rotate(a),
-        }
+        };
+        println!("rv: {}", rv);
+        println!();
+        rv
     }
 }
 

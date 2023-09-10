@@ -1,3 +1,5 @@
+use crate::dual::Dual;
+
 pub trait IsNormal {
     fn is_normal(&self) -> bool;
 }

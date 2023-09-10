@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 use crate::{
     dual::{D, Dual},
-    r2::R2, shape::{Duals, Shape}, transform::{Projection, CanTransform}, transform::Transform::{Scale, ScaleXY, Translate, self}, ellipses::xyrr::XYRR, sqrt::Sqrt, math::IsNormal, to::To
+    r2::R2, shape::{Duals, Shape}, transform::{Projection, CanTransform}, transform::Transform::{Scale, ScaleXY, Translate, self}, ellipses::xyrr::XYRR, sqrt::Sqrt, math::is_normal::IsNormal, to::To
 };
 
 #[derive(Debug, Clone, Copy, From, PartialEq, Tsify, Serialize, Deserialize)]

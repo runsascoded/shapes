@@ -1,6 +1,6 @@
 use std::f64::consts::PI;
 
-use crate::{dual::Dual, math::round};
+use crate::{dual::Dual, math::round::round};
 
 pub trait Deg {
     fn deg(&self) -> Self;

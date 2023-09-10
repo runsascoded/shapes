@@ -1,6 +1,6 @@
 use std::{fmt::Display, rc::Rc, cell::RefCell, collections::HashSet, ops::{Mul, Div, Sub}};
 
-use crate::{deg::Deg, node::N, shape::{S, Shape}, trig::Trig, dual::Dual};
+use crate::{math::deg::Deg, node::N, shape::{S, Shape}, trig::Trig, dual::Dual};
 
 pub type E<D> = Rc<RefCell<Edge<D>>>;
 

@@ -1,14 +1,47 @@
 // use std::ops::Add;
 
-use std::fmt::{Display, Formatter, self};
+use std::{fmt::{Display, Formatter, self}, ops};
 
 use derive_more::{Add, Sub, Mul, Div, Neg};
 
+use crate::{zero::Zero, sqrt::Sqrt};
 
-#[derive(Clone, Debug, Add, Sub, Mul, Div, Neg)]
+
+#[derive(Clone, Debug, PartialEq, Add, Sub, Mul, Div, Neg)]
 pub struct Complex<D> {
     pub re: D,
     pub im: D,
+}
+
+impl<D: Clone + Zero> Complex<D> {
+    pub fn re(re: D) -> Self {
+        Self { re: re.clone(), im: re.zero() }
+    }
+}
+
+// pub trait Norm
+// : Sqrt
+// + ops::Add<Output = Self>
+// + ops::Mul<Output = Self>
+// {}
+// impl Norm for f64 {}
+// impl Norm for Dual {}
+
+impl<
+    D
+    : Sqrt
+    + Clone
+    + ops::Add<Output = D>
+    + ops::Mul<Output = D>
+> Complex<D> {
+    pub fn norm(&self) -> D {
+        let re = self.re.clone();
+        let im = self.im.clone();
+        // let Complex { re, im } = self.clone();
+        let re2 = re.clone() * re;
+        let im2 = im.clone() * im;
+        (re2 + im2).sqrt()
+    }
 }
 
 impl<D: Display> Display for Complex<D> {

@@ -1,6 +1,6 @@
 use std::{fmt::{Formatter, Display, self}, ops::Add, iter::Sum};
 
-use crate::{segment::Segment, intersection::Intersection, edge::{Edge, EdgeArg}, math::{Abs, AbsArg}, r2::R2, to::To, dual::Dual};
+use crate::{segment::Segment, intersection::Intersection, edge::{Edge, EdgeArg}, math::abs::{Abs, AbsArg}, r2::R2, to::To, dual::Dual};
 
 #[derive(Debug, Clone)]
 pub struct Region<D> {

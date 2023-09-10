@@ -22,7 +22,11 @@ where
         match self {
             Transform::Translate(v) => Transform::Translate(-v),
             Transform::Scale(v) => Transform::Scale(1. / v),
-            Transform::ScaleXY(v) => Transform::ScaleXY(R2 { x: 1. / v.x, y: 1. / v.y }),
+            Transform::ScaleXY(v) => {
+                let t = Transform::ScaleXY(R2 { x: 1. / v.clone().x, y: 1. / v.clone().y });
+                println!("Inverted ScaleXY: {} -> {}", v, t);
+                t
+            },
             // Transform::Rotate(a) => Transform::Rotate(-a),
         }
     }

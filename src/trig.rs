@@ -4,6 +4,7 @@ use nalgebra::{ComplexField, RealField};
 pub trait Trig {
     fn sin(&self) -> Self;
     fn cos(&self) -> Self;
+    fn acos(&self) -> Self;
     fn atan(&self) -> Self;
     fn atan2(&self, o: &Self) -> Self;
 }
@@ -14,6 +15,9 @@ impl Trig for Dual {
     }
     fn cos(&self) -> Dual {
         Dual(self.0.clone().cos(), self.1)
+    }
+    fn acos(&self) -> Dual {
+        Dual(self.0.clone().acos(), self.1)
     }
     fn atan(&self) -> Dual {
         Dual(self.0.clone().atan(), self.1)
@@ -33,6 +37,9 @@ impl Trig for f64 {
     }
     fn cos(&self) -> f64 {
         ComplexField::cos(*self)
+    }
+    fn acos(&self) -> f64 {
+        ComplexField::acos(*self)
     }
     fn atan(&self) -> f64 {
         ComplexField::atan(*self)
