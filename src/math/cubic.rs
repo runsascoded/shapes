@@ -224,7 +224,7 @@ mod tests {
             // x³ + 30x² + 300x + 1000 has a triple-root at -10., which this library has been observed to find, returning 3 roots of unity
             // (scaled by some f64, in this case cbrt(-10)).
             let expected_triple_root = crate::math::roots::Roots(vec![ Complex::re(r), Complex { re: r2, im: r32 }, Complex { re: r2, im: -r32 }]);
-            if !relative_eq!(actual, expected_triple_root, max_relative = ε) {
+            if !relative_eq!(actual, expected_triple_root, max_relative = ε, epsilon = ε) {
                 // In other cases, we can end up with 3 (possibly complex!) numbers clustered around the triple-root.
                 // 1000x³ + 300x² + 30x + 1 has a triple-root at -0.1, and at time of writing `actual` looks like:
                 // Roots([
@@ -242,19 +242,16 @@ mod tests {
                 //
                 // - https://github.com/runsascoded/apvd/blob/adf1aeddd32c022a086d203f6e0ef452109a5495/src/quartic.ts#L28
                 // - https://github.com/runsascoded/apvd/blob/1cde548d962ca7548c88bc5baed97b24298e55e0/cubic/shared/src/main/scala/cubic/DepressedCubic.scala#L17
-                assert_relative_eq!(actual, expected_reals, max_relative = ε);
+                assert_relative_eq!(actual, expected_reals, max_relative = ε, epsilon = ε);
             }
         } else {
-            assert_relative_eq!(actual, expected_reals, max_relative = ε);
+            assert_relative_eq!(actual, expected_reals, max_relative = ε, epsilon = ε);
         }
     }
 
     #[test]
     fn sweep() {
-        // let vals = [-10., -1., -0.1, 0., 0.1, 1., 10., ];
-        // check(-1., -1., -0.1, 1.);
-        // check(-10., -10., -10., 1.);
-        let vals = [ -10., -1., -0.1, ];
+        let vals = [ -10., -1., -0.1, 0., 0.1, 1., 10., ];
         let n = vals.len();
         for i0 in 0..n {
             let r0 = vals[i0];
