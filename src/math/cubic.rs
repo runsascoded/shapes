@@ -1,6 +1,6 @@
-use std::{f64::consts::TAU, ops::{Div, Mul, Add, Sub}, fmt};
+use std::{f64::consts::TAU, ops::{Div, Mul, Add, Sub, Neg}, fmt};
 
-use crate::{trig::Trig, dual::Dual};
+use crate::{trig::Trig, dual::Dual, zero::Zero};
 
 use super::{complex::{ComplexPair, Complex, self}, quadratic, abs::{Abs, AbsArg}, is_zero::IsZero, cbrt::Cbrt, recip::Recip, deg::Deg};
 
@@ -22,6 +22,15 @@ impl<D: Clone> Roots<D> {
             Quadratic(q) => q.reals(),
             Reals(rs) => rs.to_vec(),
             Mixed(re, _) => vec![ re.clone() ],
+        }
+    }
+}
+impl<D: Clone + Neg<Output = D> + Zero> Roots<D> {
+    pub fn all(&self) -> Vec<Complex<D>> {
+        match self {
+            Quadratic(q) => q.all(),
+            Reals(rs) => rs.iter().map(|r| Complex::re(r.clone())).collect(),
+            Mixed(re, im) => vec![ Complex::re(re.clone()), im.clone(), im.conj() ],
         }
     }
 }

@@ -1,4 +1,4 @@
-use std::{fmt::{Display, Formatter, self}, ops::{Mul, Sub, Add}};
+use std::{fmt::{Display, Formatter, self}, ops::{Mul, Sub, Add, Neg}};
 
 use approx::{AbsDiffEq, RelativeEq};
 use derive_more;
@@ -19,6 +19,15 @@ pub struct Complex<D> {
 impl<D: Clone + Zero> Complex<D> {
     pub fn re(re: D) -> Self {
         Self { re: re.clone(), im: re.zero() }
+    }
+}
+
+impl<D: Clone + Neg<Output = D>> Complex<D> {
+    pub fn conj(&self) -> Self {
+        Complex {
+            re: self.re.clone(),
+            im: -self.im,
+        }
     }
 }
 

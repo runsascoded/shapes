@@ -1,8 +1,8 @@
 use std::ops::{Neg, Div, Add, Sub, Mul};
 
-use crate::{sqrt::Sqrt, dual::Dual};
+use crate::{sqrt::Sqrt, dual::Dual, zero::Zero};
 
-use super::{complex::{self, ComplexPair}, is_zero::IsZero, abs::{Abs, AbsArg}};
+use super::{complex::{self, Complex as C, ComplexPair}, is_zero::IsZero, abs::{Abs, AbsArg}};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Roots<D> {
@@ -22,6 +22,17 @@ impl<D: Clone> Roots<D> {
             Double(r) => vec![ r.clone() ],
             Reals(rs) => rs.clone().to_vec(),
             Complex(_) => vec![],
+        }
+    }
+}
+
+impl<D: Clone + Neg<Output = D> + Zero> Roots<D> {
+    pub fn all(&self) -> Vec<C<D>> {
+        match self {
+            Single(r) => vec![ C::re(r.clone()) ],
+            Double(r) => vec![ C::re(r.clone()) ],
+            Reals(rs) => rs.iter().map(|r| C::re(r.clone())).collect(),
+            Complex(c) => vec![ c.clone(), c.conj() ],
         }
     }
 }
