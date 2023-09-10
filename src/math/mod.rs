@@ -8,3 +8,4 @@ pub mod is_zero;
 pub mod quadratic;
 pub mod recip;
 pub mod round;
+pub mod roots;

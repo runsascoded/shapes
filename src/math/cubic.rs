@@ -211,16 +211,19 @@ mod tests {
         ];
         let coeffs = unscaled_coeffs.map(|c| c * scale);
         let [ a3, a2, a1, a0 ] = coeffs;
-        let f = |x: f64| a3 * x * x * x + a2 * x * x + a1 * x + a0;
+        // let f = |x: f64| a3 * x * x * x + a2 * x * x + a1 * x + a0;
         let roots = cubic::<f64>(a3, a2, a1, a0);
-        let ε = 1e-6;
-        if r0 == r1 && r1 == r2 {
-            let expected = Mixed( r0, Complex { re: r0 / -2., im: r0 * Sqrt::sqrt(&3.) / 2. });
-            assert_relative_eq!(expected, roots, max_relative = ε);
-        } else {
-            let expected_roots = [ r0, r1, r2 ];
-            assert_relative_eq!(Reals(expected_roots), roots, max_relative = ε);
-        }
+        let ε = 1e-8;
+        let actual = crate::math::roots::Roots(roots.all());
+        let expected = crate::math::roots::Roots([ r0, r1, r2 ].into_iter().map(Complex::re).collect());
+        assert_relative_eq!(actual, expected, max_relative = ε);
+        // if r0 == r1 && r1 == r2 {
+        //     let expected = Mixed( r0, Complex { re: r0 / -2., im: r0 * Sqrt::sqrt(&3.) / 2. });
+        //     assert_relative_eq!(expected, roots, max_relative = ε);
+        // } else {
+        //     let expected_roots = [ r0, r1, r2 ];
+        //     assert_relative_eq!(Reals(expected_roots), roots, max_relative = ε);
+        // }
     }
 
     #[test]

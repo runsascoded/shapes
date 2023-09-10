@@ -10,6 +10,7 @@ crate-type = ["cdylib"]
 approx = "0.5.1"
 console_error_panic_hook = "0.1.7"
 derive_more = "0.99.17"
+itertools = "0.11.0"
 log = "0.4.20"
 nalgebra = { version = "0.32.3" }
 num-dual = { version = "0.7.1" }

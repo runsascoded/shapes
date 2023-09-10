@@ -2,6 +2,7 @@ use std::{fmt::{Display, Formatter, self}, ops::{Mul, Sub, Add, Neg}};
 
 use approx::{AbsDiffEq, RelativeEq};
 use derive_more;
+use log::debug;
 
 use crate::{zero::Zero, sqrt::Sqrt, dual::Dual};
 
@@ -26,7 +27,7 @@ impl<D: Clone + Neg<Output = D>> Complex<D> {
     pub fn conj(&self) -> Self {
         Complex {
             re: self.re.clone(),
-            im: -self.im,
+            im: -self.im.clone(),
         }
     }
 }
@@ -63,7 +64,7 @@ impl<
     D
     : Clone
     + Sub<Output = D>
-> Sub for Complex<D> {
+> Sub<Complex<D>> for Complex<D> {
     type Output = Self;
     fn sub(self, rhs: Complex<D>) -> Self::Output {
         Self {
@@ -145,6 +146,9 @@ pub type ComplexPair<D> = Complex<D>;
 
 pub trait Eq
 : Norm
++ Display
++ Into<f64>
++ PartialOrd
 + Zero
 + Sub<Output = Self>
 + RelativeEq<Epsilon = f64>
@@ -172,6 +176,16 @@ impl<D: Eq> RelativeEq for Complex<D>
         D::default_max_relative()
     }
     fn relative_eq(&self, other: &Self, epsilon: Self::Epsilon, max_relative: Self::Epsilon) -> bool {
-        self.re.relative_eq(&other.re, epsilon, max_relative) && self.im.relative_eq(&other.im, epsilon, max_relative)
+        let d: f64 = (self.clone() - other.clone()).norm().into();
+        let l_d: f64 = self.norm().into();
+        let r_d: f64 = other.norm().into();
+        let max = if l_d > r_d { l_d } else { r_d };
+        d / max <= max_relative || d <= epsilon
+        // let re_cmp = self.re.relative_eq(&other.re, epsilon, max_relative);
+        // let im_cmp = self.im.relative_eq(&other.im, epsilon, max_relative);
+        // if !re_cmp || !im_cmp {
+        //     debug!("Complex.relative_eq {} {} (ε {}, maxrel {}): {} + {}i != {} + {}i", re_cmp, im_cmp, epsilon, max_relative, self.re, self.im, other.re, other.im);
+        // }
+        // re_cmp && im_cmp
     }
 }
