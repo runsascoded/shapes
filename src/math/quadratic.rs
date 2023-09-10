@@ -26,7 +26,7 @@ impl<D: Clone> Roots<D> {
     }
 }
 
-impl<D: AbsDiffEq<Epsilon = f64>> AbsDiffEq for Roots<D> {
+impl<D: complex::Eq> AbsDiffEq for Roots<D> {
     type Epsilon = D::Epsilon;
     fn default_epsilon() -> Self::Epsilon {
         D::default_epsilon()
@@ -42,7 +42,7 @@ impl<D: AbsDiffEq<Epsilon = f64>> AbsDiffEq for Roots<D> {
     }
 }
 
-impl<D: RelativeEq<Epsilon = f64>> RelativeEq for Roots<D> {
+impl<D: complex::Eq> RelativeEq for Roots<D> {
     fn default_max_relative() -> Self::Epsilon {
         D::default_max_relative()
     }

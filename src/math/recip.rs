@@ -1,10 +1,10 @@
-use std::ops::{Add, Mul, Neg, Div};
+use std::ops::{Neg, Div};
 
 use nalgebra::ComplexField;
 
-use crate::{dual::Dual, sqrt::Sqrt};
+use crate::dual::Dual;
 
-use super::complex::Complex;
+use super::complex::{Complex, self};
 
 pub trait Recip {
     fn recip(&self) -> Self;
@@ -24,10 +24,7 @@ impl Recip for Dual {
 
 impl<
     D
-    : Clone
-    + Sqrt
-    + Add<Output = D>
-    + Mul<Output = D>
+    : complex::Norm
     + Div<Output = D>
     + Neg<Output = D>
 > Recip for Complex<D> {

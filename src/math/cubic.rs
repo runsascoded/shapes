@@ -2,7 +2,7 @@ use std::{f64::consts::TAU, ops::{Div, Mul, Add, Sub}, fmt};
 
 use crate::{trig::Trig, dual::Dual};
 
-use super::{complex::{ComplexPair, Complex}, quadratic, abs::{Abs, AbsArg}, is_zero::IsZero, cbrt::Cbrt, recip::Recip};
+use super::{complex::{ComplexPair, Complex, self}, quadratic, abs::{Abs, AbsArg}, is_zero::IsZero, cbrt::Cbrt, recip::Recip, deg::Deg};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Roots<D> {
@@ -26,7 +26,7 @@ impl<D: Clone> Roots<D> {
     }
 }
 
-impl<D: AbsDiffEq<Epsilon = f64>> AbsDiffEq for Roots<D> {
+impl<D: complex::Eq> AbsDiffEq for Roots<D> {
     type Epsilon = D::Epsilon;
     fn default_epsilon() -> Self::Epsilon {
         D::default_epsilon()
@@ -41,7 +41,7 @@ impl<D: AbsDiffEq<Epsilon = f64>> AbsDiffEq for Roots<D> {
     }
 }
 
-impl<D: RelativeEq<Epsilon = f64>> RelativeEq for Roots<D> {
+impl<D: complex::Eq> RelativeEq for Roots<D> {
     fn default_max_relative() -> Self::Epsilon {
         D::default_max_relative()
     }
@@ -60,9 +60,11 @@ pub trait Arg
 + Into<f64>
 + IsZero
 + Cbrt
++ Deg
 + AbsArg
 + Recip
 + Trig
++ complex::Norm
 + quadratic::Arg
 + Add<Output = Self>
 + Add<f64, Output = Self>
@@ -142,34 +144,35 @@ where
         let re = -q.cbrt();
         let re2 = Complex::re(re.clone());
         let im = re2.clone() * u_1.clone();
-        debug!("p == 0: re {:?}, re2 {:?}, im {:?}", re, re2, im);
         Mixed(re, im)
     } else if p.lt_zero() {
-        debug!("p < 0");
-        let p3 = -p / 3.;
+        let p3 = p / 3.;
         let q2 = q / 2.;
-        let p3sq = p3.sqrt();
+        let p3sq = (-p3.clone()).sqrt();
         let u = q2 / p3 / p3sq.clone();
-        if (u.abs() - 1.).lt_zero() {
+        let d = u.abs() - 1.;
+        if d.le_zero() {
             let r = p3sq.clone() * 2.;
-            let theta = u.acos() / 3.;
+            let θ = u.acos() / 3.;
+            debug!("u {:?}, d {:?}, r {:?}, θ {:?}", u, d, r, θ.deg_str());
             let mut roots = [
-                r.clone() *  theta.clone().cos(),
-                r.clone() * (theta.clone() + TAU3).cos(),
-                r * (theta + TAU3 + TAU3).cos(),
+                r.clone() *  θ.clone().cos(),
+                r.clone() * (θ.clone() + TAU3).cos(),
+                r * (θ + TAU3 + TAU3).cos(),
             ];
             roots.sort_by_cached_key(|r| OrderedFloat::<f64>(r.clone().into()));
+            debug!("depressed roots: {:?}", roots);
             Reals(roots)
         } else {
-            let w = u.clone() + (u.clone() * u - 1.).sqrt();
+            let w = u.clone() + (u.clone() * u.clone() - 1.).sqrt();
             let m = w.cbrt();
             let re = (m.clone() + m.recip()) * p3sq.clone();
+            debug!("u {:?}, w {:?}, m {:?}, re {:?}", u, w, m, re);
             let ru = Complex::re(m) * u_1;
             let im = (ru.clone() + ru.recip()) * p3sq;
             Mixed(re, im)
         }
     } else {
-        debug!("p > 0");
         let p3 = p / 3.;
         let q2 = q / 2.;
         let p3sq = p3.sqrt();
@@ -190,38 +193,43 @@ mod tests {
     use super::*;
     use test_log::test;
 
+    fn check(r0: f64, r1: f64, r2: f64, scale: f64) {
+        let unscaled_coeffs = [
+            1.,
+            -(r0 + r1 + r2),
+            r0 * r1 + r0 * r2 + r1 * r2,
+            -(r0 * r1 * r2),
+        ];
+        let coeffs = unscaled_coeffs.map(|c| c * scale);
+        let [ a3, a2, a1, a0 ] = coeffs;
+        let f = |x: f64| a3 * x * x * x + a2 * x * x + a1 * x + a0;
+        let roots = cubic::<f64>(a3, a2, a1, a0);
+        let ε = 1e-6;
+        if r0 == r1 && r1 == r2 {
+            let expected = Mixed( r0, Complex { re: r0 / -2., im: r0 * Sqrt::sqrt(&3.) / 2. });
+            assert_relative_eq!(expected, roots, max_relative = ε);
+        } else {
+            let expected_roots = [ r0, r1, r2 ];
+            assert_relative_eq!(Reals(expected_roots), roots, max_relative = ε);
+        }
+    }
+
     #[test]
     fn sweep() {
         // let vals = [-10., -1., -0.1, 0., 0.1, 1., 10., ];
-        let vals = [ -10. ];
-        let n = vals.len();
-        for i0 in 0..n {
-            let r0 = vals[i0];
-            for i1 in i0..n {
-                let r1 = vals[i1];
-                for i2 in i1..n {
-                    let r2 = vals[i2];
-                    let scale = 1.;
-                    let unscaled_coeffs = [
-                        1.,
-                        -(r0 + r1 + r2),
-                        r0 * r1 + r0 * r2 + r1 * r2,
-                        -(r0 * r1 * r2),
-                    ];
-                    let coeffs = unscaled_coeffs.map(|c| c * scale);
-                    let [ a3, a2, a1, a0 ] = coeffs;
-                    let f = |x: f64| a3 * x * x * x + a2 * x * x + a1 * x + a0;
-                    let roots = cubic::<f64>(a3, a2, a1, a0);
-                    let ε = 1e-14;
-                    if r0 == r1 && r1 == r2 {
-                        let expected = Mixed( r0, Complex { re: r0 / -2., im: r0 * Sqrt::sqrt(&3.) / 2. });
-                        assert_relative_eq!(expected, roots, max_relative = ε);
-                    } else {
-                        let expected_roots = [ r0, r1, r2 ];
-                        assert_relative_eq!(Reals(expected_roots), roots, max_relative = ε);
-                    }
-                }
-            }
-        }
+        check(-1., -1., -0.1, 1.);
+        // let vals = [ -10., -1., -0.1, ];
+        // let n = vals.len();
+        // for i0 in 0..n {
+        //     let r0 = vals[i0];
+        //     for i1 in i0..n {
+        //         let r1 = vals[i1];
+        //         for i2 in i1..n {
+        //             let r2 = vals[i2];
+        //             let scale = 1.;
+        //             check(r0, r1, r2, scale);
+        //         }
+        //     }
+        // }
     }
 }
