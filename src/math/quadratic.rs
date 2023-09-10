@@ -13,6 +13,49 @@ pub enum Roots<D> {
 }
 
 use Roots::{Single, Double, Reals, Complex};
+use approx::{AbsDiffEq, RelativeEq};
+
+impl<D: Clone> Roots<D> {
+    pub fn reals(&self) -> Vec<D> {
+        match self {
+            Single(r) => vec![ r.clone() ],
+            Double(r) => vec![ r.clone() ],
+            Reals(rs) => rs.clone().to_vec(),
+            Complex(_) => vec![],
+        }
+    }
+}
+
+impl<D: AbsDiffEq<Epsilon = f64>> AbsDiffEq for Roots<D> {
+    type Epsilon = D::Epsilon;
+    fn default_epsilon() -> Self::Epsilon {
+        D::default_epsilon()
+    }
+    fn abs_diff_eq(&self, other: &Self, epsilon: Self::Epsilon) -> bool {
+        match (self, other) {
+            (Single(r0), Single(r1)) => r0.abs_diff_eq(r1, epsilon),
+            (Double(r0), Double(r1)) => r0.abs_diff_eq(r1, epsilon),
+            (Reals([ l0, l1 ]), Reals([ r0, r1 ])) => l0.abs_diff_eq(r0, epsilon) && l1.abs_diff_eq(r1, epsilon),
+            (Complex(c0), Complex(c1)) => c0.abs_diff_eq(c1, epsilon),
+            _ => false,
+        }
+    }
+}
+
+impl<D: RelativeEq<Epsilon = f64>> RelativeEq for Roots<D> {
+    fn default_max_relative() -> Self::Epsilon {
+        D::default_max_relative()
+    }
+    fn relative_eq(&self, other: &Self, epsilon: Self::Epsilon, max_relative: Self::Epsilon) -> bool {
+        match (self, other) {
+            (Single(r0), Single(r1)) => r0.relative_eq(r1, epsilon, max_relative),
+            (Double(r0), Double(r1)) => r0.relative_eq(r1, epsilon, max_relative),
+            (Reals([ l0, l1 ]), Reals([ r0, r1 ])) => l0.relative_eq(r0, epsilon, max_relative) && l1.relative_eq(r1, epsilon, max_relative),
+            (Complex(c0), Complex(c1)) => c0.relative_eq(c1, epsilon, max_relative),
+            _ => false,
+        }
+    }
+}
 
 pub trait Arg
 : Clone

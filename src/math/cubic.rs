@@ -1,6 +1,6 @@
 use std::{f64::consts::TAU, ops::{Div, Mul, Add, Sub}, fmt};
 
-use crate::trig::Trig;
+use crate::{trig::Trig, dual::Dual};
 
 use super::{complex::{ComplexPair, Complex}, quadratic, abs::{Abs, AbsArg}, is_zero::IsZero, cbrt::Cbrt, recip::Recip};
 
@@ -12,7 +12,48 @@ pub enum Roots<D> {
 }
 
 use Roots::{Quadratic, Reals, Mixed};
+use approx::{AbsDiffEq, RelativeEq};
+use log::{debug, error};
 use ordered_float::OrderedFloat;
+
+impl<D: Clone> Roots<D> {
+    pub fn reals(&self) -> Vec<D> {
+        match self {
+            Quadratic(q) => q.reals(),
+            Reals(rs) => rs.to_vec(),
+            Mixed(re, _) => vec![ re.clone() ],
+        }
+    }
+}
+
+impl<D: AbsDiffEq<Epsilon = f64>> AbsDiffEq for Roots<D> {
+    type Epsilon = D::Epsilon;
+    fn default_epsilon() -> Self::Epsilon {
+        D::default_epsilon()
+    }
+    fn abs_diff_eq(&self, other: &Self, epsilon: Self::Epsilon) -> bool {
+        match (self, other) {
+            (Quadratic(q0), Quadratic(q1)) => q0.abs_diff_eq(q1, epsilon),
+            (Reals([ l0, l1, l2 ]), Reals([ r0, r1, r2 ])) => l0.abs_diff_eq(r0, epsilon) && l1.abs_diff_eq(r1, epsilon) && l2.abs_diff_eq(r2, epsilon),
+            (Mixed(re0, im0), Mixed(re1, im1)) => re0.abs_diff_eq(re1, epsilon) && im0.abs_diff_eq(im1, epsilon),
+            _ => false,
+        }
+    }
+}
+
+impl<D: RelativeEq<Epsilon = f64>> RelativeEq for Roots<D> {
+    fn default_max_relative() -> Self::Epsilon {
+        D::default_max_relative()
+    }
+    fn relative_eq(&self, other: &Self, epsilon: Self::Epsilon, max_relative: Self::Epsilon) -> bool {
+        match (self, other) {
+            (Quadratic(q0), Quadratic(q1)) => q0.relative_eq(q1, epsilon, max_relative),
+            (Reals([ l0, l1, l2 ]), Reals([ r0, r1, r2 ])) => l0.relative_eq(r0, epsilon, max_relative) && l1.relative_eq(r1, epsilon, max_relative) && l2.relative_eq(r2, epsilon, max_relative),
+            (Mixed(re0, im0), Mixed(re1, im1)) => re0.relative_eq(re1, epsilon, max_relative) && im0.relative_eq(im1, epsilon, max_relative),
+            _ => false,
+        }
+    }
+}
 
 pub trait Arg
 : fmt::Debug
@@ -33,38 +74,52 @@ pub trait Arg
 + Div<f64, Output = Self>
 {}
 
-pub fn cubic<D: Arg>(a3: D, a2: D, a1: D, a0: D) -> Roots<D>
+impl Arg for f64 {}
+impl Arg for Dual {}
+
+pub fn cubic<D: Arg>(a: D, b: D, c: D, d: D) -> Roots<D>
 where
     Complex<D>
     : Add<D, Output = Complex<D>>
+    + Sub<D, Output = Complex<D>>
     + Mul<D, Output = Complex<D>>
     + Mul<Complex<f64>, Output = Complex<D>>
 {
-    if a3.is_zero() {
-        Quadratic(quadratic::quadratic(a2, a1, a0))
+    if a.is_zero() {
+        Quadratic(quadratic::quadratic(b, c, d))
     } else {
-        cubic_scaled(a2 / a3.clone(), a1 / a3.clone(), a0 / a3)
+        cubic_scaled(b / a.clone(), c / a.clone(), d / a)
     }
 }
 
-pub fn cubic_scaled<D: Arg>(a2: D, a1: D, a0: D) -> Roots<D>
+pub fn cubic_scaled<D: Arg>(b: D, c: D, d: D) -> Roots<D>
 where
     Complex<D>
     : Add<D, Output = Complex<D>>
+    + Sub<D, Output = Complex<D>>
     + Mul<D, Output = Complex<D>>
     + Mul<Complex<f64>, Output = Complex<D>>
 {
-    let b3 = a2.clone() / -3.;
-    let p = a1.clone() + a2 * b3.clone();
-    let q = b3.clone() * b3.clone() * b3.clone() * -2. - b3.clone() * a1 + a0;
-    match cubic_depressed(p, q) {
-        Reals(roots) => Reals(roots.map(|r| r + b3.clone())),
-        Mixed(re, ims) => Mixed(re + b3.clone(), ims + b3),
-        Quadratic(q) => panic!("cubic_depressed returned quadratic::Roots: {:?}", q),
+    debug!("cubic_scaled({:?}, {:?}, {:?})", b, c, d);
+    let b3 = b.clone() / 3.;
+    let p = c.clone() - b * b3.clone();
+    let q = b3.clone() * b3.clone() * b3.clone() * 2. - b3.clone() * c + d.clone();
+    if p.is_zero() && q.is_zero() {
+        let re = -d.cbrt();
+          // TODO: factor / make these static
+        let sin_tau3: f64 = TAU3.sin();
+        let u_1: Complex<f64> = Complex { re: -0.5, im: sin_tau3 };
+        Mixed(re.clone(), Complex::re(re) * u_1)
+    } else {
+        match cubic_depressed(p, q) {
+            Reals(roots) => Reals(roots.map(|r| r - b3.clone())),
+            Mixed(re, ims) => Mixed(re - b3.clone(), ims - b3),
+            Quadratic(q) => panic!("cubic_depressed returned quadratic::Roots: {:?}", q),
+        }
     }
 }
 
-static TAU3: f64 = TAU / -3.;
+static TAU3: f64 = TAU / 3.;
 
 pub fn cubic_depressed<D: Arg>(p: D, q: D) -> Roots<D>
 where
@@ -74,14 +129,23 @@ where
     + Mul<D, Output = Complex<D>>
     + Mul<Complex<f64>, Output = Complex<D>>,
 {
+    // TODO: factor / make these static
     let sin_tau3: f64 = TAU3.sin();
-    let u_1: Complex<f64> = Complex { re: -1. / 2., im:  sin_tau3 };
+    let u_1: Complex<f64> = Complex { re: -0.5, im: sin_tau3 };
     // let u_2: Complex<f64> = Complex { re: -1. / 2., im: -sin_tau3 };
+
+    debug!("p: {:?}, q: {:?}", p, q);
     if p.is_zero() {
+        if q.is_zero() {
+            error!("Can't infer complex roots from depressed cubic with p == 0 and q == 0");
+        }
         let re = -q.cbrt();
-        let im = Complex::re(re.clone()) * u_1.clone();
+        let re2 = Complex::re(re.clone());
+        let im = re2.clone() * u_1.clone();
+        debug!("p == 0: re {:?}, re2 {:?}, im {:?}", re, re2, im);
         Mixed(re, im)
     } else if p.lt_zero() {
+        debug!("p < 0");
         let p3 = -p / 3.;
         let q2 = q / 2.;
         let p3sq = p3.sqrt();
@@ -105,6 +169,7 @@ where
             Mixed(re, im)
         }
     } else {
+        debug!("p > 0");
         let p3 = p / 3.;
         let q2 = q / 2.;
         let p3sq = p3.sqrt();
@@ -116,35 +181,47 @@ where
         let im = (ru.clone() + ru.recip()) * p3sq;
         Mixed(re, im)
     }
-    // let q22 = q2 * q2;
-    // let r = q22 - p33;
-    // let theta = (q2 / p33.sqrt()).acos() / 3.;
-    // let p32 = p3.sqrt() * 2.;
-    // let theta_k = |rot: f64| p32 * (theta + rot).cos();
-    // if r.lt_zero() {
-    //     // Three distinct real roots: x-coordinates of equally spaced points on a circle of radius $2\sqrt{\frac{-p}/{3}}$.
-    //     let mut roots = [
-    //         p32 * theta.cos(),
-    //         p32 * (theta + tau3).cos(),
-    //         p32 * (theta + tau3 + tau3).cos(),
-    //     ];
-    //     roots.sort();
-    //     Reals(roots)
-    // } else if r.is_zero() {
-    //     // Real roots, one single, one double. Not distinguished in the return type, currently.
-    //     let double_root = -q2 / p3;
-    //     let mut roots = [
-    //         3 * q / p,
-    //         double_root,
-    //         double_root,
-    //     ];
-    //     roots.sort();
-    //     Reals(roots)
-    // } else {
-    //     // One real root one complex conjugate pair.
-
-    // }
-
 }
 
+#[cfg(test)]
+mod tests {
+    use crate::sqrt::Sqrt;
 
+    use super::*;
+    use test_log::test;
+
+    #[test]
+    fn sweep() {
+        // let vals = [-10., -1., -0.1, 0., 0.1, 1., 10., ];
+        let vals = [ -10. ];
+        let n = vals.len();
+        for i0 in 0..n {
+            let r0 = vals[i0];
+            for i1 in i0..n {
+                let r1 = vals[i1];
+                for i2 in i1..n {
+                    let r2 = vals[i2];
+                    let scale = 1.;
+                    let unscaled_coeffs = [
+                        1.,
+                        -(r0 + r1 + r2),
+                        r0 * r1 + r0 * r2 + r1 * r2,
+                        -(r0 * r1 * r2),
+                    ];
+                    let coeffs = unscaled_coeffs.map(|c| c * scale);
+                    let [ a3, a2, a1, a0 ] = coeffs;
+                    let f = |x: f64| a3 * x * x * x + a2 * x * x + a1 * x + a0;
+                    let roots = cubic::<f64>(a3, a2, a1, a0);
+                    let ε = 1e-14;
+                    if r0 == r1 && r1 == r2 {
+                        let expected = Mixed( r0, Complex { re: r0 / -2., im: r0 * Sqrt::sqrt(&3.) / 2. });
+                        assert_relative_eq!(expected, roots, max_relative = ε);
+                    } else {
+                        let expected_roots = [ r0, r1, r2 ];
+                        assert_relative_eq!(Reals(expected_roots), roots, max_relative = ε);
+                    }
+                }
+            }
+        }
+    }
+}
