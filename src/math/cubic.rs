@@ -251,6 +251,23 @@ mod tests {
 
     #[test]
     fn sweep() {
+        // For every nondecreasing triplet of the following values:
+        // - synthesize the corresponding cubic polynomial
+        // - ask cubic() for the roots
+        // - check that the roots are close to the expected values
+        //
+        // Expected and actual roots are assessed to be "relatively equal" if either:
+        // - |a-b| / max(|a|,|b|) <= ε$, or
+        // - |a-b| <= ε
+        //
+        // The algorithm operates on complex numbers, and small imprecisions can manifest in both the real and
+        // imaginary parts. Sometimes this means an expected real root will show up as a complex number (with a
+        // vanishingly small imaginary part). Comparing values via complex vector lengths and distances is the simplest
+        // way to verify that the algorithm is working basically correctly.
+        //
+        // THe roots::Roots(Vec<Complex<f64>>)  wrapper also implements relative equality checks by "aligning" the
+        // "expected" roots against the "actual" roots in such a way that the sum of the element-wise distances is
+        // minimized.
         let vals = [ -10., -1., -0.1, 0., 0.1, 1., 10., ];
         let n = vals.len();
         for i0 in 0..n {
