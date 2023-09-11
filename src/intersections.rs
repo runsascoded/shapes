@@ -383,7 +383,7 @@ pub mod tests {
     use crate::circle::Circle;
     use crate::math::{deg::Deg, round::round};
     use crate::dual::{Dual, d_fns};
-    use crate::ellipses::xyrr::XYRR;
+    use crate::ellipses::xyrr::{XYRR, self};
     use crate::fmt::Fmt;
     use crate::r2::R2;
 
@@ -575,6 +575,24 @@ pub mod tests {
             assert_eq!(area, *expected.get(key.as_str()).unwrap());
             // println!("{}: {}", key, area);
         }
+    }
+
+    #[test]
+    fn test_perturbed_unit_circle() {
+        // Quartic solvers struggle to retain accuracy computing this slightly-perturbed unit-circle
+        let e = XYRR {
+            idx: 0,
+            c: R2 { x: -1.100285308561806, y: -1.1500279763995946e-5 },
+            r: R2 { x:  1.000263820108834, y:  1.0000709021402923 }
+        };
+        let points = e.unit_intersections();
+        assert_eq!(
+            points,
+            [
+                R2 { x: -0.5500164117391726, y: -0.8351538461969557 },
+                R2 { x: -0.5500338731914519, y:  0.8351423461554403 },
+            ]
+        );
     }
 
     #[test]

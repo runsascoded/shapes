@@ -248,21 +248,45 @@ mod tests {
         }
     }
 
+    // Factored out of unit-intersection calculation for the ellipse:
+    //
+    // XYRR {
+    //     c: R2 { x: -1.100285308561806, y: -1.1500279763995946e-5 },
+    //     r: R2 { x:  1.000263820108834, y:  1.0000709021402923 }
+    // }
+    //
+    // which is nearly a unit circle centered at (-1.1, 0), but with all 4 coordinates perturbed slightly.
+    // See also: https://github.com/vorot/roots/issues/30, intersections::tests::test_perturbed_unit_circle.
+    static A4: f64 = 0.000000030743755847066437;
+    static A3: f64 = 0.000000003666731306801131;
+    static A2: f64 = 1.0001928389119579;
+    static A1: f64 = 0.000011499702220469921;
+    static A0: f64 = -0.6976068572771268;
+
+    // #[test]
+    // fn almost_quadratic() {
+    //     let roots = quartic(A4, A3, A2, A1, A0);
+    //     let reals = roots.reals();
+    //     assert_eq!(reals.len(), 2);
+    //     let expected = vec![
+    //         -0.835153846196954,
+    //          0.835142346155438,
+    //     ];
+    //     assert_relative_eq!(reals[0], expected[0], max_relative = 1e-5, epsilon = 1e-5);
+    //     assert_relative_eq!(reals[1], expected[1], max_relative = 1e-5, epsilon = 1e-5);
+    // }
+
     #[test]
-    fn almost_quadratic() {
-        let a_4 = 0.000000030743755847066437;
-        let a_3 = 0.000000003666731306801131;
-        let a_2 = 1.0001928389119579;
-        let a_1 = 0.000011499702220469921;
-        let a_0 = -0.6976068572771268;
-        let roots = quartic(a_4, a_3, a_2, a_1, a_0);
-        let reals = roots.reals();
-        assert_eq!(reals.len(), 2);
-        let expected = vec![
-            -0.835153846196954,
-             0.835142346155438,
-        ];
-        assert_relative_eq!(reals[0], expected[0], max_relative = 1e-5, epsilon = 1e-5);
-        assert_relative_eq!(reals[1], expected[1], max_relative = 1e-5, epsilon = 1e-5);
+    fn almost_quadratic_sturm() {
+        let results = roots::find_roots_sturm(&[A3 / A4, A2 / A4, A1 / A4, A0 / A4], &mut 1e-6);
+        let roots: Vec<f64> = results.into_iter().map(|r| r.unwrap()).collect();
+        debug!("roots: {:?}", roots);
+        assert_eq!(
+            roots,
+            [
+                -0.8351538461969557,
+                 0.8351423461554403,
+            ]
+        )
     }
 }

@@ -2,7 +2,7 @@ use std::ops::Mul;
 
 use derive_more::Display;
 use log::warn;
-use roots::find_roots_quartic;
+use roots::{find_roots_quartic, find_roots_sturm};
 
 use crate::{dual::{D, Dual}, fmt::Fmt, zero::Zero, math::quartic::quartic};
 
@@ -18,8 +18,10 @@ where
 
 impl Quartic for f64 {
     fn quartic_roots(a_4: f64, a_3: f64, a_2: f64, a_1: f64, a_0: f64) -> Vec<Root<f64>> {
-        let roots0 = quartic(a_4, a_3, a_2, a_1, a_0);
-        let reals = roots0.reals();
+        // let roots0 = quartic(a_4, a_3, a_2, a_1, a_0);
+        // let reals = roots0.reals();
+        let results = find_roots_sturm(&[ a_3 / a_4, a_2 / a_4, a_1 / a_4, a_0 / a_4 ], &mut 1e-6);
+        let reals: Vec<f64> = results.into_iter().map(|r| r.unwrap()).collect();
         let d_3: f64 = f64::mul(a_4, 4.);
         let d_2: f64 = f64::mul(a_3, 3.);
         let d_1: f64 = f64::mul(a_2, 2.);
