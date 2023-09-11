@@ -4,7 +4,7 @@ use derive_more::Display;
 use log::warn;
 use roots::find_roots_quartic;
 
-use crate::{dual::{D, Dual}, fmt::Fmt, zero::Zero};
+use crate::{dual::{D, Dual}, fmt::Fmt, zero::Zero, math::quartic::quartic};
 
 #[derive(Debug, Clone)]
 pub struct Root<D>(pub D, pub bool);  // (root, double_root
@@ -18,7 +18,8 @@ where
 
 impl Quartic for f64 {
     fn quartic_roots(a_4: f64, a_3: f64, a_2: f64, a_1: f64, a_0: f64) -> Vec<Root<f64>> {
-        let roots0 = find_roots_quartic(a_4, a_3, a_2, a_1, a_0);
+        let roots0 = quartic(a_4, a_3, a_2, a_1, a_0);
+        let reals = roots0.reals();
         let d_3: f64 = f64::mul(a_4, 4.);
         let d_2: f64 = f64::mul(a_3, 3.);
         let d_1: f64 = f64::mul(a_2, 2.);
@@ -32,10 +33,10 @@ impl Quartic for f64 {
             let x2 = x * x;
             (a_4 * x2 * x2) + (a_3 * x2 * x) + (a_2 * x2) + (a_1 * x) + a_0
         };
-        println!("Roots: {:?}", roots0);
-        for root in roots0.as_ref() {
-            println!("  x: {}, f(x): {}", root, f(*root));
-            let fd = fp(*root);
+        println!("Roots: {:?}", reals);
+        for root in reals {
+            println!("  x: {}, f(x): {}", root, f(root));
+            let fd = fp(root);
             let mut double_root = false;
             if fd == 0. {
                 // Multiple root
@@ -43,12 +44,12 @@ impl Quartic for f64 {
                 let e_1: f64 = 2. * d_2;
                 let e_0: f64 = d_1;
                 let fpp = |x: f64| e_2 * x * x + e_1 * x + e_0;
-                let fdd = fpp(*root);
+                let fdd = fpp(root);
                 if fdd == 0. {
                     let f_1 = 2. * e_2;
                     let f_0 = e_1;
                     let fppp = |x: f64| f_1 * x + f_0;
-                    let fddd = fppp(*root);
+                    let fddd = fppp(root);
                     let order = if fddd == 0. { 4 } else { 3 };
                     warn!("Skipping multiple root {} ({})", root, order);
                     continue;
@@ -56,7 +57,7 @@ impl Quartic for f64 {
                     double_root = true;
                 }
             }
-            roots.push(Root(*root, double_root));
+            roots.push(Root(root, double_root));
         }
         roots
     }

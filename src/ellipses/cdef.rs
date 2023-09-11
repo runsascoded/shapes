@@ -1,7 +1,7 @@
 
 use std::{fmt::Display, ops::{Div, Sub}};
 
-use crate::{math::abs::AbsArg, r2::R2, ellipses::quartic::{Root, Quartic}, circle, dual::Dual};
+use crate::{math::{abs::AbsArg, quartic::quartic}, r2::R2, ellipses::quartic::{Root, Quartic}, circle, dual::Dual};
 
 /// Ellipse where "A" (the x² coefficient) is 1 and "B" (the xy coefficient) is zero:
 ///

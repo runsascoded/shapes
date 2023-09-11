@@ -16,6 +16,17 @@ pub enum Roots<D> {
 use Roots::*;
 use log::debug;
 
+impl<D: Clone> Roots<D> {
+    pub fn reals(&self) -> Vec<D> {
+        match self {
+            Cubic(roots) => roots.reals(),
+            Reals(rs) => rs.clone().to_vec(),
+            Mixed(r0, r1, _) => vec![ r0.clone(), r1.clone() ],
+            Imags(_, _) => vec![],
+        }
+    }
+}
+
 impl<D: Clone + fmt::Debug + Zero + Neg<Output = D> + Zero> Roots<D> {
     pub fn all(&self) -> Vec<Complex<D>> {
         match self {
@@ -209,7 +220,7 @@ mod tests {
         let coeffs = unscaled_coeffs.map(|c| c * scale);
         let [ a4, a3, a2, a1, a0 ] = coeffs;
         // let f = |x: f64| a4 * x * x * x * x + a3 * x * x * x + a2 * x * x + a1 * x + a0;
-        let roots = quartic::<f64>(a4, a3, a2, a1, a0);
+        let roots = quartic(a4, a3, a2, a1, a0);
         let ε = 2e-5;
         let actual = crate::math::roots::Roots(roots.all());
         let expected_reals = crate::math::roots::Roots([ r0, r1, r2, r3 ].into_iter().map(Complex::re).collect());
@@ -235,5 +246,23 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn almost_quadratic() {
+        let a_4 = 0.000000030743755847066437;
+        let a_3 = 0.000000003666731306801131;
+        let a_2 = 1.0001928389119579;
+        let a_1 = 0.000011499702220469921;
+        let a_0 = -0.6976068572771268;
+        let roots = quartic(a_4, a_3, a_2, a_1, a_0);
+        let reals = roots.reals();
+        assert_eq!(reals.len(), 2);
+        let expected = vec![
+            -0.835153846196954,
+             0.835142346155438,
+        ];
+        assert_relative_eq!(reals[0], expected[0], max_relative = 1e-5, epsilon = 1e-5);
+        assert_relative_eq!(reals[1], expected[1], max_relative = 1e-5, epsilon = 1e-5);
     }
 }
