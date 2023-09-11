@@ -596,6 +596,23 @@ pub mod tests {
     }
 
     #[test]
+    fn circle_l() {
+        let e = XYRR {
+            idx: 0,
+            c: R2 { x: -1.4489198414355153, y: 0.               , },
+            r: R2 { x:  1.29721671027373  , y: 1.205758072744277, },
+        };
+        let points = e.unit_intersections();
+        // WRONG: missing other half (+y)
+        assert_eq!(
+            points,
+            [
+                R2 { x: -0.5280321051800396, y: -0.8492244095691155 },
+            ]
+        );
+    }
+
+    #[test]
     fn tweaked_3_ellipses_f64() {
         // find_roots_quartic bug?
         // a_4: 0.000000030743755847066437

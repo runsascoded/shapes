@@ -1,6 +1,6 @@
 
 
-use log::{info, debug};
+use log::{info, debug, warn};
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
@@ -32,6 +32,7 @@ impl Model {
             let nxt = diagram.step(max_step_error_ratio);
             let nxt_err = nxt.error.re;
             if nxt_err.is_nan() {
+                warn!("NaN err at step {}: {:?}", step_idx, nxt);
                 self.repeat_idx = Some(step_idx);
                 break;
             }
@@ -164,7 +165,7 @@ mod tests {
 
     pub struct CoordGetter(pub Box<dyn Fn(Diagram) -> f64>);
 
-    fn test(
+    fn check(
         inputs: Vec<Input>,
         targets: Vec<(&str, f64)>,
         expecteds: Vec<ExpectedStep>,
@@ -338,7 +339,7 @@ mod tests {
 
         let expecteds = if os == "macos" { macos } else { linux };
 
-        test(inputs, FIZZ_BUZZ.into(), expecteds.to(), 0.8, 100);
+        check(inputs, FIZZ_BUZZ.into(), expecteds.to(), 0.8, 100);
     }
 
     #[test]
@@ -412,7 +413,7 @@ mod tests {
         linux[40] = ([ 1.100, 0.749, 0.801 ], 1.550e-13, [-0.449, -0.433, -0.617 ]).into();  // Step 40
         let expecteds = if os == "macos" { macos } else { linux };
 
-        test(inputs, FIZZ_BUZZ.into(), expecteds, 0.8, 40)
+        check(inputs, FIZZ_BUZZ.into(), expecteds, 0.8, 40)
     }
 
     #[test]
@@ -442,7 +443,7 @@ mod tests {
 
         ].to();
 
-        test(inputs, FIZZ_BUZZ.into(), expecteds, 0.7, 12)
+        check(inputs, FIZZ_BUZZ.into(), expecteds, 0.7, 12)
     }
 
     #[test]
@@ -558,7 +559,7 @@ mod tests {
             ([ 1.023, 0.609, 0.988, 0.485, 0.964, 0.802, 0.534 ], 0.00689  , [-0.712, -0.461, -0.330,  0.007, -0.710,  0.342,  0.694 ]),  // Step 100
         ].to();
 
-        test(inputs, FIZZ_BUZZ_BAZZ.into(), expecteds, 0.7, 100)
+        check(inputs, FIZZ_BUZZ_BAZZ.into(), expecteds, 0.7, 100)
     }
 
     #[test]
@@ -674,7 +675,7 @@ mod tests {
             ([ 1.099, 0.777, 0.631, 0.909, 0.662 ], 0.02903  , [ 0.314,  0.097,  0.016,  0.367, -1.591 ]),  // Step 100
         ].to();
 
-        test(inputs, FIZZ_BUZZ_BAZZ.into(), expecteds, 0.7, 100)
+        check(inputs, FIZZ_BUZZ_BAZZ.into(), expecteds, 0.7, 100)
     }
 
     use crate::intersections::tests::ellipses4;
@@ -693,7 +694,7 @@ mod tests {
         let expected: Vec<ExpectedStep> = vec![
 
         ];
-        test(inputs, FIZZ_BUZZ_BAZZ.into(), expected, 0.001, 1)
+        check(inputs, FIZZ_BUZZ_BAZZ.into(), expected, 0.001, 1)
         // test(inputs, VARIANT_CALLERS.into(), expected, 0.001, 1)
     }
 }

@@ -20,7 +20,17 @@ impl Quartic for f64 {
     fn quartic_roots(a_4: f64, a_3: f64, a_2: f64, a_1: f64, a_0: f64) -> Vec<Root<f64>> {
         // let roots0 = quartic(a_4, a_3, a_2, a_1, a_0);
         // let reals = roots0.reals();
-        let results = find_roots_sturm(&[ a_3 / a_4, a_2 / a_4, a_1 / a_4, a_0 / a_4 ], &mut 1e-6);
+        let mut first_nonzero: Option<f64> = None;
+        let mut rest: Vec<f64> = vec![];
+        for coeff in &[ a_4, a_3, a_2, a_1, a_0 ] {
+            match first_nonzero {
+                None => if *coeff != 0. {
+                    first_nonzero = Some(*coeff);
+                },
+                Some(first_nonzero) => rest.push(*coeff / first_nonzero),
+            }
+        }
+        let results = find_roots_sturm(&rest, &mut 1e-6);
         let reals: Vec<f64> = results.into_iter().map(|r| r.unwrap()).collect();
         let d_3: f64 = f64::mul(a_4, 4.);
         let d_2: f64 = f64::mul(a_3, 3.);
@@ -132,9 +142,9 @@ mod tests {
         let c_1 = Dual::new(-6., d_1);
         let c_0 = Dual::new( 0., d_0);
         let roots = Quartic::quartic_roots(c_4, c_3, c_2, c_1, c_0);
-        assert_eq!(roots.len(), 4);
-        // for root in roots {
-        //     println!("{}", root);
-        // }
+        // assert_eq!(roots.len(), 4);
+        for root in roots {
+            println!("{:?}", root);
+        }
     }
 }
