@@ -6,6 +6,7 @@ pub mod deg;
 pub mod is_normal;
 pub mod is_zero;
 pub mod quadratic;
+pub mod quartic;
 pub mod recip;
 pub mod round;
 pub mod roots;

@@ -1,10 +1,10 @@
-use std::{fmt::{Display, Formatter, self}, ops::{Mul, Sub, Add, Neg}};
+use std::{fmt::{Display, Formatter, self}, ops::{Mul, Sub, Add, Neg, Div}};
 
 use approx::{AbsDiffEq, RelativeEq};
 use derive_more;
 use log::debug;
 
-use crate::{zero::Zero, sqrt::Sqrt, dual::Dual};
+use crate::{zero::Zero, sqrt::Sqrt, dual::Dual, trig::Trig};
 
 
 #[derive(
@@ -21,6 +21,41 @@ impl<D: Clone + Zero> Complex<D> {
     pub fn re(re: D) -> Self {
         Self { re: re.clone(), im: re.zero() }
     }
+}
+
+pub trait SqrtArg
+: Clone
++ Into<f64>
++ Norm
++ Sqrt
++ Trig
++ Zero
++ Div<f64, Output = Self>
++ Neg<Output = Self>
+{}
+impl SqrtArg for f64 {}
+impl SqrtArg for Dual {}
+
+impl<D: SqrtArg> Sqrt for Complex<D>
+where
+    Complex<D>: Mul<D, Output = Complex<D>>
+{
+    fn sqrt(&self) -> Self {
+        // let re = self.re;
+        // let im = self.im;
+        let theta = self.im.atan2(&self.re) / 2.;
+        let cos = theta.cos();
+        let sin = theta.sin();
+        let r = self.norm();
+        Complex { re: cos, im: sin } * r.sqrt()
+    }
+    // pub fn sqrt(d: D) -> Self {
+    //     if d.into() >= 0. {
+    //         Complex::re(d.sqrt())
+    //     } else {
+    //         Complex { re: d.zero(), im: (-d).sqrt() }
+    //     }
+    // }
 }
 
 impl<D: Clone + Neg<Output = D>> Complex<D> {

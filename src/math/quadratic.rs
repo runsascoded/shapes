@@ -1,4 +1,4 @@
-use std::ops::{Neg, Div, Add, Sub, Mul};
+use std::{ops::{Neg, Div, Add, Sub, Mul}, fmt};
 
 use crate::{sqrt::Sqrt, dual::Dual, zero::Zero};
 
@@ -26,13 +26,22 @@ impl<D: Clone> Roots<D> {
     }
 }
 
-impl<D: Clone + Neg<Output = D> + Zero> Roots<D> {
+impl<D: Clone + fmt::Debug + Neg<Output = D> + Zero> Roots<D> {
     pub fn all(&self) -> Vec<C<D>> {
         match self {
             Single(r) => vec![ C::re(r.clone()) ],
             Double(r) => vec![ C::re(r.clone()) ],
             Reals(rs) => rs.iter().map(|r| C::re(r.clone())).collect(),
             Complex(c) => vec![ c.clone(), c.conj() ],
+        }
+    }
+
+    pub fn two_roots(&self) -> [ C<D>; 2 ] {
+        match self {
+            Single(r) => panic!("single root: {:?}", r),
+            Double(r) => [ C::re(r.clone()), C::re(r.clone()) ],
+            Reals(rs) => [ C::re(rs[0].clone()), C::re(rs[1].clone()) ],
+            Complex(c) => [ c.clone(), c.conj() ],
         }
     }
 }

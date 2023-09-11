@@ -25,7 +25,7 @@ impl<D: Clone> Roots<D> {
         }
     }
 }
-impl<D: Clone + Neg<Output = D> + Zero> Roots<D> {
+impl<D: Clone + fmt::Debug + Neg<Output = D> + Zero> Roots<D> {
     pub fn all(&self) -> Vec<Complex<D>> {
         match self {
             Quadratic(q) => q.all(),
