@@ -29,10 +29,10 @@ impl<
     + Neg<Output = D>
 > Recip for Complex<D> {
     fn recip(&self) -> Complex<D> {
-        let norm = self.norm();
+        let norm2 = self.norm2();
         Complex {
-            re: self.re.clone() / norm.clone(),
-            im: -self.im.clone() / norm,
+            re: self.re.clone() / norm2.clone(),
+            im: -self.im.clone() / norm2,
         }
     }
 }

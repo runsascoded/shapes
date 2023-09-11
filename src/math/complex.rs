@@ -150,6 +150,26 @@ impl<
     }
 }
 
+impl<D: Div<f64, Output = D>> Div<f64> for Complex<D> {
+    type Output = Self;
+    fn div(self, rhs: f64) -> Self::Output {
+        Self {
+            re: self.re / rhs,
+            im: self.im / rhs,
+        }
+    }
+}
+
+impl<D: Neg<Output = D>> Neg for Complex<D> {
+    type Output = Self;
+    fn neg(self) -> Self::Output {
+        Self {
+            re: -self.re,
+            im: -self.im,
+        }
+    }
+}
+
 pub trait Norm
 : Clone
 + Sized
@@ -161,13 +181,16 @@ impl Norm for f64 {}
 impl Norm for Dual {}
 
 impl<D: Norm> Complex<D> {
-    pub fn norm(&self) -> D {
+    pub fn norm2(&self) -> D {
         let re = self.re.clone();
         let im = self.im.clone();
         // let Complex { re, im } = self.clone();
         let re2 = re.clone() * re;
         let im2 = im.clone() * im;
-        (re2 + im2).sqrt()
+        re2 + im2
+    }
+    pub fn norm(&self) -> D {
+        self.norm2().sqrt()
     }
 }
 
