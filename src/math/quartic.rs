@@ -210,7 +210,7 @@ mod tests {
         let [ a4, a3, a2, a1, a0 ] = coeffs;
         // let f = |x: f64| a4 * x * x * x * x + a3 * x * x * x + a2 * x * x + a1 * x + a0;
         let roots = quartic::<f64>(a4, a3, a2, a1, a0);
-        let ε = 1e-4;
+        let ε = 2e-5;
         let actual = crate::math::roots::Roots(roots.all());
         let expected_reals = crate::math::roots::Roots([ r0, r1, r2, r3 ].into_iter().map(Complex::re).collect());
         assert_relative_eq!(actual, expected_reals, max_relative = ε, epsilon = ε);

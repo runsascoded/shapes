@@ -226,7 +226,7 @@ mod tests {
         let [ a3, a2, a1, a0 ] = coeffs;
         // let f = |x: f64| a3 * x * x * x + a2 * x * x + a1 * x + a0;
         let roots = cubic::<f64>(a3, a2, a1, a0);
-        let ε = 1e-5;
+        let ε = 7e-7;
         let actual = crate::math::roots::Roots(roots.all());
         let expected_reals = crate::math::roots::Roots([ r0, r1, r2 ].into_iter().map(Complex::re).collect());
         if r0 == r1 && r1 == r2 {
