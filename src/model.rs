@@ -31,6 +31,10 @@ impl Model {
             debug!("Step {}:", step_idx);
             let nxt = diagram.step(max_step_error_ratio);
             let nxt_err = nxt.error.re;
+            if nxt_err.is_nan() {
+                self.repeat_idx = Some(step_idx);
+                break;
+            }
             let min_step = &self.steps[self.min_idx];
             if nxt_err < min_step.error.re {
                 self.min_idx = step_idx;
