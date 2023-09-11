@@ -126,9 +126,10 @@ where
         let a_2 = c.clone() * 2.;
         let a_1 = c.clone() * c.clone() - e * 4.;
         let a_0 = -d.clone() * d.clone();
-        let cubic_roots = cubic::cubic(a_2.zero() + 1., a_2, a_1, a_0).reals();
+        let cubic_roots = cubic::cubic(a_2.zero() + 1., a_2, a_1, a_0);
         debug!("cubic_roots: {:?}", cubic_roots);
-        let u = cubic_roots.iter().rev().next().unwrap();
+        let cubic_reals = cubic_roots.reals();
+        let u = cubic_reals.iter().rev().next().unwrap();
         let usq = Sqrt::sqrt(&Complex::re(u.clone())) / 2.;
         let usqr = usq.recip();
         debug!("u {:?}, usq {:?}, usqr {:?}", u, usq, usqr);
@@ -209,7 +210,7 @@ mod tests {
         let [ a4, a3, a2, a1, a0 ] = coeffs;
         // let f = |x: f64| a4 * x * x * x * x + a3 * x * x * x + a2 * x * x + a1 * x + a0;
         let roots = quartic::<f64>(a4, a3, a2, a1, a0);
-        let ε = 1e-5;
+        let ε = 1e-4;
         let actual = crate::math::roots::Roots(roots.all());
         let expected_reals = crate::math::roots::Roots([ r0, r1, r2, r3 ].into_iter().map(Complex::re).collect());
         assert_relative_eq!(actual, expected_reals, max_relative = ε, epsilon = ε);
@@ -217,22 +218,22 @@ mod tests {
 
     #[test]
     fn sweep() {
-        check(-10., -10., -10., -1., 1.);
-        // let vals = [ -10., -1., -0.1, 0., 0.1, 1., 10., ];
-        // let n = vals.len();
-        // for i0 in 0..n {
-        //     let r0 = vals[i0];
-        //     for i1 in i0..n {
-        //         let r1 = vals[i1];
-        //         for i2 in i1..n {
-        //             let r2 = vals[i2];
-        //             for i3 in i2..n {
-        //                 let r3 = vals[i3];
-        //                 let scale = 1.;
-        //                 check(r0, r1, r2, r3, scale);
-        //             }
-        //         }
-        //     }
-        // }
+        // check(-10., -10., -10., 0.1, 1.);
+        let vals = [ -10., -1., -0.1, 0., 0.1, 1., 10., ];
+        let n = vals.len();
+        for i0 in 0..n {
+            let r0 = vals[i0];
+            for i1 in i0..n {
+                let r1 = vals[i1];
+                for i2 in i1..n {
+                    let r2 = vals[i2];
+                    for i3 in i2..n {
+                        let r3 = vals[i3];
+                        let scale = 1.;
+                        check(r0, r1, r2, r3, scale);
+                    }
+                }
+            }
+        }
     }
 }

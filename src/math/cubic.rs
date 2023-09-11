@@ -186,8 +186,21 @@ where
         let q2 = q / 2.;
         let p3sq = p3.sqrt();
         let u = q2 / p3 / p3sq.clone();
-        let w = u.clone() + (u.clone() * u + 1.).sqrt();
-        let m = w.cbrt();
+        let a = u.asinh();
+        let m = (a.clone() / -3.).exp();
+        debug!("u {:?}, a {:?}, m {:?}", u, a, m.clone());
+        // let w = u.clone() + (u.clone() * u.clone() + 1.).sqrt();
+        // if w.is_zero() {
+            // u is very large, and negative (e.g. -104023284.33940886); p is so close to 0 that we don't have enough precision to complete this path; treat it like the $p = 0$ / $x³ + q = 0$ code path above.
+        //     let re = -q.cbrt();
+        //     let re2 = Complex::re(re.clone());
+        //     let im = re2.clone() * u_1.clone();
+        //     Mixed(re, im)
+        // } else {
+            // let m = w.cbrt();
+            // w.clone().cbrt();
+        // };
+        // debug!("u {:?}, w {:?}, m {:?}", u, w, m.clone());
         let re = (m.clone() + m.recip()) * p3sq.clone();
         let ru = Complex::re(m) * u_1;
         let im = (ru.clone() + ru.recip()) * p3sq;

@@ -7,6 +7,8 @@ pub trait Trig {
     fn acos(&self) -> Self;
     fn atan(&self) -> Self;
     fn atan2(&self, o: &Self) -> Self;
+    fn asinh(&self) -> Self;
+    fn exp(&self) -> Self;
 }
 
 impl Trig for Dual {
@@ -29,6 +31,12 @@ impl Trig for Dual {
         let z = y.atan2(x);
         Dual(z, self.1)
     }
+    fn asinh(&self) -> Dual {
+        Dual(self.0.clone().asinh(), self.1)
+    }
+    fn exp(&self) -> Dual {
+        Dual(self.0.clone().exp(), self.1)
+    }
 }
 
 impl Trig for f64 {
@@ -46,5 +54,11 @@ impl Trig for f64 {
     }
     fn atan2(&self, o: &f64) -> f64 {
         RealField::atan2(*self, *o)
+    }
+    fn asinh(&self) -> f64 {
+        ComplexField::asinh(*self)
+    }
+    fn exp(&self) -> f64 {
+        ComplexField::exp(*self)
     }
 }
