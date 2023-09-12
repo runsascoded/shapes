@@ -379,6 +379,9 @@ where
 #[cfg(test)]
 pub mod tests {
     use std::collections::HashMap;
+    use std::env;
+
+    use log::debug;
 
     use crate::circle::Circle;
     use crate::math::{deg::Deg, round::round};
@@ -388,6 +391,7 @@ pub mod tests {
     use crate::r2::R2;
 
     use super::*;
+    use test_log::test;
 
     fn duals(idx: usize, n: usize) -> Vec<Vec<f64>> {
         let mut duals = [ vec![ 0.; 3 * n ], vec![ 0.; 3 * n ], vec![ 0.; 3 * n ] ];
@@ -603,17 +607,19 @@ pub mod tests {
             r: R2 { x:  1.29721671027373  , y: 1.205758072744277, },
         };
         let points = e.unit_intersections();
-        // WRONG: missing other half (+y)
+        // WRONG: stirm: missing other half (+y)
+        // assert_eq!(points, [ R2 { x: -0.5280321051800396, y: -0.8492244095691155 }, ] );
         assert_eq!(
             points,
             [
-                R2 { x: -0.5280321051800396, y: -0.8492244095691155 },
+                R2 { x: -0.5280321050819479, y:  0.8492244085062125 },
+                R2 { x: -0.5280321050819478, y: -0.8492244085062124 },
             ]
         );
     }
 
     #[test]
-    fn tweaked_3_ellipses_f64() {
+    fn tweaked_2_ellipses_f64() {
         // find_roots_quartic bug?
         // a_4: 0.000000030743755847066437
         // a_3: 0.000000003666731306801131
@@ -635,7 +641,24 @@ pub mod tests {
         ];
         let shapes: Vec<_> = ellipses.iter().map(|e| Shape::XYRR(e.clone())).collect();
         let intersections = Intersections::new(shapes);
-        assert_eq!(intersections.nodes.len(), 8);
+        let gen_vals = env::var("GEN_VALS").map(|s| s.parse::<usize>().unwrap()).ok();
+        match gen_vals {
+            Some(_) => {
+                println!("Nodes:");
+                for node in &intersections.nodes {
+                    println!("  {:?}", format!("{}", node.borrow()));
+                }
+            },
+            None => {
+                assert_eq!(
+                    intersections.nodes.iter().map(|n| format!("{}", n.borrow())).collect::<Vec<String>>(),
+                    vec![
+                        "I( 0.897,  3.459, C0(  57)/C1( 123))",
+                        "I( 0.897,  0.119, C0( -57)/C1(-123))",
+                    ]
+                );
+            }
+        }
     }
 
     #[test]

@@ -2,7 +2,7 @@ use std::ops::Mul;
 
 use derive_more::Display;
 use log::warn;
-use roots::{find_roots_quartic, find_roots_sturm};
+use roots::{find_roots_quartic, find_roots_sturm, find_roots_eigen};
 
 use crate::{dual::{D, Dual}, fmt::Fmt, zero::Zero, math::quartic::quartic};
 
@@ -30,8 +30,9 @@ impl Quartic for f64 {
                 Some(first_nonzero) => rest.push(*coeff / first_nonzero),
             }
         }
-        let results = find_roots_sturm(&rest, &mut 1e-6);
-        let reals: Vec<f64> = results.into_iter().map(|r| r.unwrap()).collect();
+        // let results = find_roots_sturm(&rest, &mut 1e-6);
+        // let reals: Vec<f64> = results.into_iter().map(|r| r.unwrap()).collect();
+        let reals = find_roots_eigen(rest.into_iter().rev().collect());
         let d_3: f64 = f64::mul(a_4, 4.);
         let d_2: f64 = f64::mul(a_3, 3.);
         let d_1: f64 = f64::mul(a_2, 2.);
