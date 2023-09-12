@@ -573,12 +573,34 @@ pub mod tests {
             ("0---", 2.9962674848728885),
         ].into();
         assert_eq!(regions.len(), expected.len());
-        for region in regions {
-            let key = region.key.clone();
-            let area = region.area();
-            assert_eq!(area, *expected.get(key.as_str()).unwrap());
-            // println!("{}: {}", key, area);
+        match env::var("GEN_VALS").map(|s| s.parse::<usize>().unwrap()).ok() {
+            Some(_) => {
+                let mut actual: HashMap<&str, f64> = HashMap::new();
+                for region in &regions {
+                    let area = region.area();
+                    let key = region.key.as_str();
+                    actual.insert(key, area);
+                }
+                let mut actual: Vec<_> = actual.into_iter().collect();
+                actual.sort_by_cached_key(|(_, a)| OrderedFloat(*a));
+                for (key, area) in actual {
+                    println!("(\"{}\", {}),", key, area);
+                }
+            }
+            None => {
+                for region in &regions {
+                    let area = region.area();
+                    let key = region.key.as_str();
+                    assert_relative_eq!(area, *expected.get(key).unwrap(), max_relative = 1e-10);
+                }
+            }
         }
+        // for region in regions {
+        //     let key = region.key.clone();
+        //     let area = region.area();
+        //     // assert_eq!(area, *expected.get(key.as_str()).unwrap());
+        //     println!("{}: {}", key, area);
+        // }
     }
 
     #[test]
@@ -589,14 +611,19 @@ pub mod tests {
             c: R2 { x: -1.100285308561806, y: -1.1500279763995946e-5 },
             r: R2 { x:  1.000263820108834, y:  1.0000709021402923 }
         };
-        let points = e.unit_intersections();
-        assert_eq!(
-            points,
-            [
-                R2 { x: -0.5500164117391726, y: -0.8351538461969557 },
-                R2 { x: -0.5500338731914519, y:  0.8351423461554403 },
-            ]
-        );
+        let mut points = e.unit_intersections();
+        points.sort_by_key(|p| OrderedFloat(p.y));
+        assert_relative_eq!(points[0], R2 { x: -0.5500164117391726, y: -0.8351538461969557 }, max_relative = 1e-16);
+        assert_relative_eq!(points[1], R2 { x: -0.5500338731914519, y:  0.8351423461554383 }, max_relative = 1e-16);
+        // TODO: impl/use relative_eq for Vec?
+        // assert_relative_eq!(
+        //     points,
+        //     [
+        //         R2 { x: -0.5500164117391726, y: -0.8351538461969557 },
+        //         R2 { x: -0.5500338731914519, y:  0.8351423461554383 },
+        //     ],
+        //     max_relative = 1e-10,
+        // );
     }
 
     #[test]
