@@ -28,7 +28,7 @@ impl<D: Clone> Roots<D> {
     }
 }
 
-impl<D: Clone + fmt::Debug + Zero + Neg<Output = D> + Zero> Roots<D> {
+impl<D: Clone + IsZero + fmt::Debug + Zero + Neg<Output = D> + Zero> Roots<D> {
     pub fn all(&self) -> Vec<Complex<D>> {
         match self {
             Roots::Cubic(roots) => roots.all(),
