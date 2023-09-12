@@ -157,7 +157,7 @@ impl Ord for Dual {
 impl AbsDiffEq for Dual {
     type Epsilon = f64;
     fn default_epsilon() -> Self::Epsilon {
-        1e-6
+        1e-16
     }
     fn abs_diff_eq(&self, other: &Self, epsilon: Self::Epsilon) -> bool {
         self.v().abs_diff_eq(&other.v(), epsilon) && self.d().abs_diff_eq(&other.d(), epsilon)
@@ -165,7 +165,7 @@ impl AbsDiffEq for Dual {
 }
 impl RelativeEq for Dual {
     fn default_max_relative() -> Self::Epsilon {
-        1e-3
+        1e-16
     }
 
     fn relative_eq(&self, other: &Self, epsilon: Self::Epsilon, max_relative: Self::Epsilon) -> bool {

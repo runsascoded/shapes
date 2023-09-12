@@ -94,6 +94,7 @@ where
     : Add<D, Output = Complex<D>>
     + Sub<D, Output = Complex<D>>
     + Mul<D, Output = Complex<D>>
+    + Mul<Complex<D>, Output = Complex<D>>
     + Mul<Complex<f64>, Output = Complex<D>>
 {
     if a.is_zero() {
@@ -109,25 +110,29 @@ where
     : Add<D, Output = Complex<D>>
     + Sub<D, Output = Complex<D>>
     + Mul<D, Output = Complex<D>>
+    + Mul<Complex<D>, Output = Complex<D>>
     + Mul<Complex<f64>, Output = Complex<D>>
 {
-    debug!("cubic_scaled({:?}, {:?}, {:?})", b, c, d);
+    debug!("cubic_scaled: x^3 + {:?} x^2 + {:?} x + {:?}", b, c, d);
     let b3 = b.clone() / 3.;
     let p = c.clone() - b * b3.clone();
     let q = b3.clone() * b3.clone() * b3.clone() * 2. - b3.clone() * c + d.clone();
-    if p.is_zero() && q.is_zero() {
+    let rv = if p.is_zero() && q.is_zero() {
         let re = -d.cbrt();
-          // TODO: factor / make these static
-        let sin_tau3: f64 = TAU3.sin();
-        let u_1: Complex<f64> = Complex { re: -0.5, im: sin_tau3 };
-        Mixed(re.clone(), Complex::re(re) * u_1)
+        Reals([ re.clone(), re.clone(), re, ])
+        // TODO: factor / make these static
+        //   let sin_tau3: f64 = TAU3.sin();
+        //   let u_1: Complex<f64> = Complex { re: -0.5, im: sin_tau3 };
+        // Mixed(re.clone(), Complex::re(re) * u_1)
     } else {
         match cubic_depressed(p, q) {
             Reals(roots) => Reals(roots.map(|r| r - b3.clone())),
             Mixed(re, ims) => Mixed(re - b3.clone(), ims - b3),
             Quadratic(q) => panic!("cubic_depressed returned quadratic::Roots: {:?}", q),
         }
-    }
+    };
+    debug!("cubic_scaled roots: {:?}", rv);
+    rv
 }
 
 static TAU3: f64 = TAU / 3.;
@@ -138,15 +143,16 @@ where
     : Add<D, Output = Complex<D>>
     + Add<Complex<D>, Output = Complex<D>>
     + Mul<D, Output = Complex<D>>
-    + Mul<Complex<f64>, Output = Complex<D>>,
+    + Mul<Complex<D>, Output = Complex<D>>
+    + Mul<Complex<f64>, Output = Complex<D>>
 {
     // TODO: factor / make these static
     let sin_tau3: f64 = TAU3.sin();
     let u_1: Complex<f64> = Complex { re: -0.5, im: sin_tau3 };
     // let u_2: Complex<f64> = Complex { re: -1. / 2., im: -sin_tau3 };
 
-    debug!("p: {:?}, q: {:?}", p, q);
-    if p.is_zero() {
+    debug!("cubic_depressed: x^3 + {:?}x + {:?}", p, q);
+    let rv = if p.is_zero() {
         if q.is_zero() {
             error!("Can't infer complex roots from depressed cubic with p == 0 and q == 0");
         }
@@ -155,8 +161,8 @@ where
         let im = re2.clone() * u_1.clone();
         Mixed(re, im)
     } else if p.lt_zero() {
-        let p3 = p / 3.;
-        let q2 = q / 2.;
+        let p3 = p.clone() / 3.;
+        let q2 = q.clone() / 2.;
         let p3sq = (-p3.clone()).sqrt();
         let u = q2 / p3 / p3sq.clone();
         let d = u.abs() - 1.;
@@ -177,18 +183,30 @@ where
             let m = w.cbrt();
             let re = (m.clone() + m.recip()) * p3sq.clone();
             debug!("u {:?}, w {:?}, m {:?}, re {:?}", u, w, m, re);
-            let ru = Complex::re(m) * u_1;
-            let im = (ru.clone() + ru.recip()) * p3sq;
+            let mu = Complex::re(m) * u_1;
+            let im = (mu.clone() + mu.recip()) * p3sq;
             Mixed(re, im)
         }
     } else {
-        let p3 = p / 3.;
-        let q2 = q / 2.;
+        let p3 = p.clone() / 3.;
+        let q2 = q.clone() / 2.;
         let p3sq = p3.sqrt();
-        let u = q2 / p3 / p3sq.clone();
-        let a = u.asinh();
-        let m = (a.clone() / -3.).exp();
-        debug!("u {:?}, a {:?}, m {:?}", u, a, m.clone());
+        let u = -q2 / p3 / p3sq.clone();
+
+        let use_asinh = false;
+        let m = if use_asinh {
+            // More numerically stable in some cases, using asinh(x) = ln(x + sqrt(x² + 1))
+            let a = u.asinh();
+            let m = (a.clone() / -3.).exp();
+            debug!("u {:?}, a {:?}, m {:?}", u, a, m.clone());
+            m
+        } else {
+            // Naive impl, $w$ can end up as 0. with large negative $u$
+            let w = u.clone() + (u.clone() * u.clone() + 1.).sqrt();
+            let m = w.cbrt();
+            debug!("u {:?}, w {:?}, m {:?}", u, w, m.clone());
+            m
+        };
         // let w = u.clone() + (u.clone() * u.clone() + 1.).sqrt();
         // if w.is_zero() {
             // u is very large, and negative (e.g. -104023284.33940886); p is so close to 0 that we don't have enough precision to complete this path; treat it like the $p = 0$ / $x³ + q = 0$ code path above.
@@ -201,11 +219,18 @@ where
             // w.clone().cbrt();
         // };
         // debug!("u {:?}, w {:?}, m {:?}", u, w, m.clone());
-        let re = (m.clone() + m.recip()) * p3sq.clone();
-        let ru = Complex::re(m) * u_1;
-        let im = (ru.clone() + ru.recip()) * p3sq;
+        let re = (m.clone() - m.recip()) * p3sq.clone();
+        let mu = Complex::re(m) * u_1;
+        let im = (mu.clone() - mu.recip()) * p3sq;
         Mixed(re, im)
+    };
+    debug!("cubic_depressed roots: {:?}", rv);
+    let f = |x: &Complex<D>| x.clone() * x.clone() * x.clone() + x.clone() * p.clone() + q.clone();
+    for x in &rv.all() {
+        let y = f(x);
+        debug!("  x {:?}, f(x) {:?} ({:?})", x, y, y.norm());
     }
+    rv
 }
 
 #[cfg(test)]
@@ -215,55 +240,68 @@ mod tests {
     use super::*;
     use test_log::test;
 
-    fn check(r0: f64, r1: f64, r2: f64, scale: f64) {
+    fn check(r0: Complex<f64>, r1: Complex<f64>, r2: Complex<f64>, scale: f64) {
         let unscaled_coeffs = [
-            1.,
+            Complex::re(1.),
             -(r0 + r1 + r2),
             r0 * r1 + r0 * r2 + r1 * r2,
             -(r0 * r1 * r2),
         ];
         let coeffs = unscaled_coeffs.map(|c| c * scale);
-        let [ a3, a2, a1, a0 ] = coeffs;
+        let [ a3, a2, a1, a0 ] = coeffs.map(|c| {
+            assert_abs_diff_eq!(c.im, 0., epsilon = 2e-17);
+            c.re
+        });
         // let f = |x: f64| a3 * x * x * x + a2 * x * x + a1 * x + a0;
         let roots = cubic::<f64>(a3, a2, a1, a0);
         let ε = 7e-7;
         let actual = crate::math::roots::Roots(roots.all());
-        let expected_reals = crate::math::roots::Roots([ r0, r1, r2 ].into_iter().map(Complex::re).collect());
-        if r0 == r1 && r1 == r2 {
-            let r = r0;
-            let r2 = r / -2.;
-            let r32 = r2 * Sqrt::sqrt(&3.);
-            // Some triple-roots can be found precisely in f64, e.g. integers.
-            // x³ + 30x² + 300x + 1000 has a triple-root at -10., which this library has been observed to find, returning 3 roots of unity
-            // (scaled by some f64, in this case cbrt(-10)).
-            let expected_triple_root = crate::math::roots::Roots(vec![ Complex::re(r), Complex { re: r2, im: r32 }, Complex { re: r2, im: -r32 }]);
-            if !relative_eq!(actual, expected_triple_root, max_relative = ε, epsilon = ε) {
-                // In other cases, we can end up with 3 (possibly complex!) numbers clustered around the triple-root.
-                // 1000x³ + 300x² + 30x + 1 has a triple-root at -0.1, and at time of writing `actual` looks like:
-                // Roots([
-                //     Complex { re: -0.09999939922090205, im: 0.0 },
-                //     Complex { re: -0.10000030092628585, im: 5.193569712504013e-7 },
-                //     Complex { re: -0.10000030092628585, im: -5.193569712504013e-7 }
-                // ])
-                // Those are legitimately 3 values where the polynomial is very close to 0. Presumably similar
-                // clusters exist around the two imaginary roots as well, though. I think it makes more sense to
-                // represent them, but otoh there are inputs (very close to this one, I think, but it's worth
-                // investigating further) where the "cluster around -0.1" is a better answer. ε above is currently
-                // 1e-5, that's about the accuracy limit here. Putting tolerance into the algorithm  is an option:
-                // double/triple root detection code paths can accept "discrimants" `< 1e-7` instead of `== 0.`. I did
-                // some of that in these JS and Scala quartic-solver implementations:
-                //
-                // - https://github.com/runsascoded/apvd/blob/adf1aeddd32c022a086d203f6e0ef452109a5495/src/quartic.ts#L28
-                // - https://github.com/runsascoded/apvd/blob/1cde548d962ca7548c88bc5baed97b24298e55e0/cubic/shared/src/main/scala/cubic/DepressedCubic.scala#L17
-                assert_relative_eq!(actual, expected_reals, max_relative = ε, epsilon = ε);
-            }
-        } else {
-            assert_relative_eq!(actual, expected_reals, max_relative = ε, epsilon = ε);
-        }
+        let expected_reals = crate::math::roots::Roots(vec![ r0, r1, r2 ]);
+        // if r0 == r1 && r1 == r2 {
+        //     let r = r0;
+        //     let r2 = r / -2.;
+        //     let r32 = r2 * Sqrt::sqrt(&3.);
+        //     // Some triple-roots can be found precisely in f64, e.g. integers.
+        //     // x³ + 30x² + 300x + 1000 has a triple-root at -10., which this library has been observed to find, returning 3 roots of unity
+        //     // (scaled by some f64, in this case cbrt(-10)).
+        //     let expected_triple_root = crate::math::roots::Roots(vec![ Complex::re(r), Complex { re: r2, im: r32 }, Complex { re: r2, im: -r32 }]);
+        //     if !relative_eq!(actual, expected_triple_root, max_relative = ε, epsilon = ε) {
+        //         // In other cases, we can end up with 3 (possibly complex!) numbers clustered around the triple-root.
+        //         // 1000x³ + 300x² + 30x + 1 has a triple-root at -0.1, and at time of writing `actual` looks like:
+        //         // Roots([
+        //         //     Complex { re: -0.09999939922090205, im: 0.0 },
+        //         //     Complex { re: -0.10000030092628585, im: 5.193569712504013e-7 },
+        //         //     Complex { re: -0.10000030092628585, im: -5.193569712504013e-7 }
+        //         // ])
+        //         // Those are legitimately 3 values where the polynomial is very close to 0. Presumably similar
+        //         // clusters exist around the two imaginary roots as well, though. I think it makes more sense to
+        //         // represent them, but otoh there are inputs (very close to this one, I think, but it's worth
+        //         // investigating further) where the "cluster around -0.1" is a better answer. ε above is currently
+        //         // 1e-5, that's about the accuracy limit here. Putting tolerance into the algorithm  is an option:
+        //         // double/triple root detection code paths can accept "discrimants" `< 1e-7` instead of `== 0.`. I did
+        //         // some of that in these JS and Scala quartic-solver implementations:
+        //         //
+        //         // - https://github.com/runsascoded/apvd/blob/adf1aeddd32c022a086d203f6e0ef452109a5495/src/quartic.ts#L28
+        //         // - https://github.com/runsascoded/apvd/blob/1cde548d962ca7548c88bc5baed97b24298e55e0/cubic/shared/src/main/scala/cubic/DepressedCubic.scala#L17
+        //         assert_relative_eq!(actual, expected_reals, max_relative = ε, epsilon = ε);
+        //     }
+        // } else {
+        assert_relative_eq!(actual, expected_reals, max_relative = ε, epsilon = ε);
+        // }
     }
 
+    // fn check_mixed(r0: f64, im_pair: Complex<f64>, scale: f64) {
+    //     let Complex { re, im } = im_pair;
+    //     let unscaled_coeffs = [
+    //         1.,
+    //         -(r0 + re * 2.),
+    //         r0 * re * 2. + im_pair.norm2(),
+    //         -(r0 * (re*re - im*im)),
+    //     ];
+    // }
+
     #[test]
-    fn sweep() {
+    fn sweep_reals() {
         // For every nondecreasing triplet of the following values:
         // - synthesize the corresponding cubic polynomial
         // - ask cubic() for the roots
@@ -281,18 +319,83 @@ mod tests {
         // THe roots::Roots(Vec<Complex<f64>>)  wrapper also implements relative equality checks by "aligning" the
         // "expected" roots against the "actual" roots in such a way that the sum of the element-wise distances is
         // minimized.
+        // check(Complex::re(-10.), Complex::re(-10.), Complex::re(-10.), 1.);
         let vals = [ -10., -1., -0.1, 0., 0.1, 1., 10., ];
         let n = vals.len();
         for i0 in 0..n {
-            let r0 = vals[i0];
+            let r0 = Complex::re(vals[i0]);
             for i1 in i0..n {
-                let r1 = vals[i1];
+                let r1 = Complex::re(vals[i1]);
                 for i2 in i1..n {
-                    let r2 = vals[i2];
+                    let r2 = Complex::re(vals[i2]);
                     let scale = 1.;
                     check(r0, r1, r2, scale);
                 }
             }
         }
+    }
+
+    #[test]
+    fn sweep_mixed() {
+        // check(
+        //     Complex::re(-10.),
+        //     Complex { re: -1., im: -10. },
+        //     Complex { re: -1., im:  10. },
+        //     1.,
+        // );
+        let vals = [ -10., -1., -0.1, 0., 0.1, 1., 10., ];
+        let n = vals.len();
+        for i0 in 0..n {
+            let r0 = Complex::re(vals[i0]);
+            for i1 in 0..n {
+                let re = vals[i1];
+                for i2 in 0..n {
+                    let im = vals[i2];
+                    let im0 = Complex { re, im };
+                    let im1 = im0.conj();
+                    let scale = 1.;
+                    check(r0, im0, im1, scale);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn depressed_ellipses4_0_2_crate() {
+        let p = 1.4557437846748906;
+        let q = 0.5480639588360245;
+        let f = |x: Complex<f64>| x*x*x + x*p + q;
+        let e_re = -0.347626610828303;
+        let e_im = Complex { re: 0.17381330541415, im: -1.24353406872987 };
+        let roots = cubic_depressed(p, q);
+
+        let expected = Mixed(e_re, e_im);
+        debug!("Check expected roots:");
+        for x in &expected.all() {
+            let y = f(x.clone());
+            debug!("  x {:?}, f(x) {:?} ({:?})", x, y, y.norm());
+        }
+
+        assert_relative_eq!(roots, expected, max_relative = 1e-10);
+    }
+
+    #[test]
+    fn depressed_ellipses4_0_2_roots_crate() {
+        let p = 1.4557437846748906;
+        let q = 0.5480639588360245;
+        let f = |x: Complex<f64>| x*x*x + x*p + q;
+        let e_re = -0.347626610828303;
+        let e_im = Complex { re: 0.17381330541415, im: -1.24353406872987 };
+        // let roots = cubic_depressed(p, q);
+        let roots = roots::find_roots_cubic_depressed(p, q).as_ref().to_vec();
+
+        let expected = Mixed(e_re, e_im);
+        debug!("Check expected roots:");
+        for x in &expected.all() {
+            let y = f(x.clone());
+            debug!("  x {:?}, f(x) {:?} ({:?})", x, y, y.norm());
+        }
+        assert_eq!(roots.len(), 1);
+        assert_relative_eq!(roots[0], e_re, max_relative = 1e-10);
     }
 }

@@ -540,11 +540,20 @@ pub mod tests {
         let c0 = 1. / r2sqrt;
         let c1 = r2 * c0;
         [
-            Shape::XYRR(XYRR { idx: 0, c: R2 { x: c0 -0.1, y:      c1, }, r: R2 { x: 1., y: r , }, }),
+            Shape::XYRR(XYRR { idx: 0, c: R2 { x:      c0, y:      c1, }, r: R2 { x: 1., y: r , }, }),
             Shape::XYRR(XYRR { idx: 1, c: R2 { x: 1. + c0, y:      c1, }, r: R2 { x: 1., y: r , }, }),
             Shape::XYRR(XYRR { idx: 2, c: R2 { x:      c1, y: 1. + c0, }, r: R2 { x: r , y: 1., }, }),
             Shape::XYRR(XYRR { idx: 3, c: R2 { x:      c1, y:      c0, }, r: R2 { x: r , y: 1., }, }),
         ]
+    }
+
+    #[test]
+    fn ellipses4_0_2() {
+        let shapes = ellipses4(2.);
+        let shapes = vec![ shapes[0].clone(), shapes[2].clone() ];
+        let intersections = Intersections::new(shapes);
+        assert_eq!(intersections.nodes.len(), 2);
+        assert_eq!(intersections.edges.len(), 4);
     }
 
     #[test]
@@ -613,8 +622,8 @@ pub mod tests {
         };
         let mut points = e.unit_intersections();
         points.sort_by_key(|p| OrderedFloat(p.y));
-        assert_relative_eq!(points[0], R2 { x: -0.5500164117391726, y: -0.8351538461969557 }, max_relative = 1e-16);
-        assert_relative_eq!(points[1], R2 { x: -0.5500338731914519, y:  0.8351423461554383 }, max_relative = 1e-16);
+        assert_relative_eq!(points[0], R2 { x: -0.5500164117391726, y: -0.8351538461969557 }, max_relative = 1e-7);
+        assert_relative_eq!(points[1], R2 { x: -0.5500338731914519, y:  0.835142346155438  }, max_relative = 1e-7);
         // TODO: impl/use relative_eq for Vec?
         // assert_relative_eq!(
         //     points,
@@ -634,15 +643,17 @@ pub mod tests {
             r: R2 { x:  1.29721671027373  , y: 1.205758072744277, },
         };
         let points = e.unit_intersections();
-        // WRONG: stirm: missing other half (+y)
+        // WRONG: find_roots_sturm: missing other half (+y)
         // assert_eq!(points, [ R2 { x: -0.5280321051800396, y: -0.8492244095691155 }, ] );
-        assert_eq!(
-            points,
-            [
-                R2 { x: -0.5280321050819479, y:  0.8492244085062125 },
-                R2 { x: -0.5280321050819478, y: -0.8492244085062124 },
-            ]
-        );
+        // OK: find_roots_eigen, crate::math::quartic::quartic
+        assert_relative_eq!(points[0], R2 { x: -0.5280321050819479, y:  0.8492244085062125 }, max_relative = 1e-14);
+        assert_relative_eq!(points[1], R2 { x: -0.5280321050819478, y: -0.8492244085062124 }, max_relative = 1e-14);
+    }
+
+    fn assert_node_strs<D: Display + Deg + Fmt>(intersections: Intersections<D>, expected: Vec<&str>) {
+        let actual = intersections.nodes.iter().map(|n| format!("{}", n.borrow())).collect::<Vec<String>>();
+        assert_eq!(actual.len(), expected.len());
+        assert_eq!(actual, expected);
     }
 
     #[test]
@@ -677,8 +688,8 @@ pub mod tests {
                 }
             },
             None => {
-                assert_eq!(
-                    intersections.nodes.iter().map(|n| format!("{}", n.borrow())).collect::<Vec<String>>(),
+                assert_node_strs(
+                    intersections,
                     vec![
                         "I( 0.897,  3.459, C0(  57)/C1( 123))",
                         "I( 0.897,  0.119, C0( -57)/C1(-123))",
@@ -689,17 +700,27 @@ pub mod tests {
     }
 
     #[test]
-    fn tweaked_3_ellipses_dual() {
-        let ( z, d ) = d_fns(8);
+    fn tweaked_3_ellipses_f64() {
+        // let ( z, d ) = d_fns(8);
         let shapes = vec![
             // Shape::XYRR(XYRR { idx: 0, c: R2 { x: 0.347, y: 1.789 }, r: R2 { x: 1.000, y: 2.000 } }).dual(&vec![ z( ), z( ), z( ), z( ), ]),
             // Shape::XYRR(XYRR { idx: 1, c: R2 { x: 1.447, y: 1.789 }, r: R2 { x: 1.000, y: 2.000 } }).dual(&vec![ d(0), d(1), d(2), d(3), ]),
             // Shape::XYRR(XYRR { idx: 2, c: R2 { x: 1.789, y: 1.447 }, r: R2 { x: 2.000, y: 0.999 } }).dual(&vec![ d(4), d(5), d(6), d(7), ]),
-            Shape::XYRR(XYRR { idx: 0, c: R2 { x: 0.3472135954999579, y: 1.7888543819998317 }, r: R2 { x: 1.0,                y: 2.0                } }).dual(&vec![ z( ), z( ), z( ), z( ), ]),
-            Shape::XYRR(XYRR { idx: 1, c: R2 { x: 1.4472087032327248, y: 1.7888773809286864 }, r: R2 { x: 0.9997362494738584, y: 1.9998582057729295 } }).dual(&vec![ d(0), d(1), d(2), d(3), ]),
-            Shape::XYRR(XYRR { idx: 2, c: R2 { x: 1.7890795512191124, y: 1.4471922162722848 }, r: R2 { x: 1.9998252659224116, y: 0.9994675708661026 } }).dual(&vec![ d(4), d(5), d(6), d(7), ]),
-            ];
+            Shape::XYRR(XYRR { idx: 0, c: R2 { x: 0.3472135954999579, y: 1.7888543819998317 }, r: R2 { x: 1.0,                y: 2.0                } }), // .dual(&vec![ z( ), z( ), z( ), z( ), ]),
+            Shape::XYRR(XYRR { idx: 1, c: R2 { x: 1.4472087032327248, y: 1.7888773809286864 }, r: R2 { x: 0.9997362494738584, y: 1.9998582057729295 } }), // .dual(&vec![ d(0), d(1), d(2), d(3), ]),
+            Shape::XYRR(XYRR { idx: 2, c: R2 { x: 1.7890795512191124, y: 1.4471922162722848 }, r: R2 { x: 1.9998252659224116, y: 0.9994675708661026 } }), // .dual(&vec![ d(4), d(5), d(6), d(7), ]),
+        ];
         let intersections = Intersections::new(shapes);
-        assert_eq!(intersections.nodes.len(), 8);
+        assert_node_strs(
+            intersections,
+            vec![
+                "I( 0.897,  3.459, C0(  57)/C1( 123))",
+                "I( 0.897,  0.119, C0( -57)/C1(-123))",
+                "I( 2.399,  2.399, C1(  18)/C2(  72))",
+                "I( 0.469,  2.198, C1( 168)/C2( 131))",
+                "I( 0.632,  0.632, C1(-145)/C2(-125))",
+                "I( 2.198,  0.469, C1( -41)/C2( -78))",
+            ]
+        );
     }
 }

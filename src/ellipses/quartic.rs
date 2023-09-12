@@ -1,7 +1,7 @@
 use std::ops::Mul;
 
 use derive_more::Display;
-use log::warn;
+use log::{warn, debug};
 use roots::{find_roots_quartic, find_roots_sturm, find_roots_eigen};
 
 use crate::{dual::{D, Dual}, fmt::Fmt, zero::Zero, math::quartic::quartic};
@@ -18,21 +18,31 @@ where
 
 impl Quartic for f64 {
     fn quartic_roots(a_4: f64, a_3: f64, a_2: f64, a_1: f64, a_0: f64) -> Vec<Root<f64>> {
-        // let roots0 = quartic(a_4, a_3, a_2, a_1, a_0);
-        // let reals = roots0.reals();
-        let mut first_nonzero: Option<f64> = None;
-        let mut rest: Vec<f64> = vec![];
-        for coeff in &[ a_4, a_3, a_2, a_1, a_0 ] {
-            match first_nonzero {
-                None => if *coeff != 0. {
-                    first_nonzero = Some(*coeff);
-                },
-                Some(first_nonzero) => rest.push(*coeff / first_nonzero),
-            }
-        }
+        // roots::find_roots_quartic
+        // let reals = find_roots_quartic(a_4, a_3, a_2, a_1, a_0).as_ref().to_vec();
+
+        // crate::math::quartic
+        debug!("{}x^4 + {}x^3 + {}x^2 + {}x + {}", a_4, a_3, a_2, a_1, a_0);
+        let roots0 = quartic(a_4, a_3, a_2, a_1, a_0);
+        debug!("roots0: {:?}", roots0);
+        let reals = roots0.reals();
+
+        // roots::{find_roots_stur, find_roots_eigen}
+        // let mut first_nonzero: Option<f64> = None;
+        // let mut rest: Vec<f64> = vec![];
+        // for coeff in &[ a_4, a_3, a_2, a_1, a_0 ] {
+        //     match first_nonzero {
+        //         None => if *coeff != 0. {
+        //             first_nonzero = Some(*coeff);
+        //         },
+        //         Some(first_nonzero) => rest.push(*coeff / first_nonzero),
+        //     }
+        // }
+        // Sturm
         // let results = find_roots_sturm(&rest, &mut 1e-6);
         // let reals: Vec<f64> = results.into_iter().map(|r| r.unwrap()).collect();
-        let reals = find_roots_eigen(rest.into_iter().rev().collect());
+        // Eigen
+        // let reals = find_roots_eigen(rest.into_iter().rev().collect());
         let d_3: f64 = f64::mul(a_4, 4.);
         let d_2: f64 = f64::mul(a_3, 3.);
         let d_1: f64 = f64::mul(a_2, 2.);

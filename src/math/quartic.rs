@@ -6,6 +6,7 @@ use super::{complex::{ComplexPair, Complex, self, SqrtArg, Numeric}, quadratic, 
 
 use super::cubic;
 
+#[derive(Debug, Clone)]
 pub enum Roots<D> {
     Cubic(cubic::Roots<D>),
     Reals([ D; 4 ]),
@@ -65,6 +66,7 @@ where
     : Add<D, Output = Complex<D>>
     + Sub<D, Output = Complex<D>>
     + Mul<D, Output = Complex<D>>
+    + Mul<Complex<D>, Output = Complex<D>>
     + Mul<Complex<f64>, Output = Complex<D>>
     + Mul<f64, Output = Complex<D>>
     + Div<f64, Output = Complex<D>>
@@ -83,18 +85,20 @@ where
     : Add<D, Output = Complex<D>>
     + Sub<D, Output = Complex<D>>
     + Mul<D, Output = Complex<D>>
+    + Mul<Complex<D>, Output = Complex<D>>
     + Mul<Complex<f64>, Output = Complex<D>>
     + Mul<f64, Output = Complex<D>>
     + Div<f64, Output = Complex<D>>
     + Neg<Output = Complex<D>>
 {
     debug!("quartic_scaled({:?}, {:?}, {:?}, {:?})", b, c, d, e);
+    debug!("x^4 + {:?} x^3 + {:?} x^2 + {:?} x + {:?}", b, c, d, e);
     let b4 = b / 4.;
     let b4sq = b4.clone() * b4.clone();
     let c2 = c.clone() - b4sq.clone() * 6.;
     let d2 = b4sq.clone() * b4.clone() * 8. - b4.clone() * c.clone() * 2. + d.clone();
     let e2 = b4sq.clone() * b4sq.clone() * -3. + b4sq * c - b4.clone() * d + e;
-    match quartic_depressed(c2, d2, e2) {
+    let rv = match quartic_depressed(c2, d2, e2) {
         Reals([ r0, r1, r2, r3 ]) => {
             let r0 = r0 - b4.clone();
             let r1 = r1 - b4.clone();
@@ -114,7 +118,9 @@ where
             Imags(c0, c1)
         },
         Cubic(c) => panic!("quartic_depressed returned cubic::Roots: {:?}", c)
-    }
+    };
+    debug!("quartic_scaled roots: {:?}", rv);
+    rv
 }
 
 pub fn quartic_depressed<D: Arg>(c: D, d: D, e: D) -> Roots<D>
@@ -125,12 +131,14 @@ where
     + Sub<Complex<D>, Output = Complex<D>>
     + Sub<D, Output = Complex<D>>
     + Mul<D, Output = Complex<D>>
+    + Mul<Complex<D>, Output = Complex<D>>
     + Mul<Complex<f64>, Output = Complex<D>>
     + Mul<f64, Output = Complex<D>>
     + Div<f64, Output = Complex<D>>
     + Neg<Output = Complex<D>>
 {
     debug!("quartic_depressed({:?}, {:?}, {:?})", c, d, e);
+    debug!("x^4 + {:?} x^2 + {:?} x + {:?}", c, d, e);
     let roots = if d.is_zero() {
         quartic_biquadratic(c, e)
     } else {
@@ -141,21 +149,18 @@ where
         debug!("cubic_roots: {:?}", cubic_roots);
         let cubic_reals = cubic_roots.reals();
         let u = cubic_reals.iter().rev().next().unwrap();
-        let usq = Sqrt::sqrt(&Complex::re(u.clone())) / 2.;
-        let usqr = usq.recip();
-        debug!("u {:?}, usq {:?}, usqr {:?}", u, usq, usqr);
-        let c2 = c * 2.;
-        let usqrd = usqr.clone() * d;
-        let c = Complex::re(-u.clone()) - c2;
-        let d0 = c.clone() - usqrd.clone();
-        let d1 = c + usqrd;
-        let d0 = Sqrt::sqrt(&d0) / 2.;
-        let d1 = Sqrt::sqrt(&d1) / 2.;
+        let usq2 = Sqrt::sqrt(&Complex::re(u.clone())) / 2.;
+        let d_usq2r = usq2.recip() * d;
+        let uc2 = Complex::re(-u.clone()) - c * 2.;
+        debug!("u {:?}, usq2 {:?}, d_usq2r {:?}, uc2 {:?}", u, usq2, d_usq2r, uc2);
+        let d0 = Sqrt::sqrt(&(uc2.clone() - d_usq2r.clone())) / 2.;
+        let d1 = Sqrt::sqrt(&(uc2.clone() + d_usq2r)) / 2.;
+        debug!("d0 {:?}, d1 {:?}", d0, d1);
         let roots = [
-             usq.clone() + d0.clone(),
-             usq.clone() - d0.clone(),
-            -usq.clone() + d1.clone(),
-            -usq.clone() - d1.clone(),
+             usq2.clone() + d0.clone(),
+             usq2.clone() - d0.clone(),
+            -usq2.clone() + d1.clone(),
+            -usq2.clone() - d1.clone(),
         ];
         roots
     };
@@ -168,13 +173,15 @@ where
             imags.push(root.clone());
         }
     }
-    if imags.len() == 0 {
+    let rv = if imags.len() == 0 {
         Reals(roots.map(|r| r.re))
     } else if reals.len() == 0 {
         Imags(imags[0].clone(), imags[2].clone())
     } else {
         Mixed(reals[0].clone(), reals[1].clone(), imags[0].clone())
-    }
+    };
+    debug!("quartic_depressed roots: {:?}", rv);
+    rv
 }
 
 pub fn quartic_biquadratic<

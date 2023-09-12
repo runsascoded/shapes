@@ -1,10 +1,11 @@
 use std::{ops::{Mul, Div, Add, Sub, Neg}, fmt::Display};
 
 use derive_more::From;
+use log::debug;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::{r2::R2, rotate::{Rotate, RotateArg}, dual::{D, Dual}, shape::Duals, transform::{Transform::{Scale, ScaleXY, Translate, self}, CanTransform, Projection}};
+use crate::{r2::R2, rotate::{Rotate, RotateArg}, dual::{D, Dual}, shape::Duals, transform::{Transform::{Scale, ScaleXY, Translate, self}, CanProject, CanTransform, Projection}};
 
 use super::{xyrrt::XYRRT, cdef::{CDEF, self}};
 
@@ -57,7 +58,15 @@ where
         }
     }
     pub fn unit_intersections(&self) -> Vec<R2<D>> {
-        self.cdef().unit_intersections()
+        let points = self.cdef().unit_intersections();
+        debug!("xyrr unit_intersections: {}", self);
+        for point in &points {
+            let r = point.norm();
+            let projected = point.apply(&self.projection());
+            let self_r = projected.norm();
+            debug!("  point: {} ({}, {})", point, r, self_r);
+        }
+        points
     }
 }
 
@@ -110,9 +119,9 @@ where R2<D>: TransformR2<D>,
 {
     type Output = XYRR<D>;
     fn transform(&self, t: &Transform<D>) -> XYRR<D> {
-        println!("Transform XYRR:");
-        println!("self: {}", self);
-        println!("transform: {}", t);
+        // println!("Transform XYRR:");
+        // println!("self: {}", self);
+        // println!("transform: {}", t);
         let rv = match t.clone() {
             Translate(v) => XYRR {
                 idx: self.idx,
@@ -131,8 +140,8 @@ where R2<D>: TransformR2<D>,
             },
             // Rotate(a) => self.rotate(a),
         };
-        println!("rv: {}", rv);
-        println!();
+        // println!("rv: {}", rv);
+        // println!();
         rv
     }
 }
@@ -142,6 +151,7 @@ mod tests {
     use crate::{dual::Dual, circle::Circle, to::To};
 
     use super::*;
+    use test_log::test;
 
     #[test]
     fn test_unit_intersections_d() {
@@ -206,5 +216,12 @@ mod tests {
         assert_eq!(us.len(), expected.len());
         assert_relative_eq!(us[0], expected[0], epsilon = 1e-3);
         assert_relative_eq!(us[1], expected[1], epsilon = 1e-3);
+    }
+
+    #[test]
+    fn ellipses4_0_2() {
+        let e = XYRR { idx: 0, c: R2 { x: -0.6708203932499369, y: 0.34164078649987384 }, r: R2 { x: 0.5, y: 2.0 } };
+        let points = e.unit_intersections();
+        assert_eq!(points, vec![]);
     }
 }
