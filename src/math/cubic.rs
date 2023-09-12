@@ -203,11 +203,11 @@ where
         let p3sq = p3.sqrt();
         let u = -q2 / p3 / p3sq.clone();
 
-        let use_asinh = false;
+        let use_asinh = true;
         let m = if use_asinh {
             // More numerically stable in some cases, using asinh(x) = ln(x + sqrt(x² + 1))
             let a = u.asinh();
-            let m = (a.clone() / -3.).exp();
+            let m = (a.clone() / 3.).exp();
             debug!("u {:?}, a {:?}, m {:?}", u, a, m.clone());
             m
         } else {

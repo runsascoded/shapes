@@ -235,8 +235,7 @@ mod tests {
     }
 
     #[test]
-    fn sweep() {
-        // check(-10., -10., -10., 0.1, 1.);
+    fn sweep_reals() {
         let vals = [ -10., -1., -0.1, 0., 0.1, 1., 10., ];
         let n = vals.len();
         for i0 in 0..n {
