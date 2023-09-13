@@ -77,32 +77,35 @@ where
         debug!("a_2: {}", a_2);
         debug!("a_1: {}", a_1);
         debug!("a_0: {}", a_0);
-        if a_4.clone().into() < 1e-7 {
-            debug!("Setting a_4 to 0.");
-            a_4 = a_4.zero();
-        }
-        if a_3.clone().into() < 1e-7 {
-            debug!("Setting a_3 to 0.");
-            a_3 = a_3.zero();
-        }
+        // if a_4.clone().into() < 1e-7 {
+        //     debug!("Setting a_4 to 0.");
+        //     a_4 = a_4.zero();
+        // }
+        // if a_3.clone().into() < 1e-7 {
+        //     debug!("Setting a_3 to 0.");
+        //     a_3 = a_3.zero();
+        // }
         let roots = Quartic::quartic_roots(a_4, a_3, a_2, a_1, a_0);
-        let mut dual_roots: Vec<R2<D>> = Vec::new();
+        let mut points: Vec<R2<D>> = Vec::new();
+        debug!("Points:");
         for Root(r0, double_root) in &roots {
             let r1 = c_2.clone() * r0.clone() * r0.clone() + c_1.clone() * r0.clone() + c_0.clone();
             let [ x, y ] = if d_zero {
-                [ r0.clone(), r1 ]
+                [ r0.clone(), r1.clone() ]
             } else {
-                [ r1, r0.clone() ]
+                [ r1.clone(), r0.clone() ]
             };
             if *double_root {
-                dual_roots.push(R2 { x:  x.clone(), y: y.clone() });
-                dual_roots.push(R2 { x: -x.clone(), y: y.clone() });
+                debug!("  double: {:?}, {:?}", r0, r1);
+                points.push(R2 { x:  x.clone(), y: y.clone() });
+                points.push(R2 { x: -x.clone(), y: y.clone() });
             } else {
-                dual_roots.push(R2 { x, y });
+                debug!("  r0 {:?}, r1 {:?}", r0, r1);
+                debug!("  x: {}, y: {}", x, y);
+                points.push(R2 { x, y });
             }
         }
-        debug!("roots: {:?}", &roots);
-        debug!("dual_roots: {:?}", dual_roots);
-        dual_roots
+        // debug!("roots: {:?}", &roots);
+        points
     }
 }

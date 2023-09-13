@@ -159,8 +159,8 @@ mod tests {
         let points = e.unit_intersections();
         // println!("points: {:?}", points);
         let expected = [
-            R2 { x: -0.866, y: -0.5 },
             R2 { x:  0.866, y: -0.5 },
+            R2 { x: -0.866, y: -0.5 },
         ];
         assert_eq!(points.len(), expected.len());
         assert_relative_eq!(points[0], expected[0], epsilon = 1e-3);
@@ -182,11 +182,11 @@ mod tests {
         // }
 
         let expected = [
-            R2 { x: Dual::new(-0.600, vec![ 1.600,  0.800, -1.280, -0.480]),
-                 y: Dual::new(-0.800, vec![-1.200, -0.600,  0.960,  0.360]), },
             R2 { x: Dual::new(-0.948, vec![ 0.684,  0.106, -0.666, -0.024]),
                  y: Dual::new( 0.319, vec![ 2.033,  0.316, -1.980, -0.072]), },
-        ];
+            R2 { x: Dual::new(-0.600, vec![ 1.600,  0.800, -1.280, -0.480]),
+                 y: Dual::new(-0.800, vec![-1.200, -0.600,  0.960,  0.360]), },
+           ];
         assert_eq!(us.len(), expected.len());
         assert_relative_eq!(us[0], expected[0], epsilon = 1e-3);
         assert_relative_eq!(us[1], expected[1], epsilon = 1e-3);
@@ -208,11 +208,11 @@ mod tests {
         // }
 
         let expected = [
-            R2 { x: Dual::new( 0.000, vec![ 1.000,  0.000, -1.000,  0.000]),
-                 y: Dual::new(-1.000, vec![ 0.000,  0.000,  0.000,  0.000]), },
             R2 { x: Dual::new( 1.000, vec![ 0.000,  0.000,  0.000,  0.000]),
                  y: Dual::new( 0.000, vec![ 0.000,  1.000,  0.000,  1.000]), },
-        ];
+            R2 { x: Dual::new( 0.000, vec![ 1.000,  0.000, -1.000,  0.000]),
+                 y: Dual::new(-1.000, vec![ 0.000,  0.000,  0.000,  0.000]), },
+           ];
         assert_eq!(us.len(), expected.len());
         assert_relative_eq!(us[0], expected[0], epsilon = 1e-3);
         assert_relative_eq!(us[1], expected[1], epsilon = 1e-3);
@@ -222,6 +222,9 @@ mod tests {
     fn ellipses4_0_2() {
         let e = XYRR { idx: 0, c: R2 { x: -0.6708203932499369, y: 0.34164078649987384 }, r: R2 { x: 0.5, y: 2.0 } };
         let points = e.unit_intersections();
-        assert_eq!(points, vec![]);
+        assert_eq!(points, vec![
+            R2 { x: -0.1970071360883896, y: 0.9804020544298415 },
+            R2 { x: -0.2905340210149845, y: -0.9568646626523877 },
+        ]);
     }
 }

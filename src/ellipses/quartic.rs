@@ -117,21 +117,21 @@ impl Quartic for Dual {
         for Root(root, double_root) in roots {
             let fd = fp(root);
             let root2 = root * root;
-            let root_pows = [ 1., root, root2, root2 * root, root2 * root2 ];
+            let x_pows = [ 1., root, root2, root2 * root, root2 * root2 ];
             // let mut dual_root_d: Vec<f64> = repeat(0.).take(n).collect();
             let mut y: D = Zero::zero(&c_4) + root;
             let mut y_d = y.0.eps;
-            for (coeff, root_pow) in coeff_duals.into_iter().zip(root_pows.iter()).rev() {
-                y_d += coeff.0.clone().eps.clone() * -root_pow / fd;
+            for (coeff, x_pow) in coeff_duals.into_iter().zip(x_pows.iter()).rev() {
+                y_d += coeff.0.clone().eps.clone() * -x_pow / fd;
             }
             y.0.eps = y_d;
             // println!("root: {}", y.clone());
             dual_roots.push(Root(y, double_root));
         }
-        // println!("Roots:");
-        // for root in &dual_roots {
-        //     println!("  Root: {}, double? {}", root.0.s(2), root.1);
-        // }
+        debug!("Dualed roots:");
+        for root in &dual_roots {
+            debug!("  {}, double? {}", root.0.s(2), root.1);
+        }
         dual_roots
     }
 }
