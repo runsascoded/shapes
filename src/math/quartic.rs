@@ -18,7 +18,31 @@ use Roots::*;
 use log::debug;
 use ordered_float::OrderedFloat;
 
-impl<D: Clone> Roots<D> {
+impl<D: Clone + Into<f64> + IsZero + PartialEq + Neg<Output = D>> Roots<D> {
+    pub fn new(roots: [ Complex<D>; 4 ]) -> Self {
+        let mut reals: Vec<D> = Vec::new();
+        let mut imags: Vec<Complex<D>> = Vec::new();
+        for root in &roots {
+            if root.im.is_zero() {
+                reals.push(root.re.clone());
+            } else {
+                imags.push(root.clone());
+            }
+        }
+        if imags.len() == 0 {
+            Reals(roots.map(|r| r.re))
+        } else if reals.len() == 0 {
+            let c00 = imags[0].clone();
+            let c01 = c00.clone().conj();
+            let c0 = if c00.im.clone().into() > 0. { c00.clone() } else { c01.clone() };
+            match imags.into_iter().skip(1).filter(|r| (*r) != c00 && (*r) != c01 && r.clone().im.into() > 0.).next() {
+                Some(c1) => Imags(c0, c1),
+                None => Imags(c0.clone(), c0),
+            }
+        } else {
+            Mixed(reals[0].clone(), reals[1].clone(), imags[0].clone())
+        }
+    }
     pub fn reals(&self) -> Vec<D> {
         match self {
             Cubic(roots) => roots.reals(),
@@ -53,6 +77,7 @@ impl<D: Clone + IsZero + fmt::Debug + Zero + Neg<Output = D> + Zero> Roots<D> {
 
 pub trait Arg
 : cubic::Arg
++ PartialEq
 + Neg<Output = Self>
 + complex::SqrtArg
 + Numeric
@@ -168,7 +193,7 @@ where
     } else {
         let d64: f64 = d.clone().into();
         let c64: f64 = c.clone().into().abs();
-        let roots = if d64.abs() / f64::max(1., c64) < 1e-16 {
+        let roots = if d64.abs() / f64::max(1., c64) < 1e-14 {
             // Roots: -0.1, -0.1, -0.1 ± -0.1i:
             //   x⁴ - 0.4x³ + 0.07x² + 0.006x + 0.0002
             // f64 math turns this into:
@@ -181,6 +206,14 @@ where
             // similar to dividing by zero, but instead of NaNs we just a cubic root of 0, and other assumptions about
             // completing the two polynomial squares break down. I believe taking one of the other cubic roots would
             // work, but this seems like an easier work-around for now.
+            //
+            // Bound pushed above 9e-15 by: x^4 + 40.0 x^3 + 700.01 x^2 + 6000.2 x + 20002.0
+            // Depressed: x^4 + 100.00999999999999 x^2 + -9.094947017729282e-13 x + 1.0
+            // Synthesized from roots:
+            //   Complex { re: -10.0, im: -10.0 },
+            //   Complex { re: -10.0, im:  10.0 },
+            //   Complex { re: -10.0, im:  -0.1 },
+            //   Complex { re: -10.0, im:   0.1 },
             quartic_biquadratic(c.clone(), e.clone())
         } else {
             let a_2 = c.clone() * 2.;
@@ -217,23 +250,7 @@ where
             ];
             roots
         };
-
-        let mut reals: Vec<D> = Vec::new();
-        let mut imags: Vec<Complex<D>> = Vec::new();
-        for root in &roots {
-            if root.im.is_zero() {
-                reals.push(root.re.clone());
-            } else {
-                imags.push(root.clone());
-            }
-        }
-        if imags.len() == 0 {
-            Reals(roots.map(|r| r.re))
-        } else if reals.len() == 0 {
-            Imags(imags[0].clone(), imags[2].clone())
-        } else {
-            Mixed(reals[0].clone(), reals[1].clone(), imags[0].clone())
-        }
+        Roots::new(roots)
     };
     debug!("quartic_depressed roots:");
     for x in &rv.all() {
@@ -255,17 +272,30 @@ pub fn quartic_biquadratic<
 where
     Complex<D>
     : Neg<Output = Complex<D>>
+    + Add<Complex<D>, Output = Complex<D>>
+    + Add<D, Output = Complex<D>>
+    + Mul<Complex<D>, Output = Complex<D>>
+    + Mul<D, Output = Complex<D>>
 {
-    let [ r0, r1 ] = quadratic::quadratic(c.zero() + 1., c.clone(), e.clone()).two_roots();
-    let sq0 = Sqrt::sqrt(&r0);
-    let sq1 = Sqrt::sqrt(&r1);
+    let roots = quadratic::quadratic(c.zero() + 1., c.clone(), e.clone()).two_roots();
+    debug!("quadratic roots:");
+    for x in &roots {
+        let y = x.clone() * x.clone() + x.clone() * c.clone() + e.clone();
+        debug!("  x {:?}, y {:?}, r {:?}", x, y, y.norm());
+    }
+    let [ sq0, sq1 ] = roots.map(|r| r.sqrt());
     let roots = [
          sq0.clone(),
-        -sq0.clone(),
          sq1.clone(),
-        -sq1.clone(),
+         -sq0.clone(),
+         -sq1.clone(),
     ];
-    debug!("quartic_biquadratic({:?}, {:?}) = {:?}", c, e, roots);
+    debug!("quartic_biquadratic roots:");
+    for x in &roots {
+        let x2 = x.clone() * x.clone();
+        let y = x2.clone() * x2.clone() + x2.clone() * c.clone() + e.clone();
+        debug!("  x {:?}, y {:?}, r {:?}", x, y, y.norm());
+    }
     roots
 }
 
@@ -276,25 +306,71 @@ mod tests {
 
     use test_log::test;
 
+    fn coeffs_from_roots(roots: Roots<f64>) -> [ f64; 4 ] {
+        match roots {
+            Reals([ r0, r1, r2, r3 ]) => {
+                let a3 = -(r0 + r1 + r2 + r3);
+                let a2 = r0 * r1 + r0 * r2 + r0 * r3 + r1 * r2 + r1 * r3 + r2 * r3;
+                let a1 = -(r0 * r1 * r2 + r0 * r1 * r3 + r0 * r2 * r3 + r1 * r2 * r3);
+                let a0 = r0 * r1 * r2 * r3;
+                [ a3, a2, a1, a0 ]
+            },
+            Mixed(r0, r1, c) => {
+                let re = c.re;
+                let n2 = c.norm2();
+                let a3 = -(r0 + r1 + re + re);
+                let a2 = r0 * r1 + 2. * re*(r0 + r1) + n2;
+                let a1 = -(r0 * r1 * re * 2. + (r0 + r1) * n2);
+                let a0 = r0 * r1 * n2;
+                [ a3, a2, a1, a0 ]
+            },
+            Imags(c0, c1) => {
+                let re0 = c0.re;
+                let re1 = c1.re;
+                let n20 = c0.norm2();
+                let n21 = c1.norm2();
+                let a3 = -2. * (re0 + re1);
+                let a2 = 4. * re0 * re1 + n20 + n21;
+                let a1 = -2. * (n20 * re1 + n21 * re0);
+                let a0 = n20 * n21;
+                [ a3, a2, a1, a0 ]
+            }
+            Cubic(_) => panic!("Unexpected cubic roots: {:?}", roots),
+        }
+    }
+
     fn check(r0: Complex<f64>, r1: Complex<f64>, r2: Complex<f64>, r3: Complex<f64>, scale: f64) {
-        let unscaled_coeffs = [
-            Complex::re(1.),
+        let roots = Roots::new([ r0, r1, r2, r3 ]);
+        let a4 = scale;
+        let [ a3, a2, a1, a0 ] = coeffs_from_roots(roots.clone()).map(|c| c * scale);
+        let [ e3, e2, e1, e0 ] = [
             -(r0 + r1 + r2 + r3),
             r0 * r1 + r0 * r2 + r0 * r3 + r1 * r2 + r1 * r3 + r2 * r3,
             -(r0 * r1 * r2 + r0 * r1 * r3 + r0 * r2 * r3 + r1 * r2 * r3),
             r0 * r1 * r2 * r3,
-        ];
-        let coeffs = unscaled_coeffs.map(|c| c * scale);
-        let [ a4, a3, a2, a1, a0 ] = coeffs.map(|c| {
-            assert_abs_diff_eq!(c.im, 0., epsilon = 3e-17);
-            c.re
-        });
-        // let f = |x: f64| a4 * x * x * x * x + a3 * x * x * x + a2 * x * x + a1 * x + a0;
+        ].map(|c| c.re * scale);
+        // debug!("Expected coeffs:");
+        // for e in &[ e3, e2, e1, e0 ] {
+        //     debug!("  {:?}", e);
+        // }
+        // debug!("Actual coeffs:");
+        // for a in &[ a3, a2, a1, a0 ] {
+        //     debug!("  {:?}", a);
+        // }
+        // debug!("roots:");
+        // debug!("  {:?}", r0);
+        // debug!("  {:?}", r1);
+        // debug!("  {:?}", r2);
+        // debug!("  {:?}", r3);
+        assert_relative_eq!(a3, e3, max_relative = 1e-5, epsilon = 1e-14);
+        assert_relative_eq!(a2, e2, max_relative = 1e-5, epsilon = 1e-14);
+        assert_relative_eq!(a1, e1, max_relative = 1e-5, epsilon = 1e-14);
+        assert_relative_eq!(a0, e0, max_relative = 1e-5, epsilon = 1e-14);
         let roots = quartic(a4, a3, a2, a1, a0);
         let ε = 2e-5;
         let actual = crate::math::roots::Roots(roots.all());
-        let expected_reals = crate::math::roots::Roots([ r0, r1, r2, r3 ].to_vec());
-        assert_relative_eq!(actual, expected_reals, max_relative = ε, epsilon = ε);
+        let expected = crate::math::roots::Roots([ r0, r1, r2, r3 ].to_vec());
+        assert_relative_eq!(actual, expected, max_relative = ε, epsilon = ε);
     }
 
     #[test]
@@ -337,6 +413,37 @@ mod tests {
                         let im1 = im0.conj();
                         let scale = 1.;
                         check(r0, r1, im0, im1, scale);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn sweep_imags() {
+        // check(
+        //     Complex { re: -10.0, im: -10.0 },
+        //     Complex { re: -10.0, im:  10.0 },
+        //     Complex { re: -10.0, im:  -0.1 },
+        //     Complex { re: -10.0, im:   0.1 },
+        //     1.
+        // );
+        let vals = [ -10., -1., -0.1, 0., 0.1, 1., 10., ];
+        let n = vals.len();
+        for i0 in 0..n {
+            let re0 = vals[i0];
+            for i1 in i0..n {
+                let im0 = vals[i1];
+                let c00 = Complex { re: re0, im: im0 };
+                let c01 = c00.conj();
+                for i2 in i1..n {
+                    let re1 = vals[i2];
+                    for i3 in i2..n {
+                        let im1 = vals[i3];
+                        let c10 = Complex { re: re1, im: im1 };
+                        let c11 = c10.conj();
+                        let scale = 1.;
+                        check(c00, c01, c10, c11, scale);
                     }
                 }
             }
