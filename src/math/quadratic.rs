@@ -14,6 +14,7 @@ pub enum Roots<D> {
 
 use Roots::{Single, Double, Reals, Complex};
 use approx::{AbsDiffEq, RelativeEq};
+use log::debug;
 
 impl<D: Clone> Roots<D> {
     pub fn reals(&self) -> Vec<D> {
@@ -79,6 +80,7 @@ impl<D: complex::Eq> RelativeEq for Roots<D> {
 
 pub trait Arg
 : Clone
++ fmt::Debug
 + IsZero
 + AbsArg
 + Sqrt
@@ -94,6 +96,7 @@ impl Arg for f64 {}
 impl Arg for Dual {}
 
 pub fn quadratic<D: Arg>(a2: D, a1: D, a0: D) -> Roots<D> {
+    // debug!("quadratic: {:?}x^2 + {:?}x + {:?}", a2, a1, a0);
     if a2.is_zero() {
         Single(-a0 / a1)
     } else {
@@ -102,14 +105,11 @@ pub fn quadratic<D: Arg>(a2: D, a1: D, a0: D) -> Roots<D> {
 }
 
 pub fn quadratic_scaled<D: Arg>(a1: D, a0: D) -> Roots<D> {
+    // debug!("quadratic_scaled: x^2 + {:?}x + {:?}", a1, a0);
     let b2 = a1 / -2.;
     let d = b2.clone() * b2.clone() - a0;
     if d.lt_zero() {
-        let d = d.abs();
-        let b2 = b2.abs();
-        let d = d.sqrt();
-        let b2 = b2.sqrt();
-        Complex(complex::Complex { re: b2, im: d.sqrt() })
+        Complex(complex::Complex { re: b2, im: (-d).sqrt() })
     } else if d.is_zero() {
         Double(b2)
     } else {

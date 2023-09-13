@@ -5,6 +5,40 @@ use crate::{trig::Trig, dual::Dual, zero::Zero};
 use super::{complex::{ComplexPair, Complex, self}, quadratic, abs::{Abs, AbsArg}, is_zero::IsZero, cbrt::Cbrt, recip::Recip, deg::Deg};
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum DepressedRoots<D> {
+    Reals([ D; 3 ]),
+    Mixed(D, ComplexPair<D>),
+}
+
+impl<D> Into<Roots<D>> for DepressedRoots<D> {
+    fn into(self) -> Roots<D> {
+        match self {
+            DepressedRoots::Reals(rs) => Roots::Reals(rs),
+            DepressedRoots::Mixed(re, ims) => Roots::Mixed(re, ims),
+        }
+    }
+}
+
+impl<D: Clone + IsZero + fmt::Debug + Neg<Output = D> + Zero> DepressedRoots<D> {
+    pub fn all(&self) -> Vec<Complex<D>> {
+        match self {
+            DepressedRoots::Reals(rs) => rs.iter().map(|r| Complex::re(r.clone())).collect(),
+            DepressedRoots::Mixed(r, im_pair) => {
+                // Return the complex pair in sorted order
+                let orig = im_pair.clone();
+                let conj = im_pair.conj();
+                let (neg, pos) = if im_pair.im.lt_zero() {
+                    (orig, conj)
+                } else {
+                    (conj, orig)
+                };
+                vec![ Complex::re(r.clone()), neg, pos ]
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Roots<D> {
     Quadratic(quadratic::Roots<D>),
     Reals([ D; 3 ]),
@@ -29,18 +63,8 @@ impl<D: Clone + IsZero + fmt::Debug + Neg<Output = D> + Zero> Roots<D> {
     pub fn all(&self) -> Vec<Complex<D>> {
         match self {
             Quadratic(q) => q.all(),
-            Reals(rs) => rs.iter().map(|r| Complex::re(r.clone())).collect(),
-            Mixed(r, im_pair) => {
-                // Return the complex pair in sorted order
-                let orig = im_pair.clone();
-                let conj = im_pair.conj();
-                let (neg, pos) = if im_pair.im.lt_zero() {
-                    (orig, conj)
-                } else {
-                    (conj, orig)
-                };
-                vec![ Complex::re(r.clone()), neg, pos ]
-            }
+            Reals(rs) => DepressedRoots::Reals(rs.clone()).all(),
+            Mixed(r, im_pair) => DepressedRoots::Mixed(r.clone(), im_pair.clone()).all(),
         }
     }
 }
@@ -118,6 +142,7 @@ pub fn cubic_scaled<D: Arg>(b: D, c: D, d: D) -> Roots<D>
 where
     Complex<D>
     : Add<D, Output = Complex<D>>
+    + Add<Complex<D>, Output = Complex<D>>
     + Sub<D, Output = Complex<D>>
     + Mul<D, Output = Complex<D>>
     + Mul<Complex<D>, Output = Complex<D>>
@@ -125,8 +150,8 @@ where
 {
     debug!("cubic_scaled: x^3 + {:?} x^2 + {:?} x + {:?}", b, c, d);
     let b3 = b.clone() / 3.;
-    let p = c.clone() - b * b3.clone();
-    let q = b3.clone() * b3.clone() * b3.clone() * 2. - b3.clone() * c + d.clone();
+    let p = c.clone() - b.clone() * b3.clone();
+    let q = b3.clone() * b3.clone() * b3.clone() * 2. - b3.clone() * c.clone() + d.clone();
     let rv = if p.is_zero() && q.is_zero() {
         let re = -d.cbrt();
         Reals([ re.clone(), re.clone(), re, ])
@@ -136,18 +161,22 @@ where
         // Mixed(re.clone(), Complex::re(re) * u_1)
     } else {
         match cubic_depressed(p, q) {
-            Reals(roots) => Reals(roots.map(|r| r - b3.clone())),
-            Mixed(re, ims) => Mixed(re - b3.clone(), ims - b3),
-            Quadratic(q) => panic!("cubic_depressed returned quadratic::Roots: {:?}", q),
+            DepressedRoots::Reals(roots) => Reals(roots.map(|r| r - b3.clone())),
+            DepressedRoots::Mixed(re, ims) => Mixed(re - b3.clone(), ims - b3),
         }
     };
-    debug!("cubic_scaled roots: {:?}", rv);
+    debug!("cubic_scaled roots:");
+    for x in &rv.all() {
+        let x2 = x.clone() * x.clone();
+        let y = x2.clone() * x.clone() + x2 * b.clone() + x.clone() * c.clone() + d.clone();
+        debug!("  x {:?}, f(x) {:?} ({:?})", x, y, y.norm());
+    }
     rv
 }
 
 static TAU3: f64 = TAU / 3.;
 
-pub fn cubic_depressed<D: Arg>(p: D, q: D) -> Roots<D>
+pub fn cubic_depressed<D: Arg>(p: D, q: D) -> DepressedRoots<D>
 where
     Complex<D>
     : Add<D, Output = Complex<D>>
@@ -169,7 +198,7 @@ where
         let re = -q.cbrt();
         let re2 = Complex::re(re.clone());
         let im = re2.clone() * u_1.clone();
-        Mixed(re, im)
+        DepressedRoots::Mixed(re, im)
     } else if p.lt_zero() {
         let p3 = p.clone() / 3.;
         let q2 = q.clone() / 2.;
@@ -187,7 +216,7 @@ where
             ];
             roots.sort_by_cached_key(|r| OrderedFloat::<f64>(r.clone().into()));
             debug!("depressed roots: {:?}", roots);
-            Reals(roots)
+            DepressedRoots::Reals(roots)
         } else {
             let w = u.clone() + (u.clone() * u.clone() - 1.).sqrt();
             let m = w.cbrt();
@@ -195,7 +224,7 @@ where
             debug!("u {:?}, w {:?}, m {:?}, re {:?}", u, w, m, re);
             let mu = Complex::re(m) * u_1;
             let im = (mu.clone() + mu.recip()) * p3sq;
-            Mixed(re, im)
+            DepressedRoots::Mixed(re, im)
         }
     } else {
         let p3 = p.clone() / 3.;
@@ -232,9 +261,9 @@ where
         let re = (m.clone() - m.recip()) * p3sq.clone();
         let mu = Complex::re(m) * u_1;
         let im = (mu.clone() - mu.recip()) * p3sq;
-        Mixed(re, im)
+        DepressedRoots::Mixed(re, im)
     };
-    debug!("cubic_depressed roots: {:?}", rv);
+    debug!("cubic_depressed roots:");
     let f = |x: &Complex<D>| x.clone() * x.clone() * x.clone() + x.clone() * p.clone() + q.clone();
     for x in &rv.all() {
         let y = f(x);
@@ -327,7 +356,7 @@ mod tests {
         let f = |x: Complex<f64>| x*x*x + x*p + q;
         let e_re = -0.347626610828303;
         let e_im = Complex { re: 0.17381330541415, im: 1.24353406872987 };
-        let roots = cubic_depressed(p, q);
+        let roots: Roots<f64> = cubic_depressed(p, q).into();
 
         let expected = Mixed(e_re, e_im);
         debug!("Check expected roots:");
