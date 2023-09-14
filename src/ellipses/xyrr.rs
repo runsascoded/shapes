@@ -5,7 +5,7 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::{r2::R2, rotate::{Rotate, RotateArg}, dual::{D, Dual}, shape::Duals, transform::{Transform::{Scale, ScaleXY, Translate, self}, CanProject, CanTransform, Projection}};
+use crate::{r2::R2, rotate::{Rotate, RotateArg}, dual::{D, Dual}, shape::Duals, transform::{Transform::{Scale, ScaleXY, Translate, self}, CanProject, CanTransform, Projection}, intersect::Intersect};
 
 use super::{xyrrt::XYRRT, cdef::{CDEF, self}};
 
@@ -148,11 +148,30 @@ where R2<D>: TransformR2<D>,
 
 #[cfg(test)]
 mod tests {
-    use crate::{dual::Dual, circle::Circle, to::To};
+    use std::env;
+
+    use crate::{dual::Dual, circle::Circle, to::To, shape::Shape, math::deg::Deg, fmt::Fmt, intersection::Intersection};
 
     use super::*;
     use ordered_float::OrderedFloat;
     use test_log::test;
+
+    fn assert_intersections<D: Display + Deg + Fmt>(intersections: Vec<Intersection<D>>, expected: Vec<&str>) {
+        let gen_vals = env::var("GEN_VALS").map(|s| s.parse::<usize>().unwrap()).ok();
+        match gen_vals {
+            Some(_) => {
+                println!("Intersections:");
+                for node in &intersections {
+                    println!("  {:?},", format!("{}", node));
+                }
+            },
+            None => {
+                let actual = intersections.iter().map(|n| format!("{}", n)).collect::<Vec<String>>();
+                assert_eq!(actual.len(), expected.len());
+                assert_eq!(actual, expected);
+            }
+        }
+    }
 
     #[test]
     fn test_unit_intersections_d() {
@@ -255,5 +274,17 @@ mod tests {
         let points = e.unit_intersections();
         assert_relative_eq!(points[0], R2 { x: -0.19700713608839127, y: 0.9804020544298395 }, max_relative = 1e-10);
         assert_relative_eq!(points[1], R2 { x: -0.29053402101498915, y: -0.9568646626523847 }, max_relative = 1e-10);
+    }
+
+    #[test]
+    fn ellipses4_0_1() {
+        let e0 = XYRR { idx: 0, c: R2 { x: 0.4472135954999579, y: 1.7888543819998317 }, r: R2 { x: 1.,                y: 2. } };
+        let e1 = XYRR { idx: 1, c: R2 { x: 1.447213595499943 , y: 1.7888543819998468 }, r: R2 { x: 1.000000000000004, y: 1.9999999999999956 } };
+        let points = Shape::XYRR(e0).intersect(&Shape::XYRR(e1));
+        debug!("points: {:?}", points);
+        assert_intersections(points, vec![
+            "I( 0.947,  3.521, C0(  60)/C1( 120))",
+            "I( 0.947,  0.057, C0( -60)/C1(-120))",
+        ]);
     }
 }

@@ -47,16 +47,16 @@ where
         let projection = o.projection();
         let rev = -projection.clone();
         let projected = self.apply(&projection);
-        println!("Intersecting:");
-        println!("  self: {:?}", self);
-        println!("  other: {:?}", o);
-        println!("  projection: {:?}", projection);
-        println!("  projected: {:?}", projected);
+        // println!("Intersecting:");
+        // println!("  self: {:?}", self);
+        // println!("  other: {:?}", o);
+        // println!("  projection: {:?}", projection);
+        // println!("  projected: {:?}", projected);
         let unit_circle_intersections = projected.unit_circle_intersections();
         let points = unit_circle_intersections.iter().map(|p| p.apply(&rev));
-        println!("reverse projection: {:?}", rev);
-        println!("points: {:?}", points.clone().collect::<Vec<_>>());
-        println!();
+        // println!("reverse projection: {:?}", rev);
+        // println!("points: {:?}", points.clone().collect::<Vec<_>>());
+        // println!();
         points.map(|p| {
             let x = p.x.clone();
             let y = p.y.clone();

@@ -678,18 +678,18 @@ mod tests {
     #[test]
     fn variant_callers() {
         let ellipses = ellipses4(2.);
-        let [ e0, e1, e2, _ ] = ellipses;
-        let ( z, d ) = d_fns(8);
+        let [ e0, e1, e2, e3 ] = ellipses;
+        let ( z, d ) = d_fns(12);
         let inputs: Vec<Input> = vec![
             ( e0, vec![ z( ), z( ), z(  ), z(  ), ] ),
             ( e1, vec![ d(0), d(1), d( 2), d( 3), ] ),
             ( e2, vec![ d(4), d(5), d( 6), d( 7), ] ),
-            // ( e3, vec![ ds(8), ds(9), ds(10), ds(11), ] ),
+            ( e3, vec![ d(8), d(9), d(10), d(11), ] ),
         ];
         let expected: Vec<ExpectedStep> = vec![
 
         ];
-        check(inputs, FIZZ_BUZZ_BAZZ.into(), expected, 0.001, 1)
+        check(inputs, VARIANT_CALLERS.into(), expected, 0.001, 1)
         // test(inputs, VARIANT_CALLERS.into(), expected, 0.001, 1)
     }
 }

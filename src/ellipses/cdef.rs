@@ -106,8 +106,8 @@ where
         debug!("c_1: {}", c_1);
         debug!("c_0: {}", c_0);
 
-        let a_4 = c_2.clone() * c_2.clone();
-        let a_3 = c_2.clone() * c_1.clone() * 2.;
+        let mut a_4 = c_2.clone() * c_2.clone();
+        let mut a_3 = c_2.clone() * c_1.clone() * 2.;
         let a_2 = c_1.clone() * c_1.clone() + c_2.clone() * c_0.clone() * 2. + 1.;
         let a_1 = c_1.clone() * c_0.clone() * 2.;
         let a_0 = c_0.clone() * c_0.clone() - 1.;
@@ -120,14 +120,17 @@ where
         // Very small a_4/a_3 coefficients can lead to significant numeric errors.
         // Worked around below by sanity-checking various candidate points, and mapping them back onto the unit circle, so that if
         // at least one correct coordinate is returned, the other coordinate can be inferred.
-        // if a_4.clone().into() < 1e-7 {
-        //     debug!("Setting a_4 to 0.");
-        //     a_4 = a_4.zero();
-        // }
-        // if a_3.clone().into() < 1e-7 {
-        //     debug!("Setting a_3 to 0.");
-        //     a_3 = a_3.zero();
-        // }
+        if a_4.clone().into() < 1e-7 {
+            debug!("Setting a_4 to 0.");
+            let f: f64 = a_4.clone().into();
+            a_4 = a_4 - f;
+            debug!("Set a_4 to 0: {}", a_4);
+        }
+        if a_3.clone().into() < 1e-7 {
+            let f: f64 = a_3.clone().into();
+            a_3 = a_3 - f;
+            debug!("Set a_3 to 0: {}", a_3);
+        }
         let roots = Quartic::quartic_roots(a_4, a_3, a_2, a_1, a_0);
         let mut points: Vec<R2<D>> = Vec::new();
         debug!("Points:");

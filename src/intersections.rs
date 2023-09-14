@@ -219,7 +219,7 @@ where
         // Verify that all Edges have been visited the expected number of times
         let total_visits = edges.iter().map(|e| e.borrow().visits).sum::<usize>();
         if total_visits != total_expected_visits {
-            error!("total_visits ({}) != total_expected_visits ({})", total_visits, total_expected_visits);
+            panic!("total_visits ({}) != total_expected_visits ({})", total_visits, total_expected_visits);
         }
 
         Intersections { shapes, nodes, nodes_by_shape, nodes_by_shapes, edges, is_connected, regions, total_visits, total_expected_visits, }
@@ -644,7 +644,7 @@ pub mod tests {
             Some(_) => {
                 println!("Nodes:");
                 for node in &intersections.nodes {
-                    println!("  {:?}", format!("{}", node.borrow()));
+                    println!("  {:?},", format!("{}", node.borrow()));
                 }
             },
             None => {
