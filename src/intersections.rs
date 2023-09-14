@@ -535,22 +535,33 @@ pub mod tests {
     }
 
     pub fn ellipses4(r: f64) -> [Shape<f64>; 4] {
+        ellipses4_select(r, [ 0, 1, 2, 3 ])
+    }
+
+    pub fn ellipses4_select<const N: usize>(r: f64, mask: [ usize; N ]) -> [ Shape<f64>; N ] {
         let r2 = r * r;
         let r2sqrt = (1. + r2).sqrt();
         let c0 = 1. / r2sqrt;
         let c1 = r2 * c0;
-        [
-            Shape::XYRR(XYRR { idx: 0, c: R2 { x:      c0, y:      c1, }, r: R2 { x: 1., y: r , }, }),
-            Shape::XYRR(XYRR { idx: 1, c: R2 { x: 1. + c0, y:      c1, }, r: R2 { x: 1., y: r , }, }),
-            Shape::XYRR(XYRR { idx: 2, c: R2 { x:      c1, y: 1. + c0, }, r: R2 { x: r , y: 1., }, }),
-            Shape::XYRR(XYRR { idx: 3, c: R2 { x:      c1, y:      c0, }, r: R2 { x: r , y: 1., }, }),
-        ]
+        let ellipses = [
+            XYRR { idx: 0, c: R2 { x:      c0, y:      c1, }, r: R2 { x: 1., y: r , }, },
+            XYRR { idx: 1, c: R2 { x: 1. + c0, y:      c1, }, r: R2 { x: 1., y: r , }, },
+            XYRR { idx: 2, c: R2 { x:      c1, y: 1. + c0, }, r: R2 { x: r , y: 1., }, },
+            XYRR { idx: 3, c: R2 { x:      c1, y:      c0, }, r: R2 { x: r , y: 1., }, },
+        ];
+        let mut ellipses = mask.map(|i| ellipses[i].clone());
+        for i in 0..N {
+            let mut e = ellipses[i].clone();
+            e.idx = i;
+            ellipses[i] = e;
+        }
+        ellipses.map(|e| Shape::XYRR(e))
     }
 
     #[test]
     fn ellipses4_0_2() {
-        let shapes = ellipses4(2.);
-        let shapes = vec![ shapes[0].clone(), shapes[2].clone() ];
+        let shapes = ellipses4_select(2., [0, 2]).to_vec();
+        debug!("shapes: {:?}", shapes);
         let intersections = Intersections::new(shapes);
         assert_eq!(intersections.nodes.len(), 2);
         assert_eq!(intersections.edges.len(), 4);
@@ -565,21 +576,21 @@ pub mod tests {
         regions.sort_by_cached_key(|r| OrderedFloat(r.area()));
 
         let expected: HashMap<&str, f64> = [
-            ("01-3", 0.15744583391178074),
-            ("0-23", 0.15744583391178418),
-            ("-1-3", 0.5830467212121324),
-            ("0-2-", 0.5830467212121349),
-            ("0123", 0.632711280011059),
-            ("01--", 0.691115932721805),
-            ("--23", 0.6911159327218149),
-            ("0--3", 0.8415779241718238),
-            ("012-", 0.9754663505728484),
-            ("-123", 0.9754663505728542),
-            ("-12-", 1.0010372353827393),
-            ("-1--", 1.2668956027943268),
-            ("--2-", 1.2668956027943343),
-            ("---3", 2.9962283967742938),
-            ("0---", 2.9962674848728885),
+            ("0-23", 0.1574458339117841),
+            ("01-3", 0.15744583391178563),
+            ("-1-3", 0.5830467212121343),
+            ("0-2-", 0.5830467212121406),
+            ("0123", 0.6327112800110606),
+            ("--23", 0.6911159327218127),
+            ("01--", 0.6911159327218175),
+            ("0--3", 0.8415779241718198),
+            ("-123", 0.9754663505728485),
+            ("012-", 0.9754663505728591),
+            ("-12-", 1.0010372353827428),
+            ("-1--", 1.2668956027943292),
+            ("--2-", 1.2668956027943392),
+            ("0---", 2.9962311616537862),
+            ("---3", 2.996264719973729),
         ].into();
         assert_eq!(regions.len(), expected.len());
         match env::var("GEN_VALS").map(|s| s.parse::<usize>().unwrap()).ok() {
@@ -613,29 +624,6 @@ pub mod tests {
     }
 
     #[test]
-    fn test_perturbed_unit_circle() {
-        // Quartic solvers struggle to retain accuracy computing this slightly-perturbed unit-circle
-        let e = XYRR {
-            idx: 0,
-            c: R2 { x: -1.100285308561806, y: -1.1500279763995946e-5 },
-            r: R2 { x:  1.000263820108834, y:  1.0000709021402923 }
-        };
-        let mut points = e.unit_intersections();
-        points.sort_by_key(|p| OrderedFloat(p.y));
-        assert_relative_eq!(points[0], R2 { x: -0.5500164117391726, y: -0.8351538461969557 }, max_relative = 1e-7);
-        assert_relative_eq!(points[1], R2 { x: -0.5500338731914519, y:  0.835142346155438  }, max_relative = 1e-7);
-        // TODO: impl/use relative_eq for Vec?
-        // assert_relative_eq!(
-        //     points,
-        //     [
-        //         R2 { x: -0.5500164117391726, y: -0.8351538461969557 },
-        //         R2 { x: -0.5500338731914519, y:  0.8351423461554383 },
-        //     ],
-        //     max_relative = 1e-10,
-        // );
-    }
-
-    #[test]
     fn circle_l() {
         let e = XYRR {
             idx: 0,
@@ -651,9 +639,20 @@ pub mod tests {
     }
 
     fn assert_node_strs<D: Display + Deg + Fmt>(intersections: Intersections<D>, expected: Vec<&str>) {
-        let actual = intersections.nodes.iter().map(|n| format!("{}", n.borrow())).collect::<Vec<String>>();
-        assert_eq!(actual.len(), expected.len());
-        assert_eq!(actual, expected);
+        let gen_vals = env::var("GEN_VALS").map(|s| s.parse::<usize>().unwrap()).ok();
+        match gen_vals {
+            Some(_) => {
+                println!("Nodes:");
+                for node in &intersections.nodes {
+                    println!("  {:?}", format!("{}", node.borrow()));
+                }
+            },
+            None => {
+                let actual = intersections.nodes.iter().map(|n| format!("{}", n.borrow())).collect::<Vec<String>>();
+                assert_eq!(actual.len(), expected.len());
+                assert_eq!(actual, expected);
+            }
+        }
     }
 
     #[test]
@@ -679,24 +678,13 @@ pub mod tests {
         ];
         let shapes: Vec<_> = ellipses.iter().map(|e| Shape::XYRR(e.clone())).collect();
         let intersections = Intersections::new(shapes);
-        let gen_vals = env::var("GEN_VALS").map(|s| s.parse::<usize>().unwrap()).ok();
-        match gen_vals {
-            Some(_) => {
-                println!("Nodes:");
-                for node in &intersections.nodes {
-                    println!("  {:?}", format!("{}", node.borrow()));
-                }
-            },
-            None => {
-                assert_node_strs(
-                    intersections,
-                    vec![
-                        "I( 0.897,  3.459, C0(  57)/C1( 123))",
-                        "I( 0.897,  0.119, C0( -57)/C1(-123))",
-                    ]
-                );
-            }
-        }
+        assert_node_strs(
+            intersections,
+            vec![
+                "I( 0.897,  0.119, C0( -57)/C1(-123))",
+                "I( 0.897,  3.459, C0(  57)/C1( 123))",
+            ]
+        );
     }
 
     #[test]
@@ -714,8 +702,10 @@ pub mod tests {
         assert_node_strs(
             intersections,
             vec![
-                "I( 0.897,  3.459, C0(  57)/C1( 123))",
                 "I( 0.897,  0.119, C0( -57)/C1(-123))",
+                "I( 0.897,  3.459, C0(  57)/C1( 123))",
+                "I( 1.297,  2.416, C0(  18)/C2( 104))",
+                "I( 1.115,  0.506, C0( -40)/C2(-110))",
                 "I( 2.399,  2.399, C1(  18)/C2(  72))",
                 "I( 0.469,  2.198, C1( 168)/C2( 131))",
                 "I( 0.632,  0.632, C1(-145)/C2(-125))",

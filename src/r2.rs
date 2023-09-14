@@ -72,12 +72,23 @@ impl<
 impl<
     D
     : Clone
+    + Add<Output = D>
+    + Mul<Output = D>
+> R2<D> {
+    pub fn norm2(&self) -> D {
+        self.x.clone() * self.x.clone() + self.y.clone() * self.y.clone()
+    }
+}
+
+impl<
+    D
+    : Clone
     + Sqrt
     + Add<Output = D>
     + Mul<Output = D>
 > R2<D> {
     pub fn norm(&self) -> D {
-        (self.x.clone() * self.x.clone() + self.y.clone() * self.y.clone()).sqrt()
+        self.norm2().sqrt()
     }
 }
 

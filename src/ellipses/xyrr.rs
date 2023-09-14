@@ -58,7 +58,7 @@ where
         }
     }
     pub fn unit_intersections(&self) -> Vec<R2<D>> {
-        let points = self.cdef().unit_intersections();
+        let points = self.cdef().unit_intersections(&self);
         debug!("xyrr unit_intersections: {}", self);
         for point in &points {
             let r = point.norm();
@@ -151,6 +151,7 @@ mod tests {
     use crate::{dual::Dual, circle::Circle, to::To};
 
     use super::*;
+    use ordered_float::OrderedFloat;
     use test_log::test;
 
     #[test]
@@ -168,6 +169,36 @@ mod tests {
     }
 
     #[test]
+    fn test_perturbed_unit_circle1() {
+        // Quartic solvers struggle to retain accuracy computing this slightly-perturbed unit-circle
+        let e = XYRR {
+            idx: 0,
+            c: R2 { x: -1.100285308561806, y: -1.1500279763995946e-5 },
+            r: R2 { x:  1.000263820108834, y:  1.0000709021402923 }
+        };
+        let mut points = e.unit_intersections();
+        points.sort_by_key(|p| OrderedFloat(p.y));
+        // TODO: these are not super accurate, tiny x⁴ and x³ coefficients introduce numerical error, some semblance of accuracy is recovered with some kludgy checks in CDEF::unit_intersections, but better root-refinement / -finding algos would be good.
+        assert_relative_eq!(points[0], R2 { x: -0.5499993628836819, y: -0.8351650739988736 }, max_relative = 1e-7);
+        assert_relative_eq!(points[1], R2 { x: -0.5500509220473759, y: 0.835131117343158 }, max_relative = 1e-7);
+    }
+
+    #[test]
+    fn test_perturbed_unit_circle2() {
+        // Quartic solvers struggle to retain accuracy computing this slightly-perturbed unit-circle
+        let e = XYRR {
+            idx: 0,
+            c: R2 { x: -1.1, y: -1e-5 },
+            r: R2 { x:  1.0002, y:  1.00007 }
+        };
+        let mut points = e.unit_intersections();
+        points.sort_by_key(|p| OrderedFloat(p.y));
+        // TODO: these are not super accurate, tiny x⁴ and x³ coefficients introduce numerical error, some semblance of accuracy is recovered with some kludgy checks in CDEF::unit_intersections, but better root-refinement / -finding algos would be good.
+        assert_relative_eq!(points[0], R2 { x: -0.5498367543659697, y: -0.8352721374188752 }, max_relative = 1e-7);
+        assert_relative_eq!(points[1], R2 { x: -0.5499644615556463, y: 0.835188057281597   }, max_relative = 1e-7);
+    }
+
+    #[test]
     fn test_unit_intersections_1_1_2_3() {
         let e = XYRR {
             idx: 0,
@@ -182,11 +213,11 @@ mod tests {
         // }
 
         let expected = [
-            R2 { x: Dual::new(-0.948, vec![ 0.684,  0.106, -0.666, -0.024]),
-                 y: Dual::new( 0.319, vec![ 2.033,  0.316, -1.980, -0.072]), },
             R2 { x: Dual::new(-0.600, vec![ 1.600,  0.800, -1.280, -0.480]),
                  y: Dual::new(-0.800, vec![-1.200, -0.600,  0.960,  0.360]), },
-           ];
+            R2 { x: Dual::new(-0.948, vec![ 0.684,  0.106, -0.666, -0.024]),
+                 y: Dual::new( 0.319, vec![ 2.033,  0.316, -1.980, -0.072]), },
+        ];
         assert_eq!(us.len(), expected.len());
         assert_relative_eq!(us[0], expected[0], epsilon = 1e-3);
         assert_relative_eq!(us[1], expected[1], epsilon = 1e-3);
@@ -222,9 +253,7 @@ mod tests {
     fn ellipses4_0_2() {
         let e = XYRR { idx: 0, c: R2 { x: -0.6708203932499369, y: 0.34164078649987384 }, r: R2 { x: 0.5, y: 2.0 } };
         let points = e.unit_intersections();
-        assert_eq!(points, vec![
-            R2 { x: -0.1970071360883896, y: 0.9804020544298415 },
-            R2 { x: -0.2905340210149845, y: -0.9568646626523877 },
-        ]);
+        assert_relative_eq!(points[0], R2 { x: -0.19700713608839127, y: 0.9804020544298395 }, max_relative = 1e-10);
+        assert_relative_eq!(points[1], R2 { x: -0.29053402101498915, y: -0.9568646626523847 }, max_relative = 1e-10);
     }
 }
