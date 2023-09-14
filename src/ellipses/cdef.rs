@@ -121,6 +121,14 @@ where
         debug!("a_1: {}", a_1);
         debug!("a_0: {}", a_0);
         // Very small a_4/a_3 coefficients can lead to significant numeric errors attempting to solve as quartic/cubic, just treat these as cubic/quadratic.
+        if a_4.clone().into().abs() < 1e-8 && a_3.clone().into().abs() < 1e-8 {
+            debug!("Setting a_4 and a_3 to 0.");
+            let f: f64 = a_4.clone().into();
+            a_4 = a_4 - f;
+            let f: f64 = a_3.clone().into();
+            a_3 = a_3 - f;
+            debug!("Set a_4 and a_3 to 0: {}, {}", a_4, a_3);
+        }
         // if a_4.clone().into().abs() < 1e-7 {
         //     debug!("Setting a_4 to 0.");
         //     let f: f64 = a_4.clone().into();

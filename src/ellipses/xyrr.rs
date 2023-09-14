@@ -201,8 +201,8 @@ mod tests {
         let mut points = e.unit_intersections();
         points.sort_by_key(|p| OrderedFloat(p.y));
         // TODO: these are not super accurate, tiny x⁴ and x³ coefficients introduce numerical error, some semblance of accuracy is recovered with some kludgy checks in CDEF::unit_intersections, but better root-refinement / -finding algos would be good.
-        assert_relative_eq!(points[0], R2 { x: -0.5500164117413399, y: -0.8351538538709787 }, max_relative = 1e-7);
-        assert_relative_eq!(points[1], R2 { x: -0.550033873194555, y: 0.8351423563859207 }, max_relative = 1e-7);
+        assert_relative_eq!(points[0], R2 { x: -0.5499993628836819, y: -0.8351650739988736 }, max_relative = 1e-7);
+        assert_relative_eq!(points[1], R2 { x: -0.5500509220473759, y:  0.835131117343158  }, max_relative = 1e-7);
     }
 
     #[test]
@@ -216,8 +216,8 @@ mod tests {
         let mut points = e.unit_intersections();
         points.sort_by_key(|p| OrderedFloat(p.y));
         // TODO: these are not super accurate, tiny x⁴ and x³ coefficients introduce numerical error, some semblance of accuracy is recovered with some kludgy checks in CDEF::unit_intersections, but better root-refinement / -finding algos would be good.
-        assert_relative_eq!(points[0], R2 { x: -0.549893013974342, y: -0.8352351038642329 }, max_relative = 1e-7);
-        assert_relative_eq!(points[1], R2 { x: -0.5499082019508151, y: 0.8352251058705242 }, max_relative = 1e-7);
+        assert_relative_eq!(points[0], R2 { x: -0.5498367543659697, y: -0.8352721374188752 }, max_relative = 1e-7);
+        assert_relative_eq!(points[1], R2 { x: -0.5499644615556463, y: 0.835188057281597 }, max_relative = 1e-7);
     }
 
     #[test]
