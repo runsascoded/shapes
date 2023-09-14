@@ -2,7 +2,7 @@ use std::{ops::{Neg, Div}, fmt};
 
 use derive_more::Display;
 
-use crate::r2::R2;
+use crate::{r2::R2, math::recip::Recip};
 
 #[derive(Debug, Display, Clone)]
 pub enum Transform<D> {
@@ -12,18 +12,23 @@ pub enum Transform<D> {
     // Rotate(D),
 }
 
-impl<D: Clone + fmt::Display + Neg<Output = D>> Neg for Transform<D>
+impl<
+    D
+    : Clone
+    + fmt::Display
+    + Neg<Output = D>
+    + Recip
+> Neg for Transform<D>
 where
     R2<D>: Neg<Output = R2<D>>,
-    f64: Div<D, Output = D>,
 {
     type Output = Transform<D>;
     fn neg(self) -> Self {
         match self {
             Transform::Translate(v) => Transform::Translate(-v),
-            Transform::Scale(v) => Transform::Scale(1. / v),
+            Transform::Scale(v) => Transform::Scale(v.recip()),
             Transform::ScaleXY(v) => {
-                Transform::ScaleXY(R2 { x: 1. / v.clone().x, y: 1. / v.clone().y })
+                Transform::ScaleXY(R2 { x: v.clone().x.recip(), y: v.clone().y.recip() })
             },
         }
     }
@@ -32,10 +37,9 @@ where
 #[derive(Debug, Display, Clone)]
 pub struct Projection<D>(pub Vec<Transform<D>>);
 
-impl<D: Clone + fmt::Display + Neg<Output = D>> Neg for Projection<D>
+impl<D: Clone + fmt::Display + Neg<Output = D> + Recip> Neg for Projection<D>
 where
 R2<D>: Neg<Output = R2<D>>,
-f64: Div<D, Output = D>,
 {
     type Output = Projection<D>;
     fn neg(self) -> Self {

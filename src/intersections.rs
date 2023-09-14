@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc, f64::consts::TAU, collections::HashSet, ops::{Neg, Add, Sub, Mul, Div}, fmt::Display};
 
-use log::error;
+use log::{error, debug};
 use ordered_float::OrderedFloat;
 
 use crate::{node::{N, Node}, edge::{self, E}, region::{Region, RegionArg}, shape::{S, Shape}, segment::Segment, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::CanTransform, intersection::Intersection, dual::Dual, to::To};
@@ -111,11 +111,11 @@ where
             }
         }
 
-        println!("{} nodes", (&nodes).len());
+        debug!("{} nodes", (&nodes).len());
         for node in &nodes {
-            println!("  {}", node.borrow());
+            debug!("  {}", node.borrow());
         }
-        println!();
+        debug!("");
 
         // Compute edges between nodes
         let mut edges: Vec<E<D>> = Vec::new();
@@ -176,11 +176,11 @@ where
             edges_by_shape.push(shape_edges);
         }
 
-        println!("{} edges", (&edges).len());
+        debug!("{} edges", (&edges).len());
         for edge in &edges {
-            println!("  {}", edge.borrow());
+            debug!("  {}", edge.borrow());
         }
-        println!();
+        debug!("");
 
         // Graph-traversal will accumulate Regions here
         let mut regions: Vec<Region<D>> = Vec::new();
@@ -210,11 +210,11 @@ where
             segments.pop();
         }
 
-        println!("{} regions", (&regions).len());
+        debug!("{} regions", (&regions).len());
         for region in &regions {
-            println!("  {}", region);
+            debug!("  {}", region);
         }
-        println!();
+        debug!("");
 
         // Verify that all Edges have been visited the expected number of times
         let total_visits = edges.iter().map(|e| e.borrow().visits).sum::<usize>();

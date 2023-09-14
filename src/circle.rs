@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 use crate::{
     dual::{D, Dual},
-    r2::R2, shape::{Duals, Shape}, transform::{Projection, CanTransform}, transform::Transform::{Scale, ScaleXY, Translate, self}, ellipses::xyrr::XYRR, sqrt::Sqrt, math::is_normal::IsNormal, to::To
+    r2::R2, shape::{Duals, Shape}, transform::{Projection, CanTransform}, transform::Transform::{Scale, ScaleXY, Translate, self}, ellipses::xyrr::XYRR, sqrt::Sqrt, math::{is_normal::IsNormal, recip::Recip}, to::To
 };
 
 #[derive(Debug, Clone, Copy, From, PartialEq, Tsify, Serialize, Deserialize)]
@@ -184,16 +184,15 @@ where R2<D>: TransformR2<D>,
     }
 }
 
-impl<D: Clone + Display> Circle<D>
+impl<D: Clone + Display + Recip> Circle<D>
 where
     R2<D>: Neg<Output = R2<D>>,
-    f64: Div<D, Output = D>,
 {
     pub fn projection(&self) -> Projection<D> {
         let c = self.c.clone();
         let r = self.r.clone();
         let translate = Translate(-c.clone());
-        let scale = Scale(1. / r.clone());
+        let scale = Scale(r.recip());
         let transforms = vec![ translate, scale ];
         Projection(transforms)
     }

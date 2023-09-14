@@ -4,7 +4,7 @@ use derive_more::{From, Display};
 use serde::{Deserialize, Serialize};
 use tsify::{declare, Tsify};
 
-use crate::{dual::D, circle, ellipses::xyrr, zero::Zero, transform::{Transform, CanTransform, HasProjection, Projection}, r2::R2};
+use crate::{dual::D, circle, ellipses::xyrr, zero::Zero, transform::{Transform, CanTransform, HasProjection, Projection}, r2::R2, math::recip::Recip};
 
 #[declare]
 pub type Duals = Vec<Vec<f64>>;
@@ -70,10 +70,9 @@ impl<D: Zero> Shape<D> {
     }
 }
 
-impl<D: Clone + fmt::Display> HasProjection<D> for Shape<D>
+impl<D: Clone + fmt::Display + Recip> HasProjection<D> for Shape<D>
 where
     R2<D>: Neg<Output = R2<D>>,
-    f64: Div<D, Output = D>,
 {
     fn projection(&self) -> Projection<D> {
         match self {

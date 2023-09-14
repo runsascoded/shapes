@@ -4,7 +4,7 @@ use std::{fmt::Display, ops::{Div, Sub}};
 use log::debug;
 use ordered_float::OrderedFloat;
 
-use crate::{math::{abs::AbsArg, quartic::quartic, is_zero::IsZero}, r2::R2, transform::CanProject, ellipses::quartic::{Root, Quartic}, circle, dual::Dual};
+use crate::{math::{abs::AbsArg, quartic::quartic, is_zero::IsZero, recip::Recip}, r2::R2, transform::CanProject, ellipses::quartic::{Root, Quartic}, circle, dual::Dual};
 
 use super::xyrr::XYRR;
 
@@ -33,6 +33,7 @@ pub trait UnitIntersectionsArg
 + Display
 + IsZero
 + Quartic
++ Recip
 + circle::UnitIntersectionsArg
 {}
 
@@ -40,10 +41,6 @@ impl UnitIntersectionsArg for f64 {}
 impl UnitIntersectionsArg for Dual {}
 
 impl<D: UnitIntersectionsArg> CDEF<D>
-where
-    f64
-    : Sub<D, Output = D>
-    + Div<D, Output = D>,
 {
     pub fn points_err(&self, points: Vec<R2<D>>, xyrr: &XYRR<D>) -> f64 {
         points.iter().map(|p| {
@@ -92,14 +89,14 @@ where
     pub fn _unit_intersections(&self, xyrr: &XYRR<D>, sub_y_solve_x: bool) -> Vec<R2<D>> {
         debug!("_unit_intersections, sub_y_solve_x: {}", sub_y_solve_x);
         let [ c_2, c_1, c_0 ] = if sub_y_solve_x {        // debug!("d_zero: {}", d_zero);
-            let re = -1. / self.e.clone();
+            let re = -self.e.clone().recip();
             [
-                (1. - self.c.clone()) * re.clone(),
+                (-self.c.clone() + 1.) * re.clone(),
                 self.d.clone() * re.clone(),
                 (self.c.clone() + self.f.clone()) * re,
             ]
         } else {
-            let rd = -1. / self.d.clone();
+            let rd = -self.d.clone().recip();
             [
                 (self.c.clone() - 1.) * rd.clone(),
                 self.e.clone() * rd.clone(),
@@ -120,8 +117,11 @@ where
         debug!("a_2: {}", a_2);
         debug!("a_1: {}", a_1);
         debug!("a_0: {}", a_0);
+        let f_4: f64 = a_4.clone().into();
+        let f_3: f64 = a_3.clone().into();
+        let f_2: f64 = a_2.clone().into();
         // Very small a_4/a_3 coefficients can lead to significant numeric errors attempting to solve as quartic/cubic, just treat these as cubic/quadratic.
-        if a_4.clone().into().abs() < 1e-8 && a_3.clone().into().abs() < 1e-8 {
+        if f_2 != 0. && (f_4 / f_2).abs() < 1e-8 && (f_3 / f_2).abs() < 1e-8 {
             debug!("Setting a_4 and a_3 to 0.");
             let f: f64 = a_4.clone().into();
             a_4 = a_4 - f;

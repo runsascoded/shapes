@@ -56,9 +56,9 @@ impl Quartic for f64 {
             let x2 = x * x;
             (a_4 * x2 * x2) + (a_3 * x2 * x) + (a_2 * x2) + (a_1 * x) + a_0
         };
-        println!("Roots: {:?}", reals);
+        debug!("Roots: {:?}", reals);
         for root in reals {
-            println!("  x: {}, f(x): {}", root, f(root));
+            debug!("  x: {}, f(x): {}", root, f(root));
             let fd = fp(root);
             let mut double_root = false;
             if fd == 0. {
@@ -133,29 +133,5 @@ impl Quartic for Dual {
             debug!("  {}, double? {}", root.0.s(2), root.1);
         }
         dual_roots
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_quartic_roots() {
-        let d_4 = vec![ 1., 0., 0., 0., 0., ];
-        let d_3 = vec![ 0., 1., 0., 0., 0., ];
-        let d_2 = vec![ 0., 0., 1., 0., 0., ];
-        let d_1 = vec![ 0., 0., 0., 1., 0., ];
-        let d_0 = vec![ 0., 0., 0., 0., 1., ];
-        let c_4 = Dual::new( 1., d_4);
-        let c_3 = Dual::new(-6., d_3);
-        let c_2 = Dual::new(11., d_2);
-        let c_1 = Dual::new(-6., d_1);
-        let c_0 = Dual::new( 0., d_0);
-        let roots = Quartic::quartic_roots(c_4, c_3, c_2, c_1, c_0);
-        // assert_eq!(roots.len(), 4);
-        for root in roots {
-            println!("{:?}", root);
-        }
     }
 }

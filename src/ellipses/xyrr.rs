@@ -5,7 +5,7 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::{r2::R2, rotate::{Rotate, RotateArg}, dual::{D, Dual}, shape::Duals, transform::{Transform::{Scale, ScaleXY, Translate, self}, CanProject, CanTransform, Projection}, intersect::Intersect};
+use crate::{r2::R2, rotate::{Rotate, RotateArg}, dual::{D, Dual}, shape::Duals, transform::{Transform::{Scale, ScaleXY, Translate, self}, CanProject, CanTransform, Projection}, intersect::Intersect, math::recip::Recip};
 
 use super::{xyrrt::XYRRT, cdef::{CDEF, self}};
 
@@ -88,15 +88,14 @@ impl<D: Display> Display for XYRR<D> {
     }
 }
 
-impl<D: Clone> XYRR<D>
+impl<D: Clone + Recip> XYRR<D>
 where
     R2<D>: Neg<Output = R2<D>>,
-    f64: Div<R2<D>, Output = R2<D>>,
 {
     pub fn projection(&self) -> Projection<D> {
         Projection(vec![
             Translate(-self.c.clone()),
-            ScaleXY(1. / self.r.clone()),
+            ScaleXY(self.r.clone().recip()),
         ])
     }
 }

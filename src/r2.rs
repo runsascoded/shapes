@@ -6,7 +6,7 @@ use nalgebra::ComplexField;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::{dual::Dual, rotate::{Rotate, RotateArg}, transform::{Transform::{self, Translate, Scale, ScaleXY}, CanTransform}, sqrt::Sqrt, trig::Trig, to::To};
+use crate::{dual::Dual, rotate::{Rotate, RotateArg}, transform::{Transform::{self, Translate, Scale, ScaleXY}, CanTransform}, sqrt::Sqrt, trig::Trig, to::To, math::recip::Recip};
 
 #[derive(Debug, Copy, Clone, From, Neg, PartialEq, Tsify, Serialize, Deserialize)]
 pub struct R2<D> {
@@ -89,6 +89,15 @@ impl<
 > R2<D> {
     pub fn norm(&self) -> D {
         self.norm2().sqrt()
+    }
+}
+
+impl<D: Recip> Recip for R2<D> {
+    fn recip(&self) -> Self {
+        R2 {
+            x: self.x.recip(),
+            y: self.y.recip(),
+        }
     }
 }
 

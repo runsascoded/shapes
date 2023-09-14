@@ -1,6 +1,6 @@
 use std::{ops::{Div, Neg, Add, Mul}, f64::consts::PI, fmt::Display};
 
-use crate::{dual::Dual, r2::R2, transform::{CanProject, HasProjection}, shape::Shape, trig::Trig, sqrt::Sqrt};
+use crate::{dual::Dual, r2::R2, transform::{CanProject, HasProjection}, shape::Shape, trig::Trig, sqrt::Sqrt, math::recip::Recip};
 
 pub trait ThetaPoints<D> {
     fn theta(&self, p: R2<D>) -> D;
@@ -14,6 +14,7 @@ pub trait ThetaPointsArg
 + Display
 + Neg<Output = Self>
 + Into<f64>
++ Recip
 + Sqrt
 + Trig
 + PartialOrd
@@ -29,7 +30,6 @@ impl ThetaPointsArg for Dual {}
 impl<D: ThetaPointsArg> ThetaPoints<D> for Shape<D>
 where
     R2<D>: Neg<Output = R2<D>> + CanProject<D, Output = R2<D>>,
-    f64: Div<D, Output = D>,
 {
     fn theta(&self, p: R2<D>) -> D {
         p.apply(&self.projection()).atan2()
