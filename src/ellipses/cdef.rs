@@ -78,7 +78,11 @@ where
             let points1 = self._unit_intersections(xyrr, false);
             let err1 = self.points_err(points1.clone(), xyrr);
             debug!("points errs: {} vs. {}", err0, err1);
-            if err0 < err1 {
+            if points0.len() == 0 {
+                points1
+            } else if points1.len() == 0 {
+                points0
+            } else if err0 < err1 {
                 points0
             } else {
                 points1
@@ -116,21 +120,18 @@ where
         debug!("a_2: {}", a_2);
         debug!("a_1: {}", a_1);
         debug!("a_0: {}", a_0);
-        // This was a hack for "perturbed unit circle" test cases, but loses important dual/derivative values.
-        // Very small a_4/a_3 coefficients can lead to significant numeric errors.
-        // Worked around below by sanity-checking various candidate points, and mapping them back onto the unit circle, so that if
-        // at least one correct coordinate is returned, the other coordinate can be inferred.
-        if a_4.clone().into() < 1e-7 {
-            debug!("Setting a_4 to 0.");
-            let f: f64 = a_4.clone().into();
-            a_4 = a_4 - f;
-            debug!("Set a_4 to 0: {}", a_4);
-        }
-        if a_3.clone().into() < 1e-7 {
-            let f: f64 = a_3.clone().into();
-            a_3 = a_3 - f;
-            debug!("Set a_3 to 0: {}", a_3);
-        }
+        // Very small a_4/a_3 coefficients can lead to significant numeric errors attempting to solve as quartic/cubic, just treat these as cubic/quadratic.
+        // if a_4.clone().into().abs() < 1e-7 {
+        //     debug!("Setting a_4 to 0.");
+        //     let f: f64 = a_4.clone().into();
+        //     a_4 = a_4 - f;
+        //     debug!("Set a_4 to 0: {}", a_4);
+        // }
+        // if a_3.clone().into().abs() < 1e-7 {
+        //     let f: f64 = a_3.clone().into();
+        //     a_3 = a_3 - f;
+        //     debug!("Set a_3 to 0: {}", a_3);
+        // }
         let roots = Quartic::quartic_roots(a_4, a_3, a_2, a_1, a_0);
         let mut points: Vec<R2<D>> = Vec::new();
         debug!("Points:");

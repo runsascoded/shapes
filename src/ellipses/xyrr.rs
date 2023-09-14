@@ -59,12 +59,15 @@ where
     }
     pub fn unit_intersections(&self) -> Vec<R2<D>> {
         let points = self.cdef().unit_intersections(&self);
-        debug!("xyrr unit_intersections: {}", self);
+        debug!("xyrr unit_intersections: {}, points {:?}", self, points);
         for point in &points {
             let r = point.norm();
             let projected = point.apply(&self.projection());
             let self_r = projected.norm();
-            debug!("  point: {} ({}, {})", point, r, self_r);
+            if (-1. + self_r.clone().into()).abs() > 1e-2 {
+                panic!("Bad unit_intersections: {}\npoint: {}\nunit.r: {}\nself.r: {}", self, point, r, self_r);
+            }
+            debug!("  point: {}, unit.r: {}, self.r: {}", point, r, self_r);
         }
         points
     }
@@ -198,8 +201,8 @@ mod tests {
         let mut points = e.unit_intersections();
         points.sort_by_key(|p| OrderedFloat(p.y));
         // TODO: these are not super accurate, tiny x⁴ and x³ coefficients introduce numerical error, some semblance of accuracy is recovered with some kludgy checks in CDEF::unit_intersections, but better root-refinement / -finding algos would be good.
-        assert_relative_eq!(points[0], R2 { x: -0.5499993628836819, y: -0.8351650739988736 }, max_relative = 1e-7);
-        assert_relative_eq!(points[1], R2 { x: -0.5500509220473759, y: 0.835131117343158 }, max_relative = 1e-7);
+        assert_relative_eq!(points[0], R2 { x: -0.5500164117413399, y: -0.8351538538709787 }, max_relative = 1e-7);
+        assert_relative_eq!(points[1], R2 { x: -0.550033873194555, y: 0.8351423563859207 }, max_relative = 1e-7);
     }
 
     #[test]
@@ -213,8 +216,8 @@ mod tests {
         let mut points = e.unit_intersections();
         points.sort_by_key(|p| OrderedFloat(p.y));
         // TODO: these are not super accurate, tiny x⁴ and x³ coefficients introduce numerical error, some semblance of accuracy is recovered with some kludgy checks in CDEF::unit_intersections, but better root-refinement / -finding algos would be good.
-        assert_relative_eq!(points[0], R2 { x: -0.5498367543659697, y: -0.8352721374188752 }, max_relative = 1e-7);
-        assert_relative_eq!(points[1], R2 { x: -0.5499644615556463, y: 0.835188057281597   }, max_relative = 1e-7);
+        assert_relative_eq!(points[0], R2 { x: -0.549893013974342, y: -0.8352351038642329 }, max_relative = 1e-7);
+        assert_relative_eq!(points[1], R2 { x: -0.5499082019508151, y: 0.8352251058705242 }, max_relative = 1e-7);
     }
 
     #[test]
@@ -269,6 +272,21 @@ mod tests {
     }
 
     #[test]
+    fn circle_l() {
+        let e = XYRR {
+            idx: 0,
+            c: R2 { x: -1.4489198414355153, y: 0.               , },
+            r: R2 { x:  1.29721671027373  , y: 1.205758072744277, },
+        };
+        let points = e.unit_intersections();
+        // WRONG: find_roots_sturm: missing other half (+y)
+        // assert_eq!(points, [ R2 { x: -0.5280321051800396, y: -0.8492244095691155 }, ] );
+        // OK: find_roots_eigen, crate::math::quartic::quartic
+        assert_relative_eq!(points[0], R2 { x: -0.5280321050819479, y:  0.8492244085062125 }, max_relative = 1e-14);
+        assert_relative_eq!(points[1], R2 { x: -0.5280321050819478, y: -0.8492244085062124 }, max_relative = 1e-14);
+    }
+
+    #[test]
     fn ellipses4_0_2() {
         let e = XYRR { idx: 0, c: R2 { x: -0.6708203932499369, y: 0.34164078649987384 }, r: R2 { x: 0.5, y: 2.0 } };
         let points = e.unit_intersections();
@@ -286,5 +304,23 @@ mod tests {
             "I( 0.947,  3.521, C0(  60)/C1( 120))",
             "I( 0.947,  0.057, C0( -60)/C1(-120))",
         ]);
+    }
+
+    #[test]
+    fn fizz_buzz_bazz_step2() {
+        let [ e0, e1 ] = [
+            XYRR { idx: 0, c: R2 { x: 0.9640795213008657, y: 0.14439141636463643 }, r: R2 { x: 1.022261085060523, y: 1.0555121335932487 } },
+            XYRR { idx: 1, c: R2 { x: 0.1445171704183926, y: 0.964205275354622   }, r: R2 { x: 0.9998075759976, y: 0.9049240408142587 } },
+        ];
+        let shapes = [ e0, e1 ].map(|e| Shape::XYRR(e));
+        let points = shapes[0].intersect(&shapes[1]);
+        assert_intersections(points, vec![
+            "I( 1.113,  1.189, C0(  82)/C1(  14))",
+            "I(-0.056,  0.078, C0(-176)/C1(-102))",
+        ]);
+        // assert_eq!(points.len(), 2);
+        // for p in points {
+        //     println!("p: {}", p);
+        // }
     }
 }
