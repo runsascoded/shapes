@@ -344,7 +344,8 @@ mod tests {
             ( Shape::XYRR(XYRR { idx: 0, c: R2 { x: 1., y: 0. }, r: R2 { x: 1., y: 1. } }), vec![ d(0), z( ), d(1), d(2), ] ),
             ( Shape::XYRR(XYRR { idx: 1, c: R2 { x: 0., y: 1. }, r: R2 { x: 1., y: 1. } }), vec![ d(3), d(4), d(5), d(6), ] ),
         ];
-        check(inputs, FIZZ_BUZZ.into(), "fizz_buzz_ellipses_diag", 0.7, 10)
+        // TODO: some nondeterminism sets in on the "error" field, from step 15! Debug.
+        check(inputs, FIZZ_BUZZ.into(), "fizz_buzz_ellipses_diag", 0.7, 14)
     }
 
     #[test]
