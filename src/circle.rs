@@ -1,6 +1,7 @@
 use std::{fmt::{Display, self}, ops::{Mul, Add, Neg, Div, Sub}};
 
 use derive_more::From;
+use log::debug;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 use crate::{
@@ -100,7 +101,7 @@ where
         if x1.is_normal() && y1.is_normal() {
             intersections.push(R2 { x: x1.clone(), y: y1.clone() });
         }
-        println!("{}: {} intersections", self, intersections.len());
+        debug!("Circle::unit_intserctions: {}, {} intersections", self, intersections.len());
         intersections
     }
 }
