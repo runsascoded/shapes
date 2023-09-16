@@ -385,8 +385,8 @@ pub mod tests {
 
     use crate::circle::Circle;
     use crate::math::{deg::Deg, round::round};
-    use crate::dual::{Dual, d_fns};
-    use crate::ellipses::xyrr::{XYRR, self};
+    use crate::dual::Dual;
+    use crate::ellipses::xyrr::XYRR;
     use crate::fmt::Fmt;
     use crate::r2::R2;
 

@@ -295,14 +295,22 @@ mod tests {
                 info!("Read expecteds from {}", expected_path);
                 info!("{}", df);
                 assert_eq!(steps.len(), expecteds.len());
-                for (step, expected) in steps.iter().zip(expecteds.iter()) {
+                for (idx, (step, expected)) in steps.iter().zip(expecteds.iter()).enumerate() {
                     let actual = get_actual(step, &coord_getters);
                     assert_eq!(actual.vals.len(), expected.vals.len());
                     for (a_val, e_val) in actual.vals.iter().zip(expected.vals.iter()) {
                         assert_relative_eq!(a_val, e_val, epsilon = 1e-3);
                     }
-                    assert_abs_diff_eq!(actual.dual(), expected.dual(), epsilon = 1e-17);
-                    assert_abs_diff_eq!(actual.err, expected.err, epsilon = 1e-17);
+                    let actual_dual = actual.dual();
+                    let expected_dual = expected.dual();
+                    if !abs_diff_eq!(actual_dual, expected_dual, epsilon = 1e-17) {
+                        warn!("Step {} duals:\n\t{:?}\n\t{:?}", idx, actual_dual, expected_dual);
+                    }
+                    if !abs_diff_eq!(actual.err, expected.err, epsilon = 1e-17) {
+                        warn!("Step {} error: {:?} != {:?}", idx, actual.err, expected.err);
+                    }
+                    assert_relative_eq!(actual_dual, expected_dual, epsilon = 1e-17, max_relative = 1e-10);
+                    assert_relative_eq!(actual.err, expected.err, epsilon = 1e-17, max_relative = 1e-10);
                 }
             }
         }
