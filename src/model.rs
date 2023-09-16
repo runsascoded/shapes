@@ -280,7 +280,9 @@ mod tests {
 
         let steps = model.steps;
         let generate_vals = env::var("GEN_VALS").map(|s| s.parse::<usize>().unwrap()).ok();
-        let expected_path = format!("testdata/{}.csv", name);
+        let os = env::consts::OS;
+        let os = if os == "macos" { "macos" } else { "linux" };
+        let expected_path = format!("testdata/{}/{}.csv", name, os);
         match generate_vals {
             Some(_) => {
                 let expecteds: Vec<ExpectedStep> = steps.iter().map(|step| get_actual(step, &coord_getters)).collect();
