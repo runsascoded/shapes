@@ -301,10 +301,11 @@ mod tests {
                     for (a_val, e_val) in actual.vals.iter().zip(expected.vals.iter()) {
                         assert_relative_eq!(a_val, e_val, epsilon = 1e-3);
                     }
+                    // Scaffolding for allowing wiggle room on matching gradient and error values. I can't even simulate exact "linux" values in Docker on macOS.
                     let actual_dual = actual.dual();
                     let expected_dual = expected.dual();
                     let ε_abs = 1e-17;
-                    let ε_rel = 1e-7;
+                    let ε_rel = 1e-17;
                     if !abs_diff_eq!(actual_dual, expected_dual, epsilon = ε_abs) || !relative_eq!(actual_dual, expected_dual, epsilon = ε_abs, max_relative = ε_rel) {
                         warn!("{}: step {} duals:\n\t{:?}\n\t{:?}", name, idx, actual_dual, expected_dual);
                         assert_relative_eq!(actual_dual, expected_dual, epsilon = ε_abs, max_relative = ε_rel);
