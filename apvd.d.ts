@@ -99,17 +99,17 @@ export interface R2<D> {
     y: D;
 }
 
-export interface Circle<D> {
-    idx: number;
-    c: R2<D>;
-    r: D;
-}
-
 export interface Model {
     steps: Diagram[];
     repeat_idx: number | null;
     min_idx: number;
     min_error: number;
+}
+
+export interface Circle<D> {
+    idx: number;
+    c: R2<D>;
+    r: D;
 }
 
 export interface Regions {
