@@ -2,7 +2,7 @@ use std::{ops::{Neg, Div, Add, Sub, Mul}, fmt};
 
 use crate::{sqrt::Sqrt, dual::Dual, zero::Zero};
 
-use super::{complex::{self, Complex as C, ComplexPair}, is_zero::IsZero, abs::{Abs, AbsArg}};
+use super::{complex::{self, Complex as C, ComplexPair}, is_zero::IsZero, abs::AbsArg};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Roots<D> {
@@ -14,7 +14,6 @@ pub enum Roots<D> {
 
 use Roots::{Single, Double, Reals, Complex};
 use approx::{AbsDiffEq, RelativeEq};
-use log::debug;
 
 impl<D: Clone> Roots<D> {
     pub fn reals(&self) -> Vec<D> {

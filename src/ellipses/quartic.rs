@@ -1,6 +1,5 @@
 use std::ops::Mul;
 
-use derive_more::Display;
 use log::{warn, debug};
 use roots::{find_roots_quartic, find_roots_sturm, find_roots_eigen};
 

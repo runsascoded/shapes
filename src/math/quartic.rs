@@ -1,8 +1,8 @@
-use std::{f64::consts::TAU, ops::{Div, Mul, Add, Sub, Neg}, fmt};
+use std::{ops::{Div, Mul, Add, Sub, Neg}, fmt};
 
-use crate::{trig::Trig, dual::Dual, sqrt::Sqrt, zero::Zero, math::cubic::cubic_depressed};
+use crate::{dual::Dual, sqrt::Sqrt, zero::Zero, math::cubic::cubic_depressed};
 
-use super::{complex::{ComplexPair, Complex, self, SqrtArg, Numeric}, quadratic, abs::{Abs, AbsArg}, is_zero::IsZero, cbrt::Cbrt, recip::Recip, deg::Deg};
+use super::{complex::{ComplexPair, Complex, self, SqrtArg, Numeric}, quadratic, is_zero::IsZero, recip::Recip};
 
 use super::cubic;
 

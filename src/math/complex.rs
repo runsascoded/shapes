@@ -2,7 +2,6 @@ use std::{fmt::{Display, Formatter, self}, ops::{Mul, Sub, Add, Neg, Div}};
 
 use approx::{AbsDiffEq, RelativeEq};
 use derive_more;
-use log::debug;
 
 use crate::{zero::Zero, sqrt::Sqrt, dual::Dual, trig::Trig};
 

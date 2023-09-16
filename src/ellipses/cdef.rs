@@ -1,10 +1,10 @@
 
-use std::{fmt::Display, ops::{Div, Sub}};
+use std::fmt::Display;
 
 use log::debug;
 use ordered_float::OrderedFloat;
 
-use crate::{math::{abs::AbsArg, quartic::quartic, is_zero::IsZero, recip::Recip}, r2::R2, transform::CanProject, ellipses::quartic::{Root, Quartic}, circle, dual::Dual};
+use crate::{math::{abs::AbsArg, is_zero::IsZero, recip::Recip}, r2::R2, transform::CanProject, ellipses::quartic::{Root, Quartic}, circle, dual::Dual};
 
 use super::xyrr::XYRR;
 

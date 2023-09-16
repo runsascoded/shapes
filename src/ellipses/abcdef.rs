@@ -1,7 +1,5 @@
 use crate::{r2::R2, dual::D};
 
-use super::quartic::{Quartic, Root};
-
 /// Ax² + Bxy + Cy² + Dx + Ey + F = 0
 pub struct ABCDEF<D> {
     pub a: D,

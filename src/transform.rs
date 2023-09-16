@@ -1,4 +1,4 @@
-use std::{ops::{Neg, Div}, fmt};
+use std::{ops::Neg, fmt};
 
 use derive_more::Display;
 

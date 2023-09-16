@@ -5,7 +5,7 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::{r2::R2, rotate::{Rotate, RotateArg}, dual::{D, Dual}, shape::Duals, transform::{Transform::{Scale, ScaleXY, Translate, self}, CanProject, CanTransform, Projection}, intersect::Intersect, math::recip::Recip};
+use crate::{r2::R2, rotate::{Rotate, RotateArg}, dual::{D, Dual}, shape::Duals, transform::{Transform::{Scale, ScaleXY, Translate, self}, CanProject, CanTransform, Projection}, math::recip::Recip};
 
 use super::{xyrrt::XYRRT, cdef::{CDEF, self}};
 
@@ -152,7 +152,7 @@ where R2<D>: TransformR2<D>,
 mod tests {
     use std::env;
 
-    use crate::{dual::Dual, circle::Circle, to::To, shape::Shape, math::deg::Deg, fmt::Fmt, intersection::Intersection};
+    use crate::{dual::Dual, circle::Circle, intersect::Intersect, to::To, shape::Shape, math::deg::Deg, fmt::Fmt, intersection::Intersection};
 
     use super::*;
     use ordered_float::OrderedFloat;
