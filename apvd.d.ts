@@ -58,12 +58,6 @@ export interface Intersection<D> {
 
 export type D = Dual;
 
-export interface XYRR<D> {
-    idx: number;
-    c: R2<D>;
-    r: R2<D>;
-}
-
 export interface Error {
     key: string;
     actual_area: Dual | null;
@@ -87,6 +81,12 @@ export interface Diagram {
 export type Errors = Record<string, Error>;
 
 export type Targets = Record<string, number>;
+
+export interface XYRR<D> {
+    idx: number;
+    c: R2<D>;
+    r: R2<D>;
+}
 
 export type Shape<D> = { Circle: Circle<D> } | { XYRR: XYRR<D> };
 
