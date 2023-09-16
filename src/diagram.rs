@@ -68,14 +68,8 @@ impl Diagram {
         });
         let total_area = intersections.area(&all_key).unwrap_or_else(|| intersections.zero());
         let errors = Self::compute_errors(&intersections, &targets, &total_target_area, &total_area);
-        let mut error: D = errors.values().into_iter().map(|e| {
-            // println!(" summing error for {}: {:?}", k, e.error);
-            e.error.abs()
-        }).sum();
+        let mut error: D = errors.values().into_iter().map(|e| { e.error.abs() }).sum();
         debug!("diagram, error {:?}", error);
-        // for e in &errors {
-        //     debug!("  {:?}", e.1);
-        // }
         // Optional/Alternate loss function based on per-region squared errors, weights errors by region size:
         // let error = errors.values().into_iter().map(|e| e.error.clone() * &e.error).sum::<D>().sqrt();
         let regions = Regions::new(&intersections);

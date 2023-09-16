@@ -285,13 +285,13 @@ mod tests {
             Some(_) => {
                 let expecteds: Vec<ExpectedStep> = steps.iter().map(|step| get_actual(step, &coord_getters)).collect();
                 let df = write_expecteds(&expected_path, expecteds).unwrap();
-                println!("Wrote expecteds to {}", expected_path);
-                println!("{}", df);
+                info!("Wrote expecteds to {}", expected_path);
+                info!("{}", df);
             }
             None => {
                 let (df, expecteds) = load_expecteds(&expected_path);
-                println!("Read expecteds from {}", expected_path);
-                println!("{}", df);
+                info!("Read expecteds from {}", expected_path);
+                info!("{}", df);
                 assert_eq!(steps.len(), expecteds.len());
                 for (step, expected) in steps.iter().zip(expecteds.iter()) {
                     let actual = get_actual(step, &coord_getters);
@@ -299,24 +299,8 @@ mod tests {
                     for (a_val, e_val) in actual.vals.iter().zip(expected.vals.iter()) {
                         assert_relative_eq!(a_val, e_val, epsilon = 1e-3);
                     }
-                    // assert_relative_eq!(actual.dual(), expected.dual(), epsilon = 1e-3);
-                    let a = actual.dual();
-                    let e = expected.dual();
-                    println!("duals: top {}, .0 {}, .0.eps {}", a == e, a.0 == e.0, a.0.eps == e.0.eps);
-                    println!("    actual: {:?}", a);
-                    println!("  expected: {:?}", e);
-                    assert_eq!(a, e);
-                    assert_abs_diff_eq!(a, e, epsilon = 1e-17);
+                    assert_abs_diff_eq!(actual.dual(), expected.dual(), epsilon = 1e-17);
                     assert_abs_diff_eq!(actual.err, expected.err, epsilon = 1e-17);
-                    assert_eq!(actual.err, expected.err);
-
-                    // TODO: verify assert_relative_eq behavior, at one point I thought it trivially false-positives when the provided "expected" value is larger than the "actual" value, because it checks |A - B| / max(A, B).
-                    // TODO: factor out and use a better relative-equality macro.
-                    // let a_err = actual.err;
-                    // let e_err = expected.err;
-                    // let abs_err_diff = (e_err - a_err).abs();
-                    // let relative_err = abs_err_diff / e_err;
-                    // assert!(relative_err < 1e-3, "relative_err {} >= 1e-3: actual err {}, expected {}", relative_err, a_err, e_err);
                 }
             }
         }
