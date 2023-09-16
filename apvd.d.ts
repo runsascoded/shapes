@@ -42,8 +42,6 @@ export function expand_areas(targets: any): any;
 * @returns {any}
 */
 export function xyrr_unit(xyrr: any): any;
-export type D = Dual;
-
 export interface Dual {
     v: number;
     d: number[];
@@ -56,6 +54,14 @@ export interface Intersection<D> {
     c1idx: number;
     t0: D;
     t1: D;
+}
+
+export type D = Dual;
+
+export interface XYRR<D> {
+    idx: number;
+    c: R2<D>;
+    r: R2<D>;
 }
 
 export interface Error {
@@ -93,23 +99,17 @@ export interface R2<D> {
     y: D;
 }
 
+export interface Circle<D> {
+    idx: number;
+    c: R2<D>;
+    r: D;
+}
+
 export interface Model {
     steps: Diagram[];
     repeat_idx: number | null;
     min_idx: number;
     min_error: number;
-}
-
-export interface XYRR<D> {
-    idx: number;
-    c: R2<D>;
-    r: R2<D>;
-}
-
-export interface Circle<D> {
-    idx: number;
-    c: R2<D>;
-    r: D;
 }
 
 export interface Regions {
