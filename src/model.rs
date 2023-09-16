@@ -75,10 +75,10 @@ impl Model {
 
 #[cfg(test)]
 mod tests {
-    use std::{env, collections::{HashMap, BTreeMap}, path::Path};
+    use std::{env, collections::BTreeMap, path::Path};
     use polars::prelude::*;
 
-    use crate::{dual::{Dual, is_one_hot, d_fns}, circle::Circle, fmt::Fmt, r2::R2, shape::Shape, to::To, ellipses::xyrr::XYRR};
+    use crate::{dual::{Dual, is_one_hot, d_fns}, circle::Circle, r2::R2, shape::Shape, to::To, ellipses::xyrr::XYRR};
 
     use super::*;
     use test_log::test;

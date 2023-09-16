@@ -116,7 +116,7 @@ impl<D: Clone + Zero + Display + Add<Output = D> + Sub<Output = D>> Areas<D>
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{HashMap, BTreeMap};
+    use std::collections::BTreeMap;
 
     fn test(inputs: Vec<(&str, i64)>, expected: Vec<(&str, i64)>) {
         let inputs: Vec<(String, i64)> = inputs.into_iter().map(|(k, v)| (k.to_string(), v)).collect();
@@ -124,7 +124,7 @@ mod tests {
         super::Areas::<i64>::expand(&mut map);
         let mut items: Vec<(String, i64)> = map.into_iter().collect();
         items.sort_by_key(|(k, _)| k.clone());
-        items.iter().zip(expected.iter()).enumerate().for_each(|(idx, ((ak, av), (ek, ev)))| {
+        items.iter().zip(expected.iter()).for_each(|((ak, av), (ek, ev))| {
             assert_eq!(ak, ek);
             if av != ev {
                 println!("  {}: {} != {}", ak, av, ev);

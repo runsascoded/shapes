@@ -1,6 +1,5 @@
-use itertools::Itertools;
 use std::collections::BTreeMap;
-use std::{collections::HashMap, fmt::Display};
+use std::fmt::Display;
 
 use log::{info, debug};
 use serde::{Deserialize, Serialize};
@@ -124,7 +123,7 @@ impl Diagram {
 
     pub fn compute_errors(intersections: &Intersections<D>, targets: &Targets, total_target_area: &f64, total_area: &Dual) -> Errors {
         let n = intersections.len();
-        let all_key = String::from_utf8(vec![b'*'; n]).unwrap();
+        // let all_key = String::from_utf8(vec![b'*'; n]).unwrap();
         let none_key = String::from_utf8(vec![b'-'; n]).unwrap();
         targets.iter().filter_map(|(key, target_area)| {
             if key == &none_key {
