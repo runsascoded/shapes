@@ -75,7 +75,7 @@ impl Model {
 
 #[cfg(test)]
 mod tests {
-    use std::{env, collections::HashMap, path::Path};
+    use std::{env, collections::{HashMap, BTreeMap}, path::Path};
     use polars::prelude::*;
 
     use crate::{dual::{Dual, is_one_hot, d_fns}, circle::Circle, fmt::Fmt, r2::R2, shape::Shape, to::To, ellipses::xyrr::XYRR};
@@ -227,7 +227,7 @@ mod tests {
         max_step_error_ratio: f64,
         max_steps: usize
     ) {
-        let targets: HashMap<_, _> = targets.iter().map(|(k, v)| (k.to_string(), *v)).collect();
+        let targets: BTreeMap<_, _> = targets.iter().map(|(k, v)| (k.to_string(), *v)).collect();
         let mut model = Model::new(inputs.clone(), targets);
         model.train(max_step_error_ratio, max_steps);
 
@@ -299,15 +299,24 @@ mod tests {
                     for (a_val, e_val) in actual.vals.iter().zip(expected.vals.iter()) {
                         assert_relative_eq!(a_val, e_val, epsilon = 1e-3);
                     }
-                    assert_relative_eq!(actual.dual(), expected.dual(), epsilon = 1e-3);
+                    // assert_relative_eq!(actual.dual(), expected.dual(), epsilon = 1e-3);
+                    let a = actual.dual();
+                    let e = expected.dual();
+                    println!("duals: top {}, .0 {}, .0.eps {}", a == e, a.0 == e.0, a.0.eps == e.0.eps);
+                    println!("    actual: {:?}", a);
+                    println!("  expected: {:?}", e);
+                    assert_eq!(a, e);
+                    assert_abs_diff_eq!(a, e, epsilon = 1e-17);
+                    assert_abs_diff_eq!(actual.err, expected.err, epsilon = 1e-17);
+                    assert_eq!(actual.err, expected.err);
 
                     // TODO: verify assert_relative_eq behavior, at one point I thought it trivially false-positives when the provided "expected" value is larger than the "actual" value, because it checks |A - B| / max(A, B).
                     // TODO: factor out and use a better relative-equality macro.
-                    let a_err = actual.err;
-                    let e_err = expected.err;
-                    let abs_err_diff = (e_err - a_err).abs();
-                    let relative_err = abs_err_diff / e_err;
-                    assert!(relative_err < 1e-3, "relative_err {} >= 1e-3: actual err {}, expected {}", relative_err, a_err, e_err);
+                    // let a_err = actual.err;
+                    // let e_err = expected.err;
+                    // let abs_err_diff = (e_err - a_err).abs();
+                    // let relative_err = abs_err_diff / e_err;
+                    // assert!(relative_err < 1e-3, "relative_err {} >= 1e-3: actual err {}, expected {}", relative_err, a_err, e_err);
                 }
             }
         }
@@ -345,7 +354,7 @@ mod tests {
             ( Shape::XYRR(XYRR { idx: 1, c: R2 { x: 0., y: 1. }, r: R2 { x: 1., y: 1. } }), vec![ d(3), d(4), d(5), d(6), ] ),
         ];
         // TODO: some nondeterminism sets in on the "error" field, from step 15! Debug.
-        check(inputs, FIZZ_BUZZ.into(), "fizz_buzz_ellipses_diag", 0.7, 15)
+        check(inputs, FIZZ_BUZZ.into(), "fizz_buzz_ellipses_diag", 0.7, 100)
     }
 
     #[test]

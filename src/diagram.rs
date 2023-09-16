@@ -1,3 +1,5 @@
+use itertools::Itertools;
+use std::collections::BTreeMap;
 use std::{collections::HashMap, fmt::Display};
 
 use log::{info, debug};
@@ -10,9 +12,9 @@ use crate::{circle::Circle, intersections::Intersections, r2::R2, areas::Areas, 
 use crate::dual::{Dual, D};
 
 #[declare]
-pub type Targets = HashMap<String, f64>;
+pub type Targets = BTreeMap<String, f64>;
 #[declare]
-pub type Errors = HashMap<String, Error>;
+pub type Errors = BTreeMap<String, Error>;
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
 pub struct Diagram {
@@ -66,7 +68,14 @@ impl Diagram {
         });
         let total_area = intersections.area(&all_key).unwrap_or_else(|| intersections.zero());
         let errors = Self::compute_errors(&intersections, &targets, &total_target_area, &total_area);
-        let mut error: D = errors.values().into_iter().map(|e| e.error.abs()).sum();
+        let mut error: D = errors.values().into_iter().map(|e| {
+            // println!(" summing error for {}: {:?}", k, e.error);
+            e.error.abs()
+        }).sum();
+        debug!("diagram, error {:?}", error);
+        // for e in &errors {
+        //     debug!("  {:?}", e.1);
+        // }
         // Optional/Alternate loss function based on per-region squared errors, weights errors by region size:
         // let error = errors.values().into_iter().map(|e| e.error.clone() * &e.error).sum::<D>().sqrt();
         let regions = Regions::new(&intersections);

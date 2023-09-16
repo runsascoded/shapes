@@ -1,5 +1,5 @@
 use core::panic;
-use std::{collections::{HashMap, HashSet}, ops::{Sub, Add}, fmt::Display};
+use std::{collections::{HashMap, HashSet, BTreeMap}, ops::{Sub, Add}, fmt::Display};
 
 use num_traits::pow;
 
@@ -34,7 +34,7 @@ impl<D: Clone + Zero + Display + Add<Output = D> + Sub<Output = D>> Areas<D>
             )
         }).collect()
     }
-    pub fn expand(map: &mut HashMap<String, D>) {
+    pub fn expand(map: &mut BTreeMap<String, D>) {
         let initial_size = map.len();
         let n = map.keys().next().unwrap().len();
         let empty_key = String::from_utf8(vec![b'-'; n]).unwrap();
@@ -116,11 +116,11 @@ impl<D: Clone + Zero + Display + Add<Output = D> + Sub<Output = D>> Areas<D>
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::collections::{HashMap, BTreeMap};
 
     fn test(inputs: Vec<(&str, i64)>, expected: Vec<(&str, i64)>) {
         let inputs: Vec<(String, i64)> = inputs.into_iter().map(|(k, v)| (k.to_string(), v)).collect();
-        let mut map: HashMap<String, i64> = inputs.into_iter().collect();
+        let mut map: BTreeMap<String, i64> = inputs.into_iter().collect();
         super::Areas::<i64>::expand(&mut map);
         let mut items: Vec<(String, i64)> = map.into_iter().collect();
         items.sort_by_key(|(k, _)| k.clone());
