@@ -192,9 +192,6 @@ where
 
     debug!("cubic_depressed: x^3 + {:?}x + {:?}", p, q);
     let rv = if p.is_zero() {
-        if q.is_zero() {
-            error!("Can't infer complex roots from depressed cubic with p == 0 and q == 0");
-        }
         let re = -q.cbrt();
         let re2 = Complex::re(re.clone());
         let im = re2.clone() * u_1.clone();

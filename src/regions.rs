@@ -1,7 +1,7 @@
 use serde::{Serialize, Deserialize};
 use tsify::Tsify;
 
-use crate::{intersection::Intersection, circle::Circle, intersections::Intersections, dual::{Dual, D}, shape::Shape};
+use crate::{intersection::Intersection, intersections::Intersections, dual::{Dual, D}, shape::Shape};
 
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]

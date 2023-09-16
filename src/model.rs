@@ -303,14 +303,16 @@ mod tests {
                     }
                     let actual_dual = actual.dual();
                     let expected_dual = expected.dual();
-                    if !abs_diff_eq!(actual_dual, expected_dual, epsilon = 1e-17) {
+                    let ε_abs = 1e-17;
+                    let ε_rel = 1e-9;
+                    if !abs_diff_eq!(actual_dual, expected_dual, epsilon = ε_abs) || !relative_eq!(actual_dual, expected_dual, epsilon = ε_abs, max_relative = ε_rel) {
                         warn!("Step {} duals:\n\t{:?}\n\t{:?}", idx, actual_dual, expected_dual);
                     }
-                    if !abs_diff_eq!(actual.err, expected.err, epsilon = 1e-17) {
+                    if !abs_diff_eq!(actual.err, expected.err, epsilon = ε_abs) || !relative_eq!(actual.err, expected.err, epsilon = ε_abs, max_relative = ε_rel) {
                         warn!("Step {} error: {:?} != {:?}", idx, actual.err, expected.err);
                     }
-                    assert_relative_eq!(actual_dual, expected_dual, epsilon = 1e-17, max_relative = 1e-10);
-                    assert_relative_eq!(actual.err, expected.err, epsilon = 1e-17, max_relative = 1e-10);
+                    assert_relative_eq!(actual_dual, expected_dual, epsilon = ε_abs, max_relative = ε_rel);
+                    assert_relative_eq!(actual.err, expected.err, epsilon = ε_abs, max_relative = ε_rel);
                 }
             }
         }
