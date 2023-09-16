@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc, f64::consts::TAU, collections::HashSet, ops::{Neg, Add, Sub, Mul, Div}, fmt::Display};
+use std::{cell::RefCell, rc::Rc, f64::consts::TAU, collections::BTreeSet, ops::{Neg, Add, Sub, Mul, Div}, fmt::Display};
 
 use log::{error, debug};
 use ordered_float::OrderedFloat;
@@ -201,7 +201,7 @@ where
                 segments.push(successor.clone());
                 let nxt = successor.edge.clone();
                 let nxt_idxs = nxt.borrow().all_idxs();
-                let mut both = container_idxs.intersection(&nxt_idxs).cloned().collect::<HashSet<usize>>();
+                let mut both = container_idxs.intersection(&nxt_idxs).cloned().collect::<BTreeSet<usize>>();
                 // Recursively traverse the graph, trying to add each eligible Segment to the list we've seeded here, accumulating valid Regions in `regions` along the way.
                 Intersections::traverse(&start, n, &mut regions, &mut segments, &mut both, edges.len());
                 assert_eq!(segments.len(), 2);
@@ -263,7 +263,7 @@ where
         num_shapes: usize,
         regions: &mut Vec<Region<D>>,
         segments: &mut Vec<Segment<D>>,
-        container_idxs: &mut HashSet<usize>,
+        container_idxs: &mut BTreeSet<usize>,
         max_edges: usize,
     ) {
         // println!("traverse, segments:");
@@ -335,7 +335,7 @@ where
                 let nxt = successor.edge.clone();
                 let nxt_idxs = nxt.borrow().all_idxs();
                 // First, verify existing containers are preserved by the new Segment:
-                let mut both = container_idxs.intersection(&nxt_idxs).cloned().collect::<HashSet<usize>>();
+                let mut both = container_idxs.intersection(&nxt_idxs).cloned().collect::<BTreeSet<usize>>();
                 if both.len() < container_idxs.len() {
                     // This edge candidate isn't contained by (or on the border of) all the shapes that the previous segments are.
                     continue;
@@ -346,7 +346,7 @@ where
                     // This Segment can't join a Region with the existing Segments, as it is contained by at least one shape that doesn't contain the existing edges.
                     continue;
                 } else if num_extra == 1 {
-                    let extra = nxt_idxs.difference(&container_idxs).cloned().collect::<HashSet<usize>>();
+                    let extra = nxt_idxs.difference(&container_idxs).cloned().collect::<BTreeSet<usize>>();
                     let extra_idx = extra.iter().next().unwrap();
                     let nxt_edge_idx = successor.edge.borrow().c.borrow().idx();
                     if nxt_edge_idx != *extra_idx {
@@ -378,7 +378,7 @@ where
 
 #[cfg(test)]
 pub mod tests {
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
     use std::env;
 
     use log::debug;
@@ -575,7 +575,7 @@ pub mod tests {
         let mut regions = intersections.regions;
         regions.sort_by_cached_key(|r| OrderedFloat(r.area()));
 
-        let expected: HashMap<&str, f64> = [
+        let expected: BTreeMap<&str, f64> = [
             ("0-23", 0.1574458339117841),
             ("01-3", 0.15744583391178563),
             ("-1-3", 0.5830467212121343),
@@ -595,7 +595,7 @@ pub mod tests {
         assert_eq!(regions.len(), expected.len());
         match env::var("GEN_VALS").map(|s| s.parse::<usize>().unwrap()).ok() {
             Some(_) => {
-                let mut actual: HashMap<&str, f64> = HashMap::new();
+                let mut actual: BTreeMap<&str, f64> = BTreeMap::new();
                 for region in &regions {
                     let area = region.area();
                     let key = region.key.as_str();

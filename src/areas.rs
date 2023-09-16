@@ -1,12 +1,12 @@
 use core::panic;
-use std::{collections::{HashMap, HashSet, BTreeMap}, ops::{Sub, Add}, fmt::Display};
+use std::{collections::{BTreeMap, BTreeSet}, ops::{Sub, Add}, fmt::Display};
 
 use num_traits::pow;
 
 use crate::zero::Zero;
 
 pub struct Areas<D> {
-    pub map: HashMap<String, D>,
+    pub map: BTreeMap<String, D>,
     pub n: usize,
 }
 
@@ -42,7 +42,7 @@ impl<D: Clone + Zero + Display + Add<Output = D> + Sub<Output = D>> Areas<D>
             let first = map.values().next().unwrap().clone();
             map.insert(empty_key, D::zero(&first));
         }
-        let mut queue: HashSet<String> = map.keys().cloned().collect();
+        let mut queue: BTreeSet<String> = map.keys().cloned().collect();
         let max = pow(3, n);
         let mut remaining = queue.len();
         while remaining > 0 && map.len() < max {
@@ -57,7 +57,7 @@ impl<D: Clone + Zero + Display + Add<Output = D> + Sub<Output = D>> Areas<D>
                 let v0 = map.get( &k0);
                 let v1 = map.get(  k1);
                 let v2 = map.get(  k2);
-                let keys = HashMap::from([
+                let keys = BTreeMap::from([
                     ( ch0, (k0.clone(), v0)),
                     (*ch1, (k1.clone(), v1)),
                     (*ch2, (k2.clone(), v2)),

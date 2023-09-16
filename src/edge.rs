@@ -1,4 +1,4 @@
-use std::{fmt::Display, rc::Rc, cell::RefCell, collections::HashSet, ops::{Mul, Div, Sub}};
+use std::{fmt::Display, rc::Rc, cell::RefCell, collections::BTreeSet, ops::{Mul, Div, Sub}};
 
 use crate::{math::deg::Deg, node::N, shape::{S, Shape}, trig::Trig, dual::Dual};
 
@@ -53,12 +53,12 @@ impl<D: EdgeArg> Edge<D> {
     }
 
     /// Return all shape indices that either contain this Edge
-    pub fn container_idxs(&self) -> HashSet<usize> {
+    pub fn container_idxs(&self) -> BTreeSet<usize> {
         self.containers.iter().map(|c| c.borrow().idx()).collect()
     }
 
     /// Return all shape indices that either contain this Edge, or which this Edge runs along the border of
-    pub fn all_idxs(&self) -> HashSet<usize> {
+    pub fn all_idxs(&self) -> BTreeSet<usize> {
         let mut idxs = self.container_idxs();
         idxs.insert(self.c.borrow().idx());
         idxs
