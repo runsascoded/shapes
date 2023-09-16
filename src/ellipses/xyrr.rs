@@ -150,11 +150,12 @@ where R2<D>: TransformR2<D>,
 
 #[cfg(test)]
 mod tests {
-    use std::env;
+    use std::{env, fmt};
 
     use crate::{dual::Dual, circle::Circle, intersect::Intersect, to::To, shape::Shape, math::deg::Deg, fmt::Fmt, intersection::Intersection};
 
     use super::*;
+    use approx::{AbsDiffEq, RelativeEq};
     use ordered_float::OrderedFloat;
     use test_log::test;
 
@@ -175,18 +176,49 @@ mod tests {
         }
     }
 
+    #[derive(Clone, Debug, PartialEq)]
+    pub struct Points<D>(pub Vec<R2<D>>);
+    impl<D: Clone + Into<f64> + AbsDiffEq<Epsilon = f64>> AbsDiffEq for Points<D> {
+        type Epsilon = f64;
+        fn default_epsilon() -> f64 {
+            f64::default_epsilon()
+        }
+        fn abs_diff_eq(&self, other: &Self, epsilon: f64) -> bool {
+            let mut actual = self.0.clone();
+            actual.sort_by_key(|p| (OrderedFloat(p.x.clone().into()), OrderedFloat(p.y.clone().into())));
+            let mut expected = other.0.clone();
+            expected.sort_by_key(|p| (OrderedFloat(p.x.clone().into()), OrderedFloat(p.y.clone().into())));
+            actual.abs_diff_eq(&expected, epsilon)
+        }
+    }
+    impl<D: Clone + Into<f64> + RelativeEq<Epsilon = f64>> RelativeEq for Points<D>
+    {
+        fn default_max_relative() -> f64 {
+            f64::default_max_relative()
+        }
+        fn relative_eq(&self, other: &Self, epsilon: f64, max_relative: f64) -> bool {
+            let mut actual = self.0.clone();
+            actual.sort_by_key(|p| (OrderedFloat(p.x.clone().into()), OrderedFloat(p.y.clone().into())));
+            let mut expected = other.0.clone();
+            expected.sort_by_key(|p| (OrderedFloat(p.x.clone().into()), OrderedFloat(p.y.clone().into())));
+            actual.relative_eq(&expected, epsilon, max_relative)
+        }
+    }
+
+    fn check<D: Clone + fmt::Debug + Into<f64> + RelativeEq<Epsilon = f64>>(actual: Vec<R2<D>>, expected: [R2<D>; 2], max_epsilon: f64) {
+        let actual = Points(actual);
+        let expected = Points(expected.to_vec());
+        assert_relative_eq!(actual, expected, max_relative = max_epsilon);
+    }
+
     #[test]
     fn test_unit_intersections_d() {
         let e: XYRR<f64> = Circle { idx: 0, c: R2 { x: 0., y: -1. }, r: 1. }.to();
         let points = e.unit_intersections();
-        // println!("points: {:?}", points);
-        let expected = [
-            R2 { x:  0.866, y: -0.5 },
-            R2 { x: -0.866, y: -0.5 },
-        ];
-        assert_eq!(points.len(), expected.len());
-        assert_relative_eq!(points[0], expected[0], epsilon = 1e-3);
-        assert_relative_eq!(points[1], expected[1], epsilon = 1e-3);
+        check(points, [
+            R2 { x: -0.8660254037844386, y: -0.5 },
+            R2 { x:  0.8660254037844386, y: -0.5 },
+        ], 1e-15);
     }
 
     #[test]
@@ -197,11 +229,12 @@ mod tests {
             c: R2 { x: -1.100285308561806, y: -1.1500279763995946e-5 },
             r: R2 { x:  1.000263820108834, y:  1.0000709021402923 }
         };
-        let mut points = e.unit_intersections();
-        points.sort_by_key(|p| OrderedFloat(p.y));
-        // TODO: these are not super accurate, tiny x⁴ and x³ coefficients introduce numerical error, some semblance of accuracy is recovered with some kludgy checks in CDEF::unit_intersections, but better root-refinement / -finding algos would be good.
-        assert_relative_eq!(points[0], R2 { x: -0.5499993628836819, y: -0.8351650739988736 }, max_relative = 1e-7);
-        assert_relative_eq!(points[1], R2 { x: -0.5500509220473759, y:  0.835131117343158  }, max_relative = 1e-7);
+        let points = e.unit_intersections();
+        check(points, [
+            // TODO: these are not super accurate, tiny x⁴ and x³ coefficients introduce numerical error, some semblance of accuracy is recovered with some kludgy checks in CDEF::unit_intersections, but better root-refinement / -finding algos would be good.
+            R2 { x: -0.5500509220473759, y:  0.835131117343158  },
+            R2 { x: -0.5499993628836819, y: -0.8351650739988736 },
+        ], 1e-15);
     }
 
     #[test]
@@ -212,11 +245,12 @@ mod tests {
             c: R2 { x: -1.1, y: -1e-5 },
             r: R2 { x:  1.0002, y:  1.00007 }
         };
-        let mut points = e.unit_intersections();
-        points.sort_by_key(|p| OrderedFloat(p.y));
-        // TODO: these are not super accurate, tiny x⁴ and x³ coefficients introduce numerical error, some semblance of accuracy is recovered with some kludgy checks in CDEF::unit_intersections, but better root-refinement / -finding algos would be good.
-        assert_relative_eq!(points[0], R2 { x: -0.5498367543659697, y: -0.8352721374188752 }, max_relative = 1e-7);
-        assert_relative_eq!(points[1], R2 { x: -0.5499644615556463, y: 0.835188057281597 }, max_relative = 1e-7);
+        let points = e.unit_intersections();
+        check(points, [
+            // TODO: these are not super accurate, tiny x⁴ and x³ coefficients introduce numerical error, some semblance of accuracy is recovered with some kludgy checks in CDEF::unit_intersections, but better root-refinement / -finding algos would be good.
+            R2 { x: -0.5499644615556463, y: 0.835188057281597 },
+            R2 { x: -0.5498367543659697, y: -0.8352721374188752 },
+        ], 1e-15);
     }
 
     #[test]
@@ -228,20 +262,13 @@ mod tests {
             r: R2 { x: Dual::new(2., vec![0.,0.,1.,0.]),
                     y: Dual::new(3., vec![0.,0.,0.,1.]), },
         };
-        let us = e.unit_intersections();
-        // for p in &us {
-        //     println!("{}", p);
-        // }
-
-        let expected = [
-            R2 { x: Dual::new(-0.600, vec![ 1.600,  0.800, -1.280, -0.480]),
-                 y: Dual::new(-0.800, vec![-1.200, -0.600,  0.960,  0.360]), },
-            R2 { x: Dual::new(-0.948, vec![ 0.684,  0.106, -0.666, -0.024]),
-                 y: Dual::new( 0.319, vec![ 2.033,  0.316, -1.980, -0.072]), },
-        ];
-        assert_eq!(us.len(), expected.len());
-        assert_relative_eq!(us[0], expected[0], epsilon = 1e-3);
-        assert_relative_eq!(us[1], expected[1], epsilon = 1e-3);
+        let points = e.unit_intersections();
+        check(points, [
+            R2 { x: Dual::new(-0.6000000000000008 , vec![  1.6000000000000023,  0.7999999999999998 , -1.2800000000000025, -0.48                ]),
+                 y: Dual::new(-0.7999999999999974 , vec![ -1.2000000000000064, -0.6000000000000028 ,  0.9600000000000062,  0.360000000000003   ]), },
+            R2 { x: Dual::new(-0.9477785230650169 , vec![  0.6840738256449916,  0.10630975246195229, -0.6662121528911189, -0.0241348206854628  ]),
+                 y: Dual::new( 0.31892925738585376, vec![  2.0328974690234993,  0.3159261743550079 , -1.9798170148786007, -0.07172269139307064 ]), },
+        ], 1e-15);
     }
 
     #[test]
@@ -253,21 +280,13 @@ mod tests {
             r: R2 { x: Dual::new( 1., vec![0.,0.,1.,0.]),
                     y: Dual::new( 1., vec![0.,0.,0.,1.]), },
         };
-        let us = e.unit_intersections();
-        // for p in &us {
-        //     println!("{}", p.x);
-        //     println!("{}", p.y);
-        // }
-
-        let expected = [
+        let points = e.unit_intersections();
+        check(points, [
             R2 { x: Dual::new( 1.000, vec![ 0.000,  0.000,  0.000,  0.000]),
                  y: Dual::new( 0.000, vec![ 0.000,  1.000,  0.000,  1.000]), },
             R2 { x: Dual::new( 0.000, vec![ 1.000,  0.000, -1.000,  0.000]),
                  y: Dual::new(-1.000, vec![ 0.000,  0.000,  0.000,  0.000]), },
-           ];
-        assert_eq!(us.len(), expected.len());
-        assert_relative_eq!(us[0], expected[0], epsilon = 1e-3);
-        assert_relative_eq!(us[1], expected[1], epsilon = 1e-3);
+        ], 1e-3);
     }
 
     #[test]
@@ -278,19 +297,25 @@ mod tests {
             r: R2 { x:  1.29721671027373  , y: 1.205758072744277, },
         };
         let points = e.unit_intersections();
+
         // WRONG: find_roots_sturm: missing other half (+y)
         // assert_eq!(points, [ R2 { x: -0.5280321051800396, y: -0.8492244095691155 }, ] );
+
         // OK: find_roots_eigen, crate::math::quartic::quartic
-        assert_relative_eq!(points[0], R2 { x: -0.5280321050819479, y:  0.8492244085062125 }, max_relative = 1e-14);
-        assert_relative_eq!(points[1], R2 { x: -0.5280321050819478, y: -0.8492244085062124 }, max_relative = 1e-14);
+        check(points, [
+            R2 { x: -0.5280321050819483, y: 0.8492244085062177 },
+            R2 { x: -0.5280321050819483, y: -0.8492244085062177 },
+        ], 1e-14);
     }
 
     #[test]
     fn ellipses4_0_2() {
         let e = XYRR { idx: 0, c: R2 { x: -0.6708203932499369, y: 0.34164078649987384 }, r: R2 { x: 0.5, y: 2.0 } };
         let points = e.unit_intersections();
-        assert_relative_eq!(points[0], R2 { x: -0.19700713608839127, y: 0.9804020544298395 }, max_relative = 1e-10);
-        assert_relative_eq!(points[1], R2 { x: -0.29053402101498915, y: -0.9568646626523847 }, max_relative = 1e-10);
+        check(points, [
+            R2 { x: -0.19700713608839127, y:  0.9804020544298395 },
+            R2 { x: -0.29053402101498915, y: -0.9568646626523847 },
+        ], 1e-10);
     }
 
     #[test]

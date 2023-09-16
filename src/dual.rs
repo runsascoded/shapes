@@ -143,7 +143,7 @@ impl Display for Dual {
 }
 impl Debug for Dual {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} + [{}]ε", self.v(), self.d().iter().map(|x| format!("{}", x)).collect::<Vec<String>>().join(", "))
+        write!(f, "Dual::new({:?}, vec!{:?})", self.v(), self.d())
     }
 }
 
