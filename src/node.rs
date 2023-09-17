@@ -53,6 +53,12 @@ where
             y: p.y * n / (n + 1.) + o.y / (n + 1.),
         };
         // self.p = p * n / (n + 1.) + o / (n + 1.);
+        if !self.shape_thetas.contains_key(&intersection.c0idx) {
+            self.shape_thetas.insert(intersection.c0idx, intersection.t0.clone());
+        }
+        if !self.shape_thetas.contains_key(&intersection.c1idx) {
+            self.shape_thetas.insert(intersection.c1idx, intersection.t1.clone());
+        }
         self.intersections.push(intersection);
     }
 }

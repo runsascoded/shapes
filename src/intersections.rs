@@ -1,7 +1,8 @@
 use core::f64;
-use std::{cell::RefCell, rc::Rc, f64::consts::TAU, collections::{BTreeSet, BTreeMap}, ops::{Neg, Add, Sub, Mul, Div}, fmt::Display};
+use std::{cell::RefCell, rc::Rc, f64::consts::TAU, collections::BTreeSet, ops::{Neg, Add, Sub, Mul, Div}, fmt::Display};
 
 use log::{error, debug};
+use ordered_float::OrderedFloat;
 
 use crate::{node::{N, Node}, edge::{self, E}, distance::Distance, region::{Region, RegionArg}, shape::{S, Shape}, segment::Segment, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::CanTransform, intersection::Intersection, dual::Dual, to::To, math::deg::Deg, fmt::Fmt};
 
@@ -56,12 +57,14 @@ where
     f64: IntersectionsFloat<D>,
 {
     pub fn new(shapes: Vec<Shape<D>>) -> Intersections<D> {
-        let n = (&shapes).len();
+        let num_shapes = (&shapes).len();
         let duals: Vec<S<D>> = shapes.clone().into_iter().map(|s| Rc::new(RefCell::new(s))).collect();
         let mut nodes: Vec<N<D>> = Vec::new();
         let merge_threshold = 1e-7;
+
+        // Intersect all shapes, pair-wise
         for (idx, dual) in duals.iter().enumerate() {
-            for jdx in (idx + 1)..n {
+            for jdx in (idx + 1)..num_shapes {
                 let intersections = dual.borrow().intersect(&duals[jdx].borrow());
                 for i in intersections {
                     let mut merged = false;
@@ -71,6 +74,7 @@ where
                             // This intersection is close enough to an existing node; merge them
                             let mut node = node.borrow_mut();
                             node.merge(i.clone());
+                            debug!("Merged: {} into {}", i, node);
                             merged = true;
                             break;
                         }
@@ -91,27 +95,21 @@ where
             }
         }
 
-        let mut nodes_by_shape: Vec<Vec<N<D>>> = Vec::new();
-        // let mut nodes_by_shapes: Vec<Vec<Vec<N<D>>>> = Vec::new();
-        for _idx in 0..n {
-            nodes_by_shape.push(Vec::new());
-            // let mut shapes_nodes: Vec<Vec<N<D>>> = Vec::new();
-            // for _jdx in 0..n {
-            //     shapes_nodes.push(Vec::new());
-            // }
-            // nodes_by_shapes.push(shapes_nodes);
+        debug!("{} nodes", (&nodes).len());
+        for (idx, node) in nodes.iter().enumerate() {
+            debug!("  Node {}: {}", idx, node.borrow());
         }
+        debug!("");
 
-        // Sort each circle's nodes in order of where they appear on the circle (from -PI to PI)
-        // for (idx, nodes) in nodes_by_shape.iter_mut().enumerate() {
-        //     nodes.sort_by_cached_key(|n| OrderedFloat(n.borrow().theta(idx).into()))
-        // }
-
+        let mut nodes_by_shape: Vec<Vec<N<D>>> = Vec::new();
+        for _idx in 0..num_shapes {
+            nodes_by_shape.push(Vec::new());
+        }
         // Compute connected components (shape -> shape -> bool)
         let mut is_connected: Vec<Vec<bool>> = Vec::new();
-        for idx in 0..n {
+        for idx in 0..num_shapes {
             let mut connected: Vec<bool> = Vec::new();
-            for jdx in 0..n {
+            for jdx in 0..num_shapes {
                 connected.push(idx == jdx);
             }
             is_connected.push(connected);
@@ -123,9 +121,9 @@ where
                     is_connected[*i0][*i1] = true;
                     is_connected[*i1][*i0] = true;
                     if !is_connected[*i0][*i1] {
-                        for i2 in 0..n {
+                        for i2 in 0..num_shapes {
                             if is_connected[*i0][i2] && !is_connected[*i1][i2] {
-                                for i3 in 0..n {
+                                for i3 in 0..num_shapes {
                                     if is_connected[*i1][i3] && !is_connected[i2][i3] {
                                         is_connected[i2][i3] = true;
                                         is_connected[i3][i2] = true;
@@ -137,35 +135,31 @@ where
                 })
             });
         }
-
-        debug!("{} nodes", (&nodes).len());
-        for (idx, node) in nodes.iter().enumerate() {
-            debug!("  Node {}: {}", idx, node.borrow());
+        // Sort each circle's nodes in order of where they appear on the circle (from -PI to PI)
+        for (idx, nodes) in nodes_by_shape.iter_mut().enumerate() {
+            nodes.sort_by_cached_key(|n| OrderedFloat(n.borrow().theta(idx).into()))
         }
-        debug!("");
 
-        // Compute edges between nodes
+        // Construct edges
         let mut edges: Vec<E<D>> = Vec::new();
-        let mut edges_by_shape: Vec<Vec<E<D>>> = Vec::new();
         let mut total_expected_visits = 0;
-        for idx in 0..n {
-            let nodes = &nodes_by_shape[idx];
-            let mut shape_edges: Vec<E<D>> = Vec::new();
-            let m = n;
-            let n = nodes.len();
-            let c = duals[idx].clone();
-            for jdx in 0..n {
-                let i0 = nodes[jdx].clone();
-                let i1 = nodes[(jdx + 1) % n].clone();
-                let t0 = i0.borrow().theta(idx);
-                let t1 = i1.borrow().theta(idx);
-                let t1 = if &t1 < &t0 { t1 + TAU } else { t1 };
-                let arc_midpoint = duals[idx].borrow().arc_midpoint(t0.clone(), t1.clone());
+        for shape_idx in 0..num_shapes {
+            let nodes = &nodes_by_shape[shape_idx];
+            debug!("{} nodes for shape {}: {}", nodes.len(), shape_idx, nodes.iter().map(|n| n.borrow().theta(shape_idx).deg_str()).collect::<Vec<String>>().join(", "));
+            let num_shape_nodes = nodes.len();
+            let c = duals[shape_idx].clone();
+            for node_idx in 0..num_shape_nodes {
+                let cur_node = nodes[node_idx].clone();
+                let nxt_node = nodes[(node_idx + 1) % num_shape_nodes].clone();
+                let cur_theta = cur_node.borrow().theta(shape_idx);
+                let nxt_theta = nxt_node.borrow().theta(shape_idx);
+                let nxt_theta = if &nxt_theta < &cur_theta { nxt_theta + TAU } else { nxt_theta };
+                let arc_midpoint = duals[shape_idx].borrow().arc_midpoint(cur_theta.clone(), nxt_theta.clone());
                 let mut is_component_boundary = true;
                 let mut containers: Vec<S<D>> = Vec::new();
                 let mut containments: Vec<bool> = Vec::new();
-                for cdx in 0..m {
-                    if cdx == idx {
+                for cdx in 0..num_shapes {
+                    if cdx == shape_idx {
                         continue;
                     }
                     let container = duals[cdx].clone();
@@ -173,32 +167,28 @@ where
                     if contained {
                         // Shape cdx contains this edge
                         containers.push(container.clone());
-                        if is_connected[idx][cdx] {
+                        if is_connected[shape_idx][cdx] {
                             is_component_boundary = false;
                         }
                     }
                     containments.push(contained);
                 }
-                // let c0idx = i0.borrow().other(idx);
-                // let c1idx = i1.borrow().other(idx);
                 let expected_visits = if is_component_boundary { 1 } else { 2 };
                 total_expected_visits += expected_visits;
                 let edge = Rc::new(RefCell::new(edge::Edge {
                     idx: edges.len(),
                     c: c.clone(),
-                    i0, i1,
-                    t0, t1,
+                    n0: cur_node, n1: nxt_node,
+                    t0: cur_theta, t1: nxt_theta,
                     containers,
                     containments,
                     expected_visits,
                     visits: 0,
                 }));
                 edges.push(edge.clone());
-                shape_edges.push(edge.clone());
-                edge.borrow_mut().i0.borrow_mut().add_edge(edge.clone());
-                edge.borrow_mut().i1.borrow_mut().add_edge(edge.clone());
+                edge.borrow_mut().n0.borrow_mut().add_edge(edge.clone());
+                edge.borrow_mut().n1.borrow_mut().add_edge(edge.clone());
             }
-            edges_by_shape.push(shape_edges);
         }
 
         debug!("{} edges", (&edges).len());
@@ -234,7 +224,7 @@ where
                 let nxt_idxs = nxt.borrow().all_idxs();
                 let both = container_idxs.intersection(&nxt_idxs).cloned().collect::<BTreeSet<usize>>();
                 // Recursively traverse the graph, trying to add each eligible Segment to the list we've seeded here, accumulating valid Regions in `regions` along the way.
-                Intersections::traverse(&start, n, &mut regions, &mut segments, &both, &mut visited_nodes, edges.len());
+                Intersections::traverse(&start, num_shapes, &mut regions, &mut segments, &both, &mut visited_nodes, edges.len());
                 assert_eq!(segments.len(), 2);
                 segments.pop();
                 visited_nodes.remove(&segment_end_idx);
@@ -434,7 +424,6 @@ pub mod tests {
     use crate::ellipses::xyrr::XYRR;
     use crate::fmt::Fmt;
     use crate::r2::R2;
-    use ordered_float::OrderedFloat;
 
     use super::*;
     use test_log::test;
@@ -689,18 +678,18 @@ pub mod tests {
         assert_node_strs(
             &intersections,
             vec![
-                "I( 0.866,  0.500, C0(  30)/C1( -30))",
-                "I(-0.866,  0.500, C0( 150)/C1(-150))",
-                "I( 0.500,  0.866, C0(  60)/C2( 120))",
-                "I( 0.500, -0.866, C0( -60)/C2(-120))",
-                "I( 0.000,  1.000, C0(  90)/C3( 180))",
-                "I( 1.000,  0.000, C0(   0)/C3( -90))",
-                "I( 1.000,  1.000, C1(   0)/C2(  90))",
-                "I( 0.000,  0.000, C1( -90)/C2( 180))",
-                "I( 0.500,  1.866, C1(  60)/C3( 120))",
-                "I( 0.500,  0.134, C1( -60)/C3(-120))",
-                "I( 1.866,  0.500, C2(  30)/C3( -30))",
-                "I( 0.134,  0.500, C2( 150)/C3(-150))",
+                "N0( 0.866,  0.500: C0(  30), C1( -30))",
+                "N1(-0.866,  0.500: C0( 150), C1(-150))",
+                "N2( 0.500,  0.866: C0(  60), C2( 120))",
+                "N3( 0.500, -0.866: C0( -60), C2(-120))",
+                "N4( 0.000,  1.000: C0(  90), C3( 180))",
+                "N5( 1.000,  0.000: C0(   0), C3( -90))",
+                "N6( 1.000,  1.000: C1(   0), C2(  90))",
+                "N7( 0.000,  0.000: C1( -90), C2( 180))",
+                "N8( 0.500,  1.866: C1(  60), C3( 120))",
+                "N9( 0.500,  0.134: C1( -60), C3(-120))",
+                "N10( 1.866,  0.500: C2(  30), C3( -30))",
+                "N11( 0.134,  0.500: C2( 150), C3(-150))",
             ]
         );
     }
@@ -719,21 +708,16 @@ pub mod tests {
         assert_node_strs(
             &intersections,
             vec![
-                "I( 0.500,  0.866, C0(  60)/C1( 120))",
-                "I( 0.500, -0.866, C0( -60)/C1(-120))",
-                "I( 1.000,  0.000, C0(   0)/C2( -60))",
-                "I(-0.500,  0.866, C0( 120)/C2( 180))",
-                "I( 1.000,  0.000, C0(   0)/C3(  60))",
-                "I(-0.500, -0.866, C0(-120)/C3(-180))",
-                "I( 1.500,  0.866, C1(  60)/C2(   0))",
-                "I( 0.000,  0.000, C1( 180)/C2(-120))",
-                "I( 1.500, -0.866, C1( -60)/C3(   0))",
-                "I( 0.000,  0.000, C1( 180)/C3( 120))",
-                "I( 1.000,  0.000, C2( -60)/C3(  60))",
-                "I(-0.000,  0.000, C2(-120)/C3( 120))",
+                "N0( 0.500,  0.866: C0(  60), C1( 120))",
+                "N1( 0.500, -0.866: C0( -60), C1(-120))",
+                "N2( 1.000,  0.000: C0(   0), C2( -60), C3(  60))",
+                "N3(-0.500,  0.866: C0( 120), C2( 180))",
+                "N4(-0.500, -0.866: C0(-120), C3(-180))",
+                "N5( 1.500,  0.866: C1(  60), C2(   0))",
+                "N6(-0.000,  0.000: C1( 180), C2(-120), C3( 120))",
+                "N7( 1.500, -0.866: C1( -60), C3(   0))",
             ]
         );
-
         assert_eq!(intersections.regions.len(), 11);
     }
 
@@ -780,8 +764,8 @@ pub mod tests {
         assert_node_strs(
             &intersections,
             vec![
-                "I( 0.897,  0.119, C0( -57)/C1(-123))",
-                "I( 0.897,  3.459, C0(  57)/C1( 123))",
+                "N0( 0.897,  0.119: C0( -57), C1(-123))",
+                "N1( 0.897,  3.459: C0(  57), C1( 123))",
             ]
         );
     }
@@ -801,14 +785,14 @@ pub mod tests {
         assert_node_strs(
             &intersections,
             vec![
-                "I( 0.897,  0.119, C0( -57)/C1(-123))",
-                "I( 0.897,  3.459, C0(  57)/C1( 123))",
-                "I( 1.297,  2.416, C0(  18)/C2( 104))",
-                "I( 1.115,  0.506, C0( -40)/C2(-110))",
-                "I( 2.399,  2.399, C1(  18)/C2(  72))",
-                "I( 0.469,  2.198, C1( 168)/C2( 131))",
-                "I( 0.632,  0.632, C1(-145)/C2(-125))",
-                "I( 2.198,  0.469, C1( -41)/C2( -78))",
+                "N0( 0.897,  0.119: C0( -57), C1(-123))",
+                "N1( 0.897,  3.459: C0(  57), C1( 123))",
+                "N2( 1.297,  2.416: C0(  18), C2( 104))",
+                "N3( 1.115,  0.506: C0( -40), C2(-110))",
+                "N4( 2.399,  2.399: C1(  18), C2(  72))",
+                "N5( 0.469,  2.198: C1( 168), C2( 131))",
+                "N6( 0.632,  0.632: C1(-145), C2(-125))",
+                "N7( 2.198,  0.469: C1( -41), C2( -78))",
             ]
         );
     }

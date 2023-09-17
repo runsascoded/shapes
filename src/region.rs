@@ -63,10 +63,13 @@ where
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
-            f, "R({})",
+            f, "R({}\n\t{}\n)",
+            self.container_idxs.iter().map(|i| {
+                format!("{}", i)
+            }).collect::<Vec<String>>().join(", "),
             self.segments.iter().map(|s| {
-                format!("{}", s.edge.borrow())
-            }).collect::<Vec<String>>().join(", ")
+                format!("{}", s)
+            }).collect::<Vec<String>>().join(",\n\t")
         )
     }
 }
