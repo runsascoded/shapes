@@ -28,13 +28,13 @@ where
     }
     pub fn successors(&self) -> Vec<Segment<D>> {
         let end = self.end();
-        let end_p: R2<f64> = end.borrow().p().to();
+        let end_p: R2<f64> = end.borrow().p.clone().to();
         let edge = self.edge.clone();
         let idx = edge.borrow().c.borrow().idx();
         let successors = end.borrow().edges.iter().filter(|e| {
             e.borrow().c.borrow().idx() != idx && e.borrow().visits < e.borrow().expected_visits
         }).map(|e| {
-            let p: R2<f64> = e.borrow().i0.borrow().p().to();
+            let p: R2<f64> = e.borrow().i0.borrow().p.clone().to();
             let fwd = p == end_p;
             Segment { edge: e.clone(), fwd }
         }).collect();

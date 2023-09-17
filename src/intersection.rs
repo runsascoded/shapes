@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, collections::BTreeMap};
 
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
@@ -43,6 +43,15 @@ impl<D: Clone> Intersection<D> {
         } else {
             panic!("Invalid circle index {} ({}, {})", cidx, self.c0idx, self.c1idx);
         }
+    }
+}
+
+impl<D: Clone> Intersection<D> {
+    pub fn thetas(&self) -> BTreeMap<usize, D> {
+        let mut thetas = BTreeMap::new();
+        thetas.insert(self.c0idx, self.t0.clone());
+        thetas.insert(self.c1idx, self.t1.clone());
+        thetas
     }
 }
 

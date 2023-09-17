@@ -1,12 +1,12 @@
 use serde::{Serialize, Deserialize};
 use tsify::Tsify;
 
-use crate::{intersection::Intersection, intersections::Intersections, dual::{Dual, D}, shape::Shape};
+use crate::{intersection::Intersection, intersections::Intersections, dual::{Dual, D}, shape::Shape, r2::R2};
 
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
 pub struct Point {
-    pub i: Intersection<D>,
+    pub p: R2<D>,
     pub edge_idxs: Vec<usize>,
 }
 
@@ -48,7 +48,7 @@ impl Regions {
     pub fn new(intersections: &Intersections<D>) -> Self {
         let shapes = intersections.shapes.clone();
         let points = intersections.nodes.iter().map(|n| Point {
-            i: n.borrow().i.clone(),
+            p: n.borrow().p.clone(),
             edge_idxs: n.borrow().edges.iter().map(|e| e.borrow().idx).collect(),
         }).collect();
         let edges = intersections.edges.iter().map(|e| Edge {

@@ -8,8 +8,6 @@ pub type E<D> = Rc<RefCell<Edge<D>>>;
 pub struct Edge<D> {
     pub idx: usize,
     pub c: S<D>,
-    pub c0: S<D>,
-    pub c1: S<D>,
     pub i0: N<D>,
     pub i1: N<D>,
     pub t0: D,
@@ -75,10 +73,10 @@ impl<
         let containers: Vec<String> = self.containers.iter().map(|c| format!("{}", c.borrow().idx())).collect();
         write!(
             f,
-            "C{}: {}({}@{}) → {}({}@{}), containers: [{}], expected_visits: {}",
+            "C{}: {}({}) → {}({}), containers: [{}], expected_visits: {}",
             self.c.borrow().idx(),
-            self.i0.borrow().idx, self.c0.borrow().idx(), self.t0.clone().into().deg_str(),
-            self.i1.borrow().idx, self.c1.borrow().idx(), self.t1.clone().into().deg_str(),
+            self.i0.borrow().idx, self.t0.clone().into().deg_str(),
+            self.i1.borrow().idx, self.t1.clone().into().deg_str(),
             containers.join(","),
             self.expected_visits,
         )

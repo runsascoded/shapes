@@ -29,8 +29,8 @@ where
     }
     pub fn polygon_area(&self) -> D {
         (self.segments.iter().map(|s| {
-            let cur = s.start().borrow().p();
-            let nxt = s.end().borrow().p();
+            let cur = s.start().borrow().p.clone();
+            let nxt = s.end().borrow().p.clone();
             cur.x * nxt.y - cur.y * nxt.x
         }).sum::<D>() / 2.).abs()
     }

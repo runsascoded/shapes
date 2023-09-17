@@ -1,16 +1,16 @@
-use std::{cell::RefCell, rc::Rc, f64::consts::TAU, collections::BTreeSet, ops::{Neg, Add, Sub, Mul, Div}, fmt::Display};
+use core::f64;
+use std::{cell::RefCell, rc::Rc, f64::consts::TAU, collections::{BTreeSet, BTreeMap}, ops::{Neg, Add, Sub, Mul, Div}, fmt::Display};
 
 use log::{error, debug};
-use ordered_float::OrderedFloat;
 
-use crate::{node::{N, Node}, edge::{self, E}, region::{Region, RegionArg}, shape::{S, Shape}, segment::Segment, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::CanTransform, intersection::Intersection, dual::Dual, to::To};
+use crate::{node::{N, Node}, edge::{self, E}, distance::Distance, region::{Region, RegionArg}, shape::{S, Shape}, segment::Segment, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::CanTransform, intersection::Intersection, dual::Dual, to::To, math::deg::Deg, fmt::Fmt};
 
 #[derive(Clone, Debug)]
 pub struct Intersections<D> {
     pub shapes: Vec<Shape<D>>,
     pub nodes: Vec<N<D>>,
-    pub nodes_by_shape: Vec<Vec<N<D>>>,
-    pub nodes_by_shapes: Vec<Vec<Vec<N<D>>>>,
+    // pub nodes_by_shape: Vec<Vec<N<D>>>,
+    // pub nodes_by_shapes: Vec<Vec<Vec<N<D>>>>,
     pub edges: Vec<E<D>>,
     pub is_connected: Vec<Vec<bool>>,
     pub regions: Vec<Region<D>>,
@@ -20,12 +20,20 @@ pub struct Intersections<D> {
 
 pub trait IntersectionsD
 : IntersectShapesArg
++ Add<Output = Self>
++ Mul<f64, Output = Self>
++ Div<f64, Output = Self>
++ Deg
++ Fmt
 + RegionArg
 {}
 impl IntersectionsD for f64 {}
 impl IntersectionsD for Dual {}
 pub trait IntersectionsR2<D>
 : Neg<Output = Self>
+// TODO: can't get this to derive for R2<Dual>
+// + Mul<f64, Output = Self>
+// + Div<f64, Output = Self>
 + CanTransform<D, Output = Self>
 + To<R2<f64>>
 {}
@@ -51,39 +59,53 @@ where
         let n = (&shapes).len();
         let duals: Vec<S<D>> = shapes.clone().into_iter().map(|s| Rc::new(RefCell::new(s))).collect();
         let mut nodes: Vec<N<D>> = Vec::new();
-        let mut nodes_by_shape: Vec<Vec<N<D>>> = Vec::new();
-        let mut nodes_by_shapes: Vec<Vec<Vec<N<D>>>> = Vec::new();
-        for _idx in 0..n {
-            nodes_by_shape.push(Vec::new());
-            let mut shapes_nodes: Vec<Vec<N<D>>> = Vec::new();
-            for _jdx in 0..n {
-                shapes_nodes.push(Vec::new());
-            }
-            nodes_by_shapes.push(shapes_nodes);
-        }
+        let merge_threshold = 1e-7;
         for (idx, dual) in duals.iter().enumerate() {
             for jdx in (idx + 1)..n {
                 let intersections = dual.borrow().intersect(&duals[jdx].borrow());
                 for i in intersections {
+                    let mut merged = false;
+                    for node in &nodes {
+                        let d = node.borrow().p.distance(&i.p()).unwrap();
+                        if d.into() < merge_threshold {
+                            // This intersection is close enough to an existing node; merge them
+                            let mut node = node.borrow_mut();
+                            node.merge(i.clone());
+                            merged = true;
+                            break;
+                        }
+                    }
+                    if merged {
+                        continue;
+                    }
                     let node = Node {
                         idx: nodes.len(),
-                        i,
+                        p: i.p(),
+                        intersections: vec![i.clone()],
+                        shape_thetas: i.thetas(),
                         edges: Vec::new(),
                     };
                     let n = Rc::new(RefCell::new(node));
                     nodes.push(n.clone());
-                    nodes_by_shape[idx].push(n.clone());
-                    nodes_by_shapes[idx][jdx].push(n.clone());
-                    nodes_by_shape[jdx].push(n.clone());
-                    nodes_by_shapes[jdx][idx].push(n.clone());
                 }
             }
         }
 
-        // Sort each circle's nodes in order of where they appear on the circle (from -PI to PI)
-        for (idx, nodes) in nodes_by_shape.iter_mut().enumerate() {
-            nodes.sort_by_cached_key(|n| OrderedFloat(n.borrow().theta(idx).into()))
+        let mut nodes_by_shape: Vec<Vec<N<D>>> = Vec::new();
+        // let mut nodes_by_shapes: Vec<Vec<Vec<N<D>>>> = Vec::new();
+        for _idx in 0..n {
+            nodes_by_shape.push(Vec::new());
+            // let mut shapes_nodes: Vec<Vec<N<D>>> = Vec::new();
+            // for _jdx in 0..n {
+            //     shapes_nodes.push(Vec::new());
+            // }
+            // nodes_by_shapes.push(shapes_nodes);
         }
+
+        // Sort each circle's nodes in order of where they appear on the circle (from -PI to PI)
+        // for (idx, nodes) in nodes_by_shape.iter_mut().enumerate() {
+        //     nodes.sort_by_cached_key(|n| OrderedFloat(n.borrow().theta(idx).into()))
+        // }
 
         // Compute connected components (shape -> shape -> bool)
         let mut is_connected: Vec<Vec<bool>> = Vec::new();
@@ -95,20 +117,25 @@ where
             is_connected.push(connected);
         }
         for node in &nodes {
-            let i0 = node.borrow().i.c0idx;
-            let i1 = node.borrow().i.c1idx;
-            if !is_connected[i0][i1] {
-                for i2 in 0..n {
-                    if is_connected[i0][i2] && !is_connected[i1][i2] {
-                        for i3 in 0..n {
-                            if is_connected[i1][i3] && !is_connected[i2][i3] {
-                                is_connected[i2][i3] = true;
-                                is_connected[i3][i2] = true;
+            node.borrow().shape_thetas.keys().for_each(|i0| {
+                nodes_by_shape[*i0].push(node.clone());
+                node.borrow().shape_thetas.keys().for_each(|i1| {
+                    is_connected[*i0][*i1] = true;
+                    is_connected[*i1][*i0] = true;
+                    if !is_connected[*i0][*i1] {
+                        for i2 in 0..n {
+                            if is_connected[*i0][i2] && !is_connected[*i1][i2] {
+                                for i3 in 0..n {
+                                    if is_connected[*i1][i3] && !is_connected[i2][i3] {
+                                        is_connected[i2][i3] = true;
+                                        is_connected[i3][i2] = true;
+                                    }
+                                };
                             }
                         };
                     }
-                };
-            }
+                })
+            });
         }
 
         debug!("{} nodes", (&nodes).len());
@@ -152,15 +179,13 @@ where
                     }
                     containments.push(contained);
                 }
-                let c0idx = i0.borrow().other(idx);
-                let c1idx = i1.borrow().other(idx);
+                // let c0idx = i0.borrow().other(idx);
+                // let c1idx = i1.borrow().other(idx);
                 let expected_visits = if is_component_boundary { 1 } else { 2 };
                 total_expected_visits += expected_visits;
                 let edge = Rc::new(RefCell::new(edge::Edge {
                     idx: edges.len(),
                     c: c.clone(),
-                    c0: duals[c0idx].clone(),
-                    c1: duals[c1idx].clone(),
                     i0, i1,
                     t0, t1,
                     containers,
@@ -230,7 +255,7 @@ where
             error!("total_visits ({}) != total_expected_visits ({})", total_visits, total_expected_visits);
         }
 
-        Intersections { shapes, nodes, nodes_by_shape, nodes_by_shapes, edges, is_connected, regions, total_visits, total_expected_visits, }
+        Intersections { shapes, nodes, edges, is_connected, regions, total_visits, total_expected_visits, }
     }
 
     pub fn area(&self, key: &String) -> Option<D> {
@@ -298,7 +323,7 @@ where
             containers_str,
             regions.len(),
         );
-        if start.borrow().p() == end.borrow().p() {
+        if start.borrow().idx == end.borrow().idx {
             // Back where we started; check whether this is a valid region, push it if so, and return
             let first_segment = segments.first().unwrap();
             let first_edge = first_segment.edge.clone();
@@ -409,6 +434,7 @@ pub mod tests {
     use crate::ellipses::xyrr::XYRR;
     use crate::fmt::Fmt;
     use crate::r2::R2;
+    use ordered_float::OrderedFloat;
 
     use super::*;
     use test_log::test;
@@ -440,16 +466,29 @@ pub mod tests {
 
         let check = |idx: usize, x: Dual, y: Dual, c0idx: usize, deg0v: i64, deg0d: [i64; 9], c1idx: usize, deg1v: i64, deg1d: [i64; 9]| {
             let n = intersections.nodes[idx].borrow();
-            assert_relative_eq!(n.i.x, x, epsilon = 1e-3);
-            assert_relative_eq!(n.i.y, y, epsilon = 1e-3);
-            assert_eq!(n.i.c0idx, c0idx);
-            assert_eq!(n.i.c1idx, c1idx);
-            let d0 = n.i.t0.deg();
-            let a0: (i64, Vec<i64>) = (round(&d0.v()), d0.d().iter().map(round).collect());
-            assert_eq!(a0, (deg0v, deg0d.into()));
-            let d1 = n.i.t1.deg();
-            let a1: (i64, Vec<i64>) = (round(&d1.v()), d1.d().iter().map(round).collect());
-            assert_eq!(a1, (deg1v, deg1d.into()));
+            assert_relative_eq!(n.p.x, x, epsilon = 1e-3);
+            assert_relative_eq!(n.p.y, y, epsilon = 1e-3);
+            let shape_idxs: Vec<usize> = Vec::from_iter(n.shape_thetas.keys().into_iter().map(|i| *i));
+            assert_eq!(
+                shape_idxs,
+                vec![c0idx, c1idx],
+            );
+            // assert_eq!(n.i.c0idx, c0idx);
+            // assert_eq!(n.i.c1idx, c1idx);
+            let thetas: Vec<_> = n.shape_thetas.values().into_iter().map(|t| t.deg()).map(|d| (round(&d.v()), d.d().iter().map(round).collect::<Vec<_>>())).collect();
+            assert_eq!(
+                thetas,
+                vec![
+                    (deg0v, deg0d.into()),
+                    (deg1v, deg1d.into()),
+                ],
+            );
+            // let d0 = n.i.t0.deg();
+            // let a0: (i64, Vec<i64>) = (round(&d0.v()), d0.d().iter().map(round).collect());
+            // assert_eq!(a0, (deg0v, deg0d.into()));
+            // let d1 = n.i.t1.deg();
+            // let a1: (i64, Vec<i64>) = (round(&d1.v()), d1.d().iter().map(round).collect());
+            // assert_eq!(a1, (deg1v, deg1d.into()));
         };
 
         let expected = [

@@ -2,7 +2,6 @@ use std::{ops::{Sub, Mul, Add, Div}, fmt::{Display, Formatter, self}};
 use approx::{AbsDiffEq, RelativeEq};
 
 use derive_more::{Neg, From};
-use nalgebra::ComplexField;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
@@ -119,10 +118,10 @@ impl<D: Trig> R2<D> {
     }
 }
 
-impl<'a, D: 'a + Clone + Add<Output = D> + Mul<&'a D, Output = D> + ComplexField> R2<D>
+impl<D: Clone + Add<Output = D> + Mul<Output = D> + Sqrt> R2<D>
 {
-    pub fn r(&'a self) -> D {
-        (self.x.clone() * &self.x + self.y.clone() * &self.y).sqrt()
+    pub fn r(&self) -> D {
+        (self.x.clone() * self.x.clone() + self.y.clone() * self.y.clone()).sqrt()
     }
 }
 
@@ -255,8 +254,8 @@ impl<D: Div<Output = D>> Div for R2<D> {
     }
 }
 
-impl<D: Div<D, Output = D> + Clone> Div<D> for R2<D> {
-    type Output = Self;
+impl<D: Div<D> + Clone> Div<D> for R2<D> {
+    type Output = R2<D::Output>;
     fn div(self, rhs: D) -> Self::Output {
         R2 {
             x: self.x / rhs.clone(),
@@ -264,6 +263,16 @@ impl<D: Div<D, Output = D> + Clone> Div<D> for R2<D> {
         }
     }
 }
+
+// impl<D: Div<f64, Output = D> + Clone> Div<f64> for R2<D> {
+//     type Output = Self;
+//     fn div(self, rhs: f64) -> Self::Output {
+//         R2 {
+//             x: self.x / rhs.clone(),
+//             y: self.y / rhs.clone(),
+//         }
+//     }
+// }
 
 impl<D> Div<R2<D>> for f64
 where
