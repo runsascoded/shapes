@@ -223,9 +223,11 @@ where
                 let nxt = successor.edge.clone();
                 let nxt_idxs = nxt.borrow().all_idxs();
                 let both = container_idxs.intersection(&nxt_idxs).cloned().collect::<BTreeSet<usize>>();
-                // Recursively traverse the graph, trying to add each eligible Segment to the list we've seeded here, accumulating valid Regions in `regions` along the way.
-                Intersections::traverse(&start, num_shapes, &mut regions, &mut segments, &both, &mut visited_nodes, edges.len());
-                assert_eq!(segments.len(), 2);
+                if !both.is_empty() {
+                    // Recursively traverse the graph, trying to add each eligible Segment to the list we've seeded here, accumulating valid Regions in `regions` along the way.
+                    Intersections::traverse(&start, num_shapes, &mut regions, &mut segments, &both, &mut visited_nodes, edges.len());
+                    assert_eq!(segments.len(), 2);
+                }
                 segments.pop();
                 visited_nodes.remove(&segment_end_idx);
             }
@@ -772,14 +774,10 @@ pub mod tests {
 
     #[test]
     fn tweaked_3_ellipses_f64() {
-        // let ( z, d ) = d_fns(8);
         let shapes = vec![
-            // Shape::XYRR(XYRR { idx: 0, c: R2 { x: 0.347, y: 1.789 }, r: R2 { x: 1.000, y: 2.000 } }).dual(&vec![ z( ), z( ), z( ), z( ), ]),
-            // Shape::XYRR(XYRR { idx: 1, c: R2 { x: 1.447, y: 1.789 }, r: R2 { x: 1.000, y: 2.000 } }).dual(&vec![ d(0), d(1), d(2), d(3), ]),
-            // Shape::XYRR(XYRR { idx: 2, c: R2 { x: 1.789, y: 1.447 }, r: R2 { x: 2.000, y: 0.999 } }).dual(&vec![ d(4), d(5), d(6), d(7), ]),
-            Shape::XYRR(XYRR { idx: 0, c: R2 { x: 0.3472135954999579, y: 1.7888543819998317 }, r: R2 { x: 1.0,                y: 2.0                } }), // .dual(&vec![ z( ), z( ), z( ), z( ), ]),
-            Shape::XYRR(XYRR { idx: 1, c: R2 { x: 1.4472087032327248, y: 1.7888773809286864 }, r: R2 { x: 0.9997362494738584, y: 1.9998582057729295 } }), // .dual(&vec![ d(0), d(1), d(2), d(3), ]),
-            Shape::XYRR(XYRR { idx: 2, c: R2 { x: 1.7890795512191124, y: 1.4471922162722848 }, r: R2 { x: 1.9998252659224116, y: 0.9994675708661026 } }), // .dual(&vec![ d(4), d(5), d(6), d(7), ]),
+            Shape::XYRR(XYRR { idx: 0, c: R2 { x: 0.3472135954999579, y: 1.7888543819998317 }, r: R2 { x: 1.0,                y: 2.0                } }),
+            Shape::XYRR(XYRR { idx: 1, c: R2 { x: 1.4472087032327248, y: 1.7888773809286864 }, r: R2 { x: 0.9997362494738584, y: 1.9998582057729295 } }),
+            Shape::XYRR(XYRR { idx: 2, c: R2 { x: 1.7890795512191124, y: 1.4471922162722848 }, r: R2 { x: 1.9998252659224116, y: 0.9994675708661026 } }),
         ];
         let intersections = Intersections::new(shapes);
         assert_node_strs(
@@ -795,5 +793,35 @@ pub mod tests {
                 "N7( 2.198,  0.469: C1( -41), C2( -78))",
             ]
         );
+    }
+
+    #[test]
+    fn fizz_bazz_buzz_qux_error() {
+        let ellipses = [
+            XYRR { idx: 0, c: R2 { x:  -2.0547374714862916, y:  0.7979432881804286   }, r: R2 { x: 15.303664487498873, y: 17.53077114567813  } },
+            XYRR { idx: 1, c: R2 { x: -11.526407092112622 , y:  3.0882189920409058   }, r: R2 { x: 22.75383340199038 , y:  5.964648612528639 } },
+            XYRR { idx: 2, c: R2 { x:  10.550418544451459 , y:  0.029458342547552023 }, r: R2 { x:  6.102407875525676, y: 11.431493472697646 } },
+            XYRR { idx: 3, c: R2 { x:   4.271631577807546 , y: -5.4473446956862155   }, r: R2 { x:  2.652054463066812, y: 10.753963707585315 } },
+        ];
+        let shapes = ellipses.map(Shape::XYRR);
+        let intersections = Intersections::new(shapes.to_vec());
+        assert_node_strs(
+            &intersections,
+            vec![
+                "N0(-15.600,  8.956: C0( 152), C1( 100))",
+                "N1(-17.051, -2.698: C0(-168), C1(-104))",
+                "N2( 10.112,  11.431: C0(  37), C2(  94))",
+                "N3( 9.177, -11.109: C0( -43), C2(-103))",
+                "N4( 5.795, -14.251: C0( -59), C3( -55))",
+                "N5( 3.388, -15.587: C0( -69), C3(-109))",
+                "N6( 5.707,  6.983: C1(  41), C2( 143))",
+                "N7( 4.481, -1.151: C1( -45), C2(-174))",
+                "N8( 6.627, -0.508: C1( -37), C3(  27))",
+                "N9( 1.781, -1.750: C1( -54), C3( 160))",
+                "N10( 5.022,  4.868: C2( 155), C3(  74))",
+                "N11( 6.778, -8.957: C2(-128), C3( -19))",
+            ]
+        );
+        assert_eq!(intersections.regions.len(), 11);
     }
 }
