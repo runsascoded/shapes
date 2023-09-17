@@ -42,7 +42,7 @@ use shape::Input;
 use diagram::Diagram;
 use dual::D;
 use ellipses::xyrr::XYRR;
-use log::LevelFilter;
+use log::{LevelFilter, info, error};
 
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_console_logger::DEFAULT_LOGGER;
@@ -64,7 +64,10 @@ pub fn deser_log_level(level: JsValue) -> LevelFilter {
 
 #[wasm_bindgen]
 pub fn init_logs() {
-    log::set_logger(&DEFAULT_LOGGER).unwrap();
+    match log::set_logger(&DEFAULT_LOGGER) {
+        Ok(_) => info!("Initialized console.logger"),
+        Err(e) => error!("failed to set console.logger: {}", e),
+    };
     console_error_panic_hook::set_once();
 }
 
