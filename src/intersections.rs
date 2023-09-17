@@ -112,8 +112,8 @@ where
         }
 
         debug!("{} nodes", (&nodes).len());
-        for node in &nodes {
-            debug!("  {}", node.borrow());
+        for (idx, node) in nodes.iter().enumerate() {
+            debug!("  Node {}: {}", idx, node.borrow());
         }
         debug!("");
 
@@ -186,6 +186,7 @@ where
         let mut regions: Vec<Region<D>> = Vec::new();
         // Working list o Segments comprising partial Regions, as they are built up and verified by `traverse`
         let mut segments: Vec<Segment<D>> = Vec::new();
+        let mut visited_nodes: BTreeSet<usize> = BTreeSet::new();
         // The first two Segments for each Region uniquely determine various properties of the Region, so we loop over and construct them explicitly below, before kicking off a recursive `traverse` process to complete each Region.
         for edge in edges.clone() {
             if edge.borrow().visits == edge.borrow().expected_visits {
@@ -194,20 +195,27 @@ where
             }
             let segment = Segment { edge: edge.clone(), fwd: true };  // Each Region's first edge can be traversed in the forward direction, WLOG
             let start = &segment.start();
+            let end = &segment.end();
+            let segment_end_idx = end.borrow().idx;
             let successors = segment.successors();
             segments.push(segment);
+            visited_nodes.insert(segment_end_idx);
             let container_idxs = &mut edge.borrow().all_idxs().clone();  // Shape indices that contain the first Edge, will be intersected with the second Edge below to obtain the set of shapes for the Region under construction.
             for successor in successors {
+                let segment_end_idx = successor.end().borrow().idx;
+                visited_nodes.insert(segment_end_idx);
                 segments.push(successor.clone());
                 let nxt = successor.edge.clone();
                 let nxt_idxs = nxt.borrow().all_idxs();
-                let mut both = container_idxs.intersection(&nxt_idxs).cloned().collect::<BTreeSet<usize>>();
+                let both = container_idxs.intersection(&nxt_idxs).cloned().collect::<BTreeSet<usize>>();
                 // Recursively traverse the graph, trying to add each eligible Segment to the list we've seeded here, accumulating valid Regions in `regions` along the way.
-                Intersections::traverse(&start, n, &mut regions, &mut segments, &mut both, edges.len());
+                Intersections::traverse(&start, n, &mut regions, &mut segments, &both, &mut visited_nodes, edges.len());
                 assert_eq!(segments.len(), 2);
                 segments.pop();
+                visited_nodes.remove(&segment_end_idx);
             }
             segments.pop();
+            visited_nodes.remove(&segment_end_idx);
         }
 
         debug!("{} regions", (&regions).len());
@@ -263,32 +271,33 @@ where
         num_shapes: usize,
         regions: &mut Vec<Region<D>>,
         segments: &mut Vec<Segment<D>>,
-        container_idxs: &mut BTreeSet<usize>,
+        container_idxs: &BTreeSet<usize>,
+        visited_nodes: &mut BTreeSet<usize>,
         max_edges: usize,
     ) {
-        // println!("traverse, segments:");
-        // for segment in segments.clone() {
-        //     println!("  {}", segment);
-        // }
-        // println!();
+        debug!("traverse, segments:");
+        for segment in segments.clone() {
+            debug!("  {}", segment);
+        }
+        debug!("");
         if segments.len() > max_edges {
             panic!("segments.len() ({}) > edges.len() ({})", segments.len(), max_edges);
         }
         let last_segment = segments.last().unwrap();
         let end = last_segment.end();
-        // let indent = String::from_utf8(vec![b' '; 4 * (segments.len() - 2)]).unwrap();
-        // let idxs_str = segments.iter().fold(start.borrow().idx.to_string(), |acc, s| {
-        //     format!("{}→{}", acc, s.end().borrow().idx)
-        // });
-        // let containers_str = container_idxs.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(" ");
-        // println!(
-        //     "{}traverse: {}, {} segments, containers: [{}], {} regions",
-        //     indent,
-        //     idxs_str,
-        //     segments.len(),
-        //     containers_str,
-        //     regions.len(),
-        // );
+        let indent = String::from_utf8(vec![b' '; 4 * (segments.len() - 2)]).unwrap();
+        let idxs_str = segments.iter().fold(start.borrow().idx.to_string(), |acc, s| {
+            format!("{}→{}", acc, s.end().borrow().idx)
+        });
+        let containers_str = container_idxs.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(" ");
+        debug!(
+            "{}traverse: {}, {} segments, containers: [{}], {} regions",
+            indent,
+            idxs_str,
+            segments.len(),
+            containers_str,
+            regions.len(),
+        );
         if start.borrow().p() == end.borrow().p() {
             // Back where we started; check whether this is a valid region, push it if so, and return
             let first_segment = segments.first().unwrap();
@@ -331,22 +340,31 @@ where
             //     println!("{}  {}", indent, successor);
             // }
             for successor in successors {
+                let next_node = successor.end();
+                let next_node_idx = next_node.borrow().idx;
+                if visited_nodes.contains(&next_node_idx) {
+                    // This Segment would revisit a Node that's already been visited (and isn't the start Node, which we're allowed to revisit, to complete a Region)
+                    continue;
+                }
                 // The new Segment should be contained by (or run along the border of) the same shapes as the previous segments, with one exception: the new Segment can run along the border of a shape that doesn't contain the in-progress Region.
                 let nxt = successor.edge.clone();
                 let nxt_idxs = nxt.borrow().all_idxs();
                 // First, verify existing containers are preserved by the new Segment:
-                let mut both = container_idxs.intersection(&nxt_idxs).cloned().collect::<BTreeSet<usize>>();
-                if both.len() < container_idxs.len() {
+                let missing: BTreeSet<usize> = container_idxs.difference(&nxt_idxs).cloned().collect();
+                if !missing.is_empty() {
+                // let mut both = container_idxs.intersection(&nxt_idxs).cloned().collect::<BTreeSet<usize>>();
+                // if both.len() < container_idxs.len() {
                     // This edge candidate isn't contained by (or on the border of) all the shapes that the previous segments are.
                     continue;
                 }
+                let extra: BTreeSet<usize> = nxt_idxs.difference(&container_idxs).cloned().collect();
                 // Next, verify that the only additional container, if any, is the Segment's border shape:
-                let num_extra = nxt_idxs.len() - both.len();
+                let num_extra = extra.len();
                 if num_extra > 1 {
                     // This Segment can't join a Region with the existing Segments, as it is contained by at least one shape that doesn't contain the existing edges.
                     continue;
                 } else if num_extra == 1 {
-                    let extra = nxt_idxs.difference(&container_idxs).cloned().collect::<BTreeSet<usize>>();
+                    // let extra = nxt_idxs.difference(&container_idxs).cloned().collect::<BTreeSet<usize>>();
                     let extra_idx = extra.iter().next().unwrap();
                     let nxt_edge_idx = successor.edge.borrow().c.borrow().idx();
                     if nxt_edge_idx != *extra_idx {
@@ -356,9 +374,11 @@ where
                         // OK to proceed with this edge; it is contained by all the shapes that the previous segments are (and outer-borders one additional shape that's not included in the bounded region)
                     }
                 }
+                visited_nodes.insert(next_node_idx);
                 segments.push(successor.clone());
-                Intersections::traverse(&start, num_shapes, regions, segments, &mut both, max_edges);
+                Intersections::traverse(&start, num_shapes, regions, segments, container_idxs, visited_nodes, max_edges);
                 segments.pop();
+                visited_nodes.remove(&next_node_idx);
             }
         }
     }
@@ -615,15 +635,70 @@ pub mod tests {
                 }
             }
         }
-        // for region in regions {
-        //     let key = region.key.clone();
-        //     let area = region.area();
-        //     // assert_eq!(area, *expected.get(key.as_str()).unwrap());
-        //     println!("{}: {}", key, area);
-        // }
     }
 
-    fn assert_node_strs<D: Display + Deg + Fmt>(intersections: Intersections<D>, expected: Vec<&str>) {
+    #[test]
+    fn test_4_circles_lattice_0_1() {
+        let ellipses = [
+            XYRR { idx: 0, c: R2 { x: 0., y: 0. }, r: R2 { x: 1., y: 1., }, },
+            XYRR { idx: 1, c: R2 { x: 0., y: 1. }, r: R2 { x: 1., y: 1., }, },
+            XYRR { idx: 2, c: R2 { x: 1., y: 0. }, r: R2 { x: 1., y: 1., }, },
+            XYRR { idx: 3, c: R2 { x: 1., y: 1. }, r: R2 { x: 1., y: 1., }, },
+        ];
+        let shapes = ellipses.map(Shape::XYRR);
+        let intersections = Intersections::new(shapes.to_vec());
+        assert_node_strs(
+            &intersections,
+            vec![
+                "I( 0.866,  0.500, C0(  30)/C1( -30))",
+                "I(-0.866,  0.500, C0( 150)/C1(-150))",
+                "I( 0.500,  0.866, C0(  60)/C2( 120))",
+                "I( 0.500, -0.866, C0( -60)/C2(-120))",
+                "I( 0.000,  1.000, C0(  90)/C3( 180))",
+                "I( 1.000,  0.000, C0(   0)/C3( -90))",
+                "I( 1.000,  1.000, C1(   0)/C2(  90))",
+                "I( 0.000,  0.000, C1( -90)/C2( 180))",
+                "I( 0.500,  1.866, C1(  60)/C3( 120))",
+                "I( 0.500,  0.134, C1( -60)/C3(-120))",
+                "I( 1.866,  0.500, C2(  30)/C3( -30))",
+                "I( 0.134,  0.500, C2( 150)/C3(-150))",
+            ]
+        );
+    }
+
+    #[test]
+    fn test_4_circles_diamond() {
+        let sq3 = 3_f64.sqrt();
+        let ellipses = [
+            XYRR { idx: 0, c: R2 { x: 0. , y:  0.       }, r: R2 { x: 1., y: 1., }, },
+            XYRR { idx: 1, c: R2 { x: 1. , y:  0.       }, r: R2 { x: 1., y: 1., }, },
+            XYRR { idx: 2, c: R2 { x: 0.5, y:  sq3 / 2. }, r: R2 { x: 1., y: 1., }, },
+            XYRR { idx: 3, c: R2 { x: 0.5, y: -sq3 / 2. }, r: R2 { x: 1., y: 1., }, },
+        ];
+        let shapes = ellipses.map(Shape::XYRR);
+        let intersections = Intersections::new(shapes.to_vec());
+        assert_node_strs(
+            &intersections,
+            vec![
+                "I( 0.500,  0.866, C0(  60)/C1( 120))",
+                "I( 0.500, -0.866, C0( -60)/C1(-120))",
+                "I( 1.000,  0.000, C0(   0)/C2( -60))",
+                "I(-0.500,  0.866, C0( 120)/C2( 180))",
+                "I( 1.000,  0.000, C0(   0)/C3(  60))",
+                "I(-0.500, -0.866, C0(-120)/C3(-180))",
+                "I( 1.500,  0.866, C1(  60)/C2(   0))",
+                "I( 0.000,  0.000, C1( 180)/C2(-120))",
+                "I( 1.500, -0.866, C1( -60)/C3(   0))",
+                "I( 0.000,  0.000, C1( 180)/C3( 120))",
+                "I( 1.000,  0.000, C2( -60)/C3(  60))",
+                "I(-0.000,  0.000, C2(-120)/C3( 120))",
+            ]
+        );
+
+        assert_eq!(intersections.regions.len(), 11);
+    }
+
+    fn assert_node_strs<D: Display + Deg + Fmt>(intersections: &Intersections<D>, expected: Vec<&str>) {
         let gen_vals = env::var("GEN_VALS").map(|s| s.parse::<usize>().unwrap()).ok();
         match gen_vals {
             Some(_) => {
@@ -664,7 +739,7 @@ pub mod tests {
         let shapes: Vec<_> = ellipses.iter().map(|e| Shape::XYRR(e.clone())).collect();
         let intersections = Intersections::new(shapes);
         assert_node_strs(
-            intersections,
+            &intersections,
             vec![
                 "I( 0.897,  0.119, C0( -57)/C1(-123))",
                 "I( 0.897,  3.459, C0(  57)/C1( 123))",
@@ -685,7 +760,7 @@ pub mod tests {
         ];
         let intersections = Intersections::new(shapes);
         assert_node_strs(
-            intersections,
+            &intersections,
             vec![
                 "I( 0.897,  0.119, C0( -57)/C1(-123))",
                 "I( 0.897,  3.459, C0(  57)/C1( 123))",

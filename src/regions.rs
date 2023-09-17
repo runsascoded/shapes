@@ -12,18 +12,13 @@ pub struct Point {
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
 pub struct Edge {
-    // pub idx: usize,
     pub cidx: usize,
-    // pub c0: usize,
-    // pub c1: usize,
     pub i0: usize,
     pub i1: usize,
     pub t0: f64,
     pub t1: f64,
     pub containers: Vec<usize>,
     pub containments: Vec<bool>,
-    // pub expected_visits: usize,
-    // pub visits: usize,
 }
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
