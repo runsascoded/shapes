@@ -56,7 +56,7 @@ where R2<D>: To<R2<f64>>,
                 t0: zero,
                 t1: tau.clone(),
                 container_idxs: component_container_idxs.clone(),
-                is_component_boundary: false,
+                is_component_boundary: true,
                 visits: 0,
             };
             let e = Rc::new(RefCell::new(edge));
@@ -82,12 +82,21 @@ where R2<D>: To<R2<f64>>,
             return component;
         }
 
-        let nodes: Vec<N<D>> = shape_idxs.iter().map(|i| nodes_by_shape[*i].clone()).flatten().collect();
+        let mut nodes: Vec<N<D>> =
+            shape_idxs
+            .iter()
+            .flat_map(|i|
+                nodes_by_shape[*i]
+                .iter()
+                .filter(|n|
+                    n.borrow().shape_thetas.keys().min() == Some(i)
+                )
+                .cloned()
+            )
+            .collect();
+        nodes.sort_by_cached_key(|n| n.borrow().idx);
         debug!("Connected component: {}", shape_idxs.iter().map(|i| i.to_string()).collect::<Vec<String>>().join(", "));
         let edges = Component::edges(&shape_idxs, &nodes_by_shape, &duals, &component_container_idxs);
-        let total_expected_visits = edges.iter().map(|e| e.borrow().expected_visits()).sum::<usize>();
-        let regions = Component::regions(&edges, num_shapes, total_expected_visits, &component_container_idxs);
-        // let total_visits = edges.iter().map(|e| e.borrow().visits).sum::<usize>();
 
         let first_hull_edge = edges.iter().find(|e| e.borrow().is_component_boundary).unwrap();
         let first_hull_segment = Segment { edge: first_hull_edge.clone(), fwd: true };
@@ -95,13 +104,16 @@ where R2<D>: To<R2<f64>>,
         let start_idx = first_hull_segment.start().borrow().idx;
         loop {
             let last_hull_segment = hull_segments.last().unwrap();
+            debug!("computing hull, last segment: {}", last_hull_segment);
             let end_idx = last_hull_segment.end().borrow().idx;
             if start_idx == end_idx {
                 break;
             }
-            let successors = last_hull_segment.successors().into_iter().filter(|s| s.edge.borrow().is_component_boundary).collect::<Vec<_>>();
+            let all_successors = last_hull_segment.successors();
+            let num_successors = all_successors.len();
+            let successors = all_successors.clone().into_iter().filter(|s| s.edge.borrow().is_component_boundary).collect::<Vec<_>>();
             if successors.len() != 1 {
-                panic!("Expected 1 boundary successor for hull segment {}, found {}: {:?}", last_hull_segment, successors.len(), successors);
+                panic!("Expected 1 boundary successor among {} for hull segment {}, found {}, all: {}", num_successors, last_hull_segment, successors.len(), all_successors.iter().map(|s| format!("{}", s)).collect::<Vec<_>>().join(", "));
             }
             let successor = successors[0].clone();
             hull_segments.push(successor);
@@ -111,6 +123,10 @@ where R2<D>: To<R2<f64>>,
             segments: hull_segments,
             container_idxs: component_container_idxs.iter().cloned().collect(),
         };
+
+        let total_expected_visits = edges.iter().map(|e| e.borrow().expected_visits()).sum::<usize>();
+        let regions = Component::regions(&edges, num_shapes, total_expected_visits, &component_container_idxs);
+        // let total_visits = edges.iter().map(|e| e.borrow().visits).sum::<usize>();
 
         Component {
             shape_idxs: shape_idxs.clone(),
@@ -158,7 +174,6 @@ where R2<D>: To<R2<f64>>,
                         is_component_boundary = false;
                     }
                 }
-                let expected_visits = if is_component_boundary { 1 } else { 2 };
                 let edge = Rc::new(RefCell::new(edge::Edge {
                     idx: edges.len(),
                     c: c.clone(),

@@ -60,10 +60,12 @@ where
         // Intersect all shapes, pair-wise
         for (idx, dual) in duals.iter().enumerate() {
             let mut directly_connected: Vec<bool> = Vec::new();
-            for jdx in 0..(idx - 1) {
-                directly_connected.push(is_directly_connected[jdx][idx]);
+            if idx > 0 {
+                for jdx in 0..idx {
+                    directly_connected.push(is_directly_connected[jdx][idx]);
+                }
             }
-            directly_connected.push(false);
+            directly_connected.push(true);
             for jdx in (idx + 1)..num_shapes {
                 let intersections = dual.borrow().intersect(&duals[jdx].borrow());
                 if intersections.is_empty() {
@@ -270,10 +272,6 @@ pub mod tests {
         assert_eq!(scene.components.len(), 1);
         let component = scene.components[0].clone();
 
-        // for node in shapes.nodes.iter() {
-        //     println!("{}", node.borrow());
-        // }
-
         let check = |idx: usize, x: Dual, y: Dual, c0idx: usize, deg0v: i64, deg0d: [i64; 9], c1idx: usize, deg1v: i64, deg1d: [i64; 9]| {
             let n = component.nodes[idx].borrow();
             assert_relative_eq!(n.p.x, x, epsilon = 1e-3);
@@ -283,8 +281,6 @@ pub mod tests {
                 shape_idxs,
                 vec![c0idx, c1idx],
             );
-            // assert_eq!(n.i.c0idx, c0idx);
-            // assert_eq!(n.i.c1idx, c1idx);
             let thetas: Vec<_> = n.shape_thetas.values().into_iter().map(|t| t.deg()).map(|d| (round(&d.v()), d.d().iter().map(round).collect::<Vec<_>>())).collect();
             assert_eq!(
                 thetas,
@@ -293,12 +289,6 @@ pub mod tests {
                     (deg1v, deg1d.into()),
                 ],
             );
-            // let d0 = n.i.t0.deg();
-            // let a0: (i64, Vec<i64>) = (round(&d0.v()), d0.d().iter().map(round).collect());
-            // assert_eq!(a0, (deg0v, deg0d.into()));
-            // let d1 = n.i.t1.deg();
-            // let a1: (i64, Vec<i64>) = (round(&d1.v()), d1.d().iter().map(round).collect());
-            // assert_eq!(a1, (deg1v, deg1d.into()));
         };
 
         let expected = [
@@ -318,33 +308,7 @@ pub mod tests {
         }
 
         assert_eq!(component.edges.len(), 12);
-        // println!("edges:");
-        // for edge in shapes.edges.iter() {
-        //     println!("{}", edge.borrow());
-        // }
-        // println!();
-
-        // let is_connected = intersections.is_connected;
-        // println!("is_connected:");
-        // for row in is_connected {
-        //     for col in row {
-        //         print!("{}", if col { "1" } else { "0" });
-        //     }
-        //     println!();
-        // }
-        // println!();
-
-        // let segment = Segment { edge: intersections.edges[0].clone(), fwd: true };
-        // let successors = segment.successors();
-        // println!("successors:");
-        // for successor in successors {
-        //     println!("  {}", successor);
-        // }
-        // println!();
-
         assert_eq!(component.regions.len(), 7);
-        // assert_eq!(component.total_expected_visits, 21);
-        // assert_eq!(component.total_visits, 21);
         let expected = [
             "01- 0( -60) 2( -30) 1( 180): 0.500 + 0.285 =  0.785, vec![ 1.366, -0.366,  1.571, -0.866, -0.500,  1.047, -0.500,  0.866, -1.047]",
             "-1- 0( -60) 2( -30) 1(  90): 0.000 + 1.785 =  1.785, vec![-1.366,  0.366, -1.571,  1.866, -0.500,  3.665, -0.500,  0.134, -0.524]",
@@ -364,11 +328,6 @@ pub mod tests {
             }).collect::<Vec<String>>().join(" ");
             format!("{} {}: {:.3} + {:.3} = {}", region.key, path_str, region.polygon_area().v(), region.secant_area().v(), region.area().s(3))
         }).collect::<Vec<String>>();
-        // println!("regions:");
-        // for a in actual.iter() {
-        //     println!("{}", a);
-        // }
-        // println!();
         actual.iter().zip(expected.iter()).enumerate().for_each(|(idx, (a, b))| assert_eq!(&a, b, "idx: {}, {} != {}", idx, a, b));
     }
 
@@ -386,11 +345,17 @@ pub mod tests {
         ];
         let shapes: Vec<_> = inputs.iter().map(|(c, duals)| c.dual(duals)).collect();
         let scene = Scene::new(shapes);
-        assert_eq!(scene.components.len(), 4);
-        // for node in intersections.nodes.iter() {
-        //     println!("{}", node.borrow());
-        // }
-        // println!();
+        assert_eq!(scene.components.len(), 2);
+        assert_node_strs(&scene, vec![
+            vec![
+                "N0( 0.500, vec![ 0.500,  0.866,  1.000,  0.500, -0.866, -1.000,  0.000,  0.000,  0.000,  0.000,  0.000,  0.000],  0.866, vec![ 0.289,  0.500,  0.577, -0.289,  0.500,  0.577,  0.000,  0.000,  0.000,  0.000,  0.000,  0.000]: C0(  60 [1895, -3283, -1895, -1895, 3283, 3791,    0,    0,    0,    0,    0,    0]), C1( 120 [-1895, -3283, -3791, 1895, 3283, 1895,    0,    0,    0,    0,    0,    0]))",
+                "N1( 0.500, vec![ 0.500, -0.866,  1.000,  0.500,  0.866, -1.000,  0.000,  0.000,  0.000,  0.000,  0.000,  0.000], -0.866, vec![-0.289,  0.500, -0.577,  0.289,  0.500, -0.577,  0.000,  0.000,  0.000,  0.000,  0.000,  0.000]: C0( -60 [-1895, -3283, 1895, 1895, 3283, -3791,    0,    0,    0,    0,    0,    0]), C1(-120 [1895, -3283, 3791, -1895, 3283, -1895,    0,    0,    0,    0,    0,    0]))",
+              ],
+              vec![
+                "N2( 0.999, vec![ 0.000,  0.000,  0.000,  0.000,  0.000,  0.000,  0.007,  0.042,  0.042,  0.993, -0.042,  0.994],  2.958, vec![ 0.000,  0.000,  0.000,  0.000,  0.000,  0.000,  0.168,  0.993,  1.007, -0.168,  0.007, -0.168]: C2(  80 [   0,    0,    0,    0,    0,    0, 1102,  -46,  138, -1102,   46, -1103]), C3(  -2 [   0,    0,    0,    0,    0,    0,  550, 3263, 3309, -550, -3263, -414]))",
+                "N3(-0.932, vec![ 0.000,  0.000,  0.000,  0.000,  0.000,  0.000,  0.175, -0.322, -0.366,  0.825,  0.322, -0.886],  2.636, vec![ 0.000,  0.000,  0.000,  0.000,  0.000,  0.000, -0.448,  0.825,  0.939,  0.448,  0.175, -0.481]: C2( 119 [   0,    0,    0,    0,    0,    0, 1027,  401, -138, -1027, -401, 1103]), C3(-159 [   0,    0,    0,    0,    0,    0, 1579, -2908, -3309, -1579, 2908,  414]))",
+              ],
+        ]);
     }
 
     pub fn ellipses4(r: f64) -> [Shape<f64>; 4] {
@@ -492,7 +457,7 @@ pub mod tests {
         let scene = Scene::new(shapes.to_vec());
         assert_node_strs(
             &scene,
-            vec![
+            vec![vec![
                 "N0( 0.866,  0.500: C0(  30), C1( -30))",
                 "N1(-0.866,  0.500: C0( 150), C1(-150))",
                 "N2( 0.500,  0.866: C0(  60), C2( 120))",
@@ -505,7 +470,7 @@ pub mod tests {
                 "N9( 0.500,  0.134: C1( -60), C3(-120))",
                 "N10( 1.866,  0.500: C2(  30), C3( -30))",
                 "N11( 0.134,  0.500: C2( 150), C3(-150))",
-            ]
+            ]]
         );
     }
 
@@ -520,11 +485,9 @@ pub mod tests {
         ];
         let shapes = ellipses.map(Shape::XYRR);
         let scene = Scene::new(shapes.to_vec());
-        assert_eq!(scene.components.len(), 1);
-        let component = scene.components[0].clone();
         assert_node_strs(
             &scene,
-            vec![
+            vec![vec![
                 "N0( 0.500,  0.866: C0(  60), C1( 120))",
                 "N1( 0.500, -0.866: C0( -60), C1(-120))",
                 "N2( 1.000,  0.000: C0(   0), C2( -60), C3(  60))",
@@ -533,26 +496,29 @@ pub mod tests {
                 "N5( 1.500,  0.866: C1(  60), C2(   0))",
                 "N6(-0.000,  0.000: C1( 180), C2(-120), C3( 120))",
                 "N7( 1.500, -0.866: C1( -60), C3(   0))",
-            ]
+            ]]
         );
+        assert_eq!(scene.components.len(), 1);
+        let component = scene.components[0].clone();
         assert_eq!(component.regions.len(), 11);
     }
 
-    fn assert_node_strs<D: Display + Deg + Fmt>(scene: &Scene<D>, expected: Vec<&str>) {
-        assert_eq!(scene.components.len(), 1);
-        let component = &scene.components[0];
-        let nodes = &component.nodes;
+    fn assert_node_strs<D: Display + Deg + Fmt>(scene: &Scene<D>, expected: Vec<Vec<&str>>) {
         let gen_vals = env::var("GEN_VALS").map(|s| s.parse::<usize>().unwrap()).ok();
         match gen_vals {
             Some(_) => {
-                println!("Nodes:");
-                for node in nodes {
-                    println!("  {:?},", format!("{}", node.borrow()));
+                println!("Nodes: vec![");
+                for component in &scene.components {
+                    println!("  vec![");
+                    for node in &component.nodes {
+                        println!("    {:?},", format!("{}", node.borrow()));
+                    }
+                    println!("  ],");
                 }
+                println!("]");
             },
             None => {
-                let actual = nodes.iter().map(|n| format!("{}", n.borrow())).collect::<Vec<String>>();
-                assert_eq!(actual.len(), expected.len());
+                let actual: Vec<Vec<String>> = scene.components.iter().map(|c| c.nodes.iter().map(|n| format!("{}", n.borrow())).collect::<Vec<String>>()).collect();
                 assert_eq!(actual, expected);
             }
         }
@@ -583,10 +549,10 @@ pub mod tests {
         let scene = Scene::new(shapes);
         assert_node_strs(
             &scene,
-            vec![
+            vec![vec![
                 "N0( 0.897,  0.119: C0( -57), C1(-123))",
                 "N1( 0.897,  3.459: C0(  57), C1( 123))",
-            ]
+            ]]
         );
     }
 
@@ -600,7 +566,7 @@ pub mod tests {
         let scene = Scene::new(shapes);
         assert_node_strs(
             &scene,
-            vec![
+            vec![vec![
                 "N0( 0.897,  0.119: C0( -57), C1(-123))",
                 "N1( 0.897,  3.459: C0(  57), C1( 123))",
                 "N2( 1.297,  2.416: C0(  18), C2( 104))",
@@ -609,7 +575,7 @@ pub mod tests {
                 "N5( 0.469,  2.198: C1( 168), C2( 131))",
                 "N6( 0.632,  0.632: C1(-145), C2(-125))",
                 "N7( 2.198,  0.469: C1( -41), C2( -78))",
-            ]
+            ]]
         );
     }
 
@@ -627,7 +593,7 @@ pub mod tests {
         let component = scene.components[0].clone();
         assert_node_strs(
             &scene,
-            vec![
+            vec![vec![
                 "N0(-15.600,  8.956: C0( 152), C1( 100))",
                 "N1(-17.051, -2.698: C0(-168), C1(-104))",
                 "N2( 10.112,  11.431: C0(  37), C2(  94))",
@@ -640,7 +606,7 @@ pub mod tests {
                 "N9( 1.781, -1.750: C1( -54), C3( 160))",
                 "N10( 5.022,  4.868: C2( 155), C3(  74))",
                 "N11( 6.778, -8.957: C2(-128), C3( -19))",
-            ]
+            ]]
         );
         assert_eq!(component.regions.len(), 13);
         // debug!("is_connected: {:?}", intersections.is_connected);
@@ -656,7 +622,7 @@ pub mod tests {
         ];
         let shapes = ellipses.map(Shape::XYRR);
         let scene = Scene::new(shapes.to_vec());
-        assert_node_strs(&scene, vec![]);
+        assert_eq!(scene.components.len(), 4);
         // debug!("is_connected: {:?}", intersections.is_connected);
     }
 }
