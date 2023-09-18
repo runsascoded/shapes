@@ -66,6 +66,13 @@ impl Diagram {
             .clone()
         });
         let total_area = scene.area(&all_key).unwrap_or_else(|| scene.zero());
+        debug!("scene: {} components, total_area {}", scene.components.len(), total_area);
+        for component in &scene.components {
+            debug!("  {} regions", component.regions.len());
+            for region in &component.regions {
+                debug!("    {}: {} segments, area {}", region.key, region.segments.len(), region.area());
+            }
+        }
         let errors = Self::compute_errors(&scene, &targets, &total_target_area, &total_area);
         let mut error: D = errors.values().into_iter().map(|e| { e.error.abs() }).sum();
         debug!("diagram, error {:?}", error);
@@ -92,15 +99,16 @@ impl Diagram {
             let nf = n as f64;
             let centroid: R2<Dual> = shape_idxs.iter().map(|idx| shapes[*idx].center()).sum::<R2<Dual>>();
             let centroid = R2 { x: centroid.x / nf, y: centroid.y / nf };
+            debug!("missing region {:?}, centroid {:?}", shape_idxs, centroid);
             shape_idxs.iter().for_each(|idx| {
                 let shape = &shapes[*idx];
                 let distance = shape.center().distance(&centroid);
-                // debug!("  missing region penalty! {}: {} * {}", shape_idxs.iter().map(|idx| idx.to_string()).collect::<Vec<_>>().join(""), &gap, target_area);
+                debug!("  missing region penalty: {}: {}", idx, &distance);
                 total_disjoint_penalty += distance * target_area / nf;
             });
         }
         if !missing_regions.is_empty() {
-            info!("missing_regions: {:?}", missing_regions);
+            info!("missing_regions ({}): {:?}, unscaled penalty {}", total_missing, missing_regions, total_disjoint_penalty);
         }
         total_disjoint_penalty = total_disjoint_penalty.recip() * total_missing;
 

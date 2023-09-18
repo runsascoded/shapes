@@ -2,7 +2,7 @@ use std::{collections::{BTreeSet, BTreeMap}, cell::RefCell, rc::Rc, f64::consts:
 
 use log::{debug, error};
 
-use crate::{node::{N, Node}, math::deg::Deg, edge::{E, self, EdgeArg, Edge}, contains::Contains, region::Region, segment::Segment, shape::S, theta_points::{ThetaPoints, ThetaPointsArg}, r2::R2, to::To, zero::Zero};
+use crate::{node::{N, Node}, math::deg::Deg, edge::{E, self, EdgeArg, Edge}, contains::Contains, region::Region, segment::Segment, shape::S, theta_points::{ThetaPoints, ThetaPointsArg}, r2::R2, to::To, zero::Zero, fmt::Fmt};
 
 #[derive(Clone, Debug)]
 pub struct Component<D> {
@@ -15,7 +15,7 @@ pub struct Component<D> {
     pub hull: Region<D>,
 }
 
-impl<D: Deg + EdgeArg + fmt::Debug + ThetaPointsArg + Zero> Component<D>
+impl<D: Deg + EdgeArg + fmt::Debug + Fmt + ThetaPointsArg + Zero> Component<D>
 where R2<D>: To<R2<f64>>,
 {
     pub fn new(
@@ -60,10 +60,20 @@ where R2<D>: To<R2<f64>>,
                 visits: 0,
             };
             let e = Rc::new(RefCell::new(edge));
+            let mut key = String::new();
+            for i in 0..num_shapes {
+                if i == shape_idx || component_container_idxs.contains(&i) {
+                    key += &i.to_string();
+                } else {
+                    key += "-";
+                }
+            }
+            let mut container_idxs = component_container_idxs.clone();
+            container_idxs.insert(shape_idx);
             let region = Region {
-                key: String::new(),
+                key,
                 segments: vec![ Segment { edge: e.clone(), fwd: true } ],
-                container_idxs: component_container_idxs.clone(),
+                container_idxs: container_idxs.clone(),
             };
             node.add_edge(e.clone());
             let component = Component {
@@ -71,14 +81,18 @@ where R2<D>: To<R2<f64>>,
                 shapes: duals.clone(),
                 nodes: vec![n.clone()],
                 edges: vec![e.clone()],
-                container_idxs: component_container_idxs.clone(),
-                regions: vec![ region ],
+                container_idxs: component_container_idxs,
+                regions: vec![ region.clone() ],
                 hull: Region {
                     key: String::new(),
-                    segments: vec![ Segment { edge: e, fwd: true } ],
+                    segments: vec![ Segment { edge: e.clone(), fwd: true } ],
                     container_idxs: BTreeSet::new(),
                 },
             };
+            debug!("singleton component: {}", shape_idx);
+            debug!("  node: {}", node);
+            debug!("  edge: {}", e.borrow());
+            debug!("  region: {}", region);
             return component;
         }
 

@@ -1,5 +1,7 @@
 use std::{fmt::{Formatter, Display, self}, ops::Add, iter::Sum, collections::BTreeSet};
 
+use log::debug;
+
 use crate::{segment::Segment, intersection::Intersection, edge::{Edge, EdgeArg}, math::abs::{Abs, AbsArg}, r2::R2, to::To, dual::Dual};
 
 #[derive(Debug, Clone)]
@@ -36,12 +38,16 @@ where
     pub fn secant_area(&self) -> D {
         self.segments.iter().map(|s| {
             let area = s.secant_area();
-            let idx = s.edge.borrow().c.borrow().idx();
+            let idx = s.edge.borrow().shape_idx();
             if self.container_idxs.contains(&idx) { area } else { -area }
         }).sum::<D>()
     }
     pub fn area(&self) -> D {
-        self.polygon_area() + self.secant_area()
+        let polygon_area = self.polygon_area();
+        let secant_area = self.secant_area();
+        let area = polygon_area.clone() + secant_area.clone();
+        // debug!("Region {}: polygon_area: {}, secant_area: {}, total: {}", self.key, polygon_area, secant_area, area);
+        area
     }
     pub fn matches(&self, key: &String) -> bool {
         for (idx, ch) in (&key).chars().enumerate() {
