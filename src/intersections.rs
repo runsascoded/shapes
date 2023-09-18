@@ -4,7 +4,7 @@ use std::{cell::RefCell, rc::Rc, f64::consts::TAU, collections::BTreeSet, ops::{
 use log::{error, debug};
 use ordered_float::OrderedFloat;
 
-use crate::{node::{N, Node}, edge::{self, E}, gap::Gap, region::{Region, RegionArg}, shape::{S, Shape}, segment::Segment, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::CanTransform, intersection::Intersection, dual::Dual, to::To, math::deg::Deg, fmt::Fmt};
+use crate::{node::{N, Node}, edge::{self, E}, distance::Distance, region::{Region, RegionArg}, shape::{S, Shape}, segment::Segment, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::CanTransform, intersection::Intersection, dual::Dual, to::To, math::deg::Deg, fmt::Fmt};
 
 #[derive(Clone, Debug)]
 pub struct Intersections<D> {
@@ -69,7 +69,7 @@ where
                 for i in intersections {
                     let mut merged = false;
                     for node in &nodes {
-                        let d = node.borrow().p.gap(&i.p()).unwrap();
+                        let d = node.borrow().p.distance(&i.p());
                         if d.into() < merge_threshold {
                             // This intersection is close enough to an existing node; merge them
                             let mut node = node.borrow_mut();
@@ -118,9 +118,11 @@ where
             node.borrow().shape_thetas.keys().for_each(|i0| {
                 nodes_by_shape[*i0].push(node.clone());
                 node.borrow().shape_thetas.keys().for_each(|i1| {
+                    let was_connected = is_connected[*i0][*i1];
                     is_connected[*i0][*i1] = true;
                     is_connected[*i1][*i0] = true;
-                    if !is_connected[*i0][*i1] {
+                    if !was_connected {
+                        // Everything connected to i0 is now also connected to i1, and vice versa
                         for i2 in 0..num_shapes {
                             if is_connected[*i0][i2] && !is_connected[*i1][i2] {
                                 for i3 in 0..num_shapes {
@@ -135,9 +137,32 @@ where
                 })
             });
         }
+        let mut shape_containments: Vec<Vec<usize>> = Vec::new();
+        for shape in &shapes {
+            let mut shape_containment: Vec<usize> = Vec::new();
+            for (idx, dual) in duals.iter().enumerate() {
+                if dual.borrow().contains(&shape()) {
+                    shape_containment.push(idx);
+                }
+            }
+            shape_containments.push(shape_containment);
+        }
         // Sort each circle's nodes in order of where they appear on the circle (from -PI to PI)
         for (idx, nodes) in nodes_by_shape.iter_mut().enumerate() {
             nodes.sort_by_cached_key(|n| OrderedFloat(n.borrow().theta(idx).into()))
+        }
+
+        let mut assigned_idxs: BTreeSet<usize> = BTreeSet::new();
+        let mut connected_components: Vec<Vec<usize>> = Vec::new();
+        for shape_idx in 0..num_shapes {
+            if assigned_idxs.contains(&shape_idx) {
+                continue
+            }
+            let connection_idxs = is_connected[shape_idx].clone().into_iter().enumerate().filter(|(_, c)| *c).map(|(i, _)| i).collect::<Vec<usize>>();
+            connected_components.push(connection_idxs.clone());
+            for idx in connection_idxs {
+                assigned_idxs.insert(idx);
+            }
         }
 
         // Construct edges
@@ -822,6 +847,21 @@ pub mod tests {
                 "N11( 6.778, -8.957: C2(-128), C3( -19))",
             ]
         );
-        assert_eq!(intersections.regions.len(), 11);
+        assert_eq!(intersections.regions.len(), 13);
+        debug!("is_connected: {:?}", intersections.is_connected);
+    }
+
+    #[test]
+    fn disjoint() {
+        let ellipses = [
+            XYRR { idx: 0, c: R2 { x: 0. , y: 0. }, r: R2 { x: 1., y: 1., }, },
+            XYRR { idx: 1, c: R2 { x: 3. , y: 0. }, r: R2 { x: 1., y: 1., }, },
+            XYRR { idx: 2, c: R2 { x: 0. , y: 3. }, r: R2 { x: 1., y: 1., }, },
+            XYRR { idx: 3, c: R2 { x: 3. , y: 3. }, r: R2 { x: 1., y: 1., }, },
+        ];
+        let shapes = ellipses.map(Shape::XYRR);
+        let intersections = Intersections::new(shapes.to_vec());
+        assert_node_strs(&intersections, vec![]);
+        debug!("is_connected: {:?}", intersections.is_connected);
     }
 }

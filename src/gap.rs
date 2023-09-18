@@ -9,17 +9,6 @@ pub trait Gap<O> {
     fn gap(&self, o: &O) -> Option<Self::Output>;
 }
 
-impl<D: Clone + Add<Output = D> + Mul<Output = D> + Sqrt> Gap<R2<D>> for R2<D>
-where
-    R2<D>
-    : Sub<Output = R2<D>>
-{
-    type Output = D;
-    fn gap(&self, o: &R2<D>) -> Option<D> {
-        Some((self.clone() - o.clone()).r())
-    }
-}
-
 impl<
     'a,
     D

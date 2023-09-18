@@ -6,8 +6,9 @@ use serde::{Deserialize, Serialize};
 use tsify::{declare, Tsify};
 
 use crate::ellipses::xyrr::XYRR;
-use crate::shape::{Input, Shape, Duals, self};
-use crate::{circle::Circle, intersections::Intersections, math::is_zero::IsZero, r2::R2, areas::Areas, regions::Regions, gap::Gap};
+use crate::math::recip::Recip;
+use crate::shape::{Input, Shape, Duals};
+use crate::{circle::Circle, distance::Distance, intersections::Intersections, math::is_zero::IsZero, r2::R2, areas::Areas, regions::Regions};
 use crate::dual::{Dual, D};
 
 #[declare]
@@ -82,63 +83,56 @@ impl Diagram {
             }
         }).collect();
 
+        let total_missing = missing_regions.values().sum::<f64>();
+        // Include penalties for erroneously-disjoint shapes
+        // let mut disjoint_penalties = Vec::<DisjointPenalty>::new();
+        let mut total_disjoint_penalty = Dual::zero(error.d().len());
+
         for (shape_idxs, target_area) in missing_regions.iter() {
             let n = shape_idxs.len();
-            for i in 0..(n-1) {
-                let shape0 = &shapes[i];
-                for j in (i+1)..n {
-                    let shape1 = &shapes[j];
-                    match shape0.gap(&shape1) {
-                        Some(gap) => {
-                            debug!("  missing region penalty! {}: {} * {}", shape_idxs.iter().map(|idx| idx.to_string()).collect::<Vec<_>>().join(""), &gap, target_area);
-                            error += gap * target_area;
-                        },
-                        None => (),
-                    }
-                }
-            }
-            let mut key = String::from_utf8(vec![b'*'; shapes.len()]).unwrap();
-            for (idx, shape_idx) in shape_idxs.iter().enumerate() {
-                let ch = char::to_string(&char::from_digit(*shape_idx as u32, 10).unwrap());
-                key.replace_range(idx..idx+1, &ch);
-            }
-            expanded_targets.insert(key, *target_area);
+            let nf = n as f64;
+            let centroid: R2<Dual> = shape_idxs.iter().map(|idx| shapes[*idx].center()).sum::<R2<Dual>>();
+            let centroid = R2 { x: centroid.x / nf, y: centroid.y / nf };
+            shape_idxs.iter().for_each(|idx| {
+                let shape = &shapes[*idx];
+                let distance = shape.center().distance(&centroid);
+                // debug!("  missing region penalty! {}: {} * {}", shape_idxs.iter().map(|idx| idx.to_string()).collect::<Vec<_>>().join(""), &gap, target_area);
+                total_disjoint_penalty += distance * target_area / nf;
+            });
         }
         if !missing_regions.is_empty() {
             info!("missing_regions: {:?}", missing_regions);
         }
-
-        // Include penalties for erroneously-disjoint shapes
-        // let mut disjoint_penalties = Vec::<DisjointPenalty>::new();
-        let mut total_disjoint_penalty = Dual::zero(error.d().len());
-        let n = inputs.len();
-        for i in 0..(n - 1) {
-            let ci = shapes[i].clone();
-            for j in (i + 1)..n {
-                let mut key = String::from_utf8(vec![b'*'; n]).unwrap();
-                let chi = char::to_string(&char::from_digit(i as u32, 10).unwrap());
-                let chj = char::to_string(&char::from_digit(j as u32, 10).unwrap());
-                key.replace_range(i..i+1, &chi);
-                key.replace_range(j..j+1, &chj);
-                let target = expanded_targets.get(&key);
-                match target {
-                    Some(target) => {
-                        match ci.gap(&shapes[j]) {
-                            Some(gap) => {
-                                debug!("  disjoint penalty! {}: {} * {}", key, &gap, target);
-                                total_disjoint_penalty += gap * target;
-                            },
-                            None => (),
-                        }
-                    },
-                    None => ()
-                }
-            }
-        }
+        total_disjoint_penalty = total_disjoint_penalty.recip() * total_missing;
+        // let n = inputs.len();
+        // for i in 0..(n - 1) {
+        //     let ci = shapes[i].clone();
+        //     for j in (i + 1)..n {
+        //         let mut key = String::from_utf8(vec![b'*'; n]).unwrap();
+        //         let chi = char::to_string(&char::from_digit(i as u32, 10).unwrap());
+        //         let chj = char::to_string(&char::from_digit(j as u32, 10).unwrap());
+        //         key.replace_range(i..i+1, &chi);
+        //         key.replace_range(j..j+1, &chj);
+        //         let target = expanded_targets.get(&key);
+        //         match target {
+        //             Some(target) => {
+        //                 match ci.gap(&shapes[j]) {
+        //                     Some(gap) => {
+        //                         debug!("  disjoint penalty! {}: {} * {}", key, &gap, target);
+        //                         total_disjoint_penalty += gap * target;
+        //                     },
+        //                     None => (),
+        //                 }
+        //             },
+        //             None => ()
+        //         }
+        //     }
+        // }
 
         if total_disjoint_penalty.v() > 0. {
-            debug!("  total_disjoint_penalty: {}", total_disjoint_penalty);
-            error += total_disjoint_penalty;
+            info!("  total_disjoint_penalty: {}", total_disjoint_penalty);
+            error += Dual::new(total_disjoint_penalty.v(), total_disjoint_penalty.d().iter().map(|d| -d).collect());
+            // error += total_disjoint_penalty;
         }
 
         Diagram { inputs, regions, targets, total_target_area, total_area, errors, error }

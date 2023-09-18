@@ -1,4 +1,4 @@
-use std::{ops::{Sub, Mul, Add, Div}, fmt::{Display, Formatter, self}};
+use std::{ops::{Sub, Mul, Add, Div}, fmt::{Display, Formatter, self}, iter::Sum};
 use approx::{AbsDiffEq, RelativeEq};
 
 use derive_more::{Neg, From};
@@ -284,6 +284,16 @@ where
             x: self / rhs.x,
             y: self / rhs.y,
         }
+    }
+}
+
+impl<D: Sum> Sum for R2<D>
+where R2<D>: Add<Output = R2<D>>
+{
+    fn sum<I: Iterator<Item = Self>>(mut iter: I) -> Self {
+        let first = iter.next().unwrap();
+        iter.fold(first, |a, b| a + b)
+        // iter.fold(R2 { x: D::zero(), y: D::zero() }, |a, b| a + b)
     }
 }
 

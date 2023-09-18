@@ -28,11 +28,17 @@ impl Shape<f64> {
     }
 }
 
-impl<D> Shape<D> {
+impl<D: Clone> Shape<D> {
     pub fn idx(&self) -> usize {
         match self {
             Shape::Circle(c) => c.idx,
             Shape::XYRR(e) => e.idx,
+        }
+    }
+    pub fn center(&self) -> R2<D> {
+        match self {
+            Shape::Circle(c) => c.c.clone(),
+            Shape::XYRR(e) => e.c.clone(),
         }
     }
 }
