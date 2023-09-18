@@ -4,18 +4,18 @@ use log::debug;
 
 use crate::{circle::Circle, ellipses::xyrr::XYRR, r2::R2, sqrt::Sqrt, shape::Shape, theta_points::{ThetaPoints, ThetaPointsArg}, transform::CanProject};
 
-pub trait Distance<O> {
+pub trait Gap<O> {
     type Output;
-    fn distance(&self, o: &O) -> Option<Self::Output>;
+    fn gap(&self, o: &O) -> Option<Self::Output>;
 }
 
-impl<D: Clone + Add<Output = D> + Mul<Output = D> + Sqrt> Distance<R2<D>> for R2<D>
+impl<D: Clone + Add<Output = D> + Mul<Output = D> + Sqrt> Gap<R2<D>> for R2<D>
 where
     R2<D>
     : Sub<Output = R2<D>>
 {
     type Output = D;
-    fn distance(&self, o: &R2<D>) -> Option<D> {
+    fn gap(&self, o: &R2<D>) -> Option<D> {
         Some((self.clone() - o.clone()).r())
     }
 }
@@ -30,14 +30,14 @@ impl<
     + Add<Output = D>
     + Sub<Output = D>
     + Mul<Output = D>
-> Distance<Circle<D>> for Circle<D>
+> Gap<Circle<D>> for Circle<D>
 where
     R2<D>
     : Sub<Output = R2<D>>
     + Sub<&'a R2<D>, Output = R2<D>>,
 {
     type Output = D;
-    fn distance(&self, o: &Circle<D>) -> Option<D> {
+    fn gap(&self, o: &Circle<D>) -> Option<D> {
         let distance = (self.c.clone() - o.c.clone()).norm();
         let gap = distance - self.r.clone() - o.r.clone();
         let gap_f64: f64 = gap.clone().into();
@@ -53,7 +53,7 @@ impl<
     D
     : ThetaPointsArg
     + Sub<Output = D>
-> Distance<XYRR<D>> for Circle<D>
+> Gap<XYRR<D>> for Circle<D>
 where
     R2<D>
     : Neg<Output = R2<D>>
@@ -62,8 +62,8 @@ where
     f64: Div<D, Output = D>,
 {
     type Output = D;
-    fn distance(&self, o: &XYRR<D>) -> Option<D> {
-        self.xyrr().distance(o)
+    fn gap(&self, o: &XYRR<D>) -> Option<D> {
+        self.xyrr().gap(o)
     }
 }
 
@@ -71,7 +71,7 @@ impl<
     D
     : ThetaPointsArg
     + Sub<Output = D>
-> Distance<XYRR<D>> for XYRR<D>
+> Gap<XYRR<D>> for XYRR<D>
 where
     R2<D>
     : Neg<Output = R2<D>>
@@ -80,7 +80,7 @@ where
     f64: Div<D, Output = D>,
 {
     type Output = D;
-    fn distance(&self, o: &XYRR<D>) -> Option<D> {
+    fn gap(&self, o: &XYRR<D>) -> Option<D> {
         let t0 = Shape::XYRR(self.clone()).theta(o.c.clone());
         let distance = (self.c.clone() - o.c.clone()).norm();
         let p0 = Shape::XYRR(self.clone()).point(t0.clone());
@@ -102,7 +102,7 @@ impl<
     : 'a
     + ThetaPointsArg
     + Sub<Output = D>
-> Distance<Shape<D>> for Shape<D>
+> Gap<Shape<D>> for Shape<D>
 where
     R2<D>
     : Sub<Output = R2<D>>
@@ -113,12 +113,12 @@ where
     : Div<D, Output = D>,
 {
     type Output = D;
-    fn distance(&self, o: &Shape<D>) -> Option<D> {
+    fn gap(&self, o: &Shape<D>) -> Option<D> {
         match (self, o) {
-            (Shape::Circle(c0), Shape::Circle(c1)) => c0.distance(c1),
-            (Shape::Circle(c0), Shape::XYRR(e)) => c0.distance(e),
-            (Shape::XYRR(e), Shape::Circle(o)) => o.distance(e),
-            (Shape::XYRR(e), Shape::XYRR(o)) => e.distance(o),
+            (Shape::Circle(c0), Shape::Circle(c1)) => c0.gap(c1),
+            (Shape::Circle(c0), Shape::XYRR(e)) => c0.gap(e),
+            (Shape::XYRR(e), Shape::Circle(o)) => o.gap(e),
+            (Shape::XYRR(e), Shape::XYRR(o)) => e.gap(o),
         }
     }
 }

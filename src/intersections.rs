@@ -4,7 +4,7 @@ use std::{cell::RefCell, rc::Rc, f64::consts::TAU, collections::BTreeSet, ops::{
 use log::{error, debug};
 use ordered_float::OrderedFloat;
 
-use crate::{node::{N, Node}, edge::{self, E}, distance::Distance, region::{Region, RegionArg}, shape::{S, Shape}, segment::Segment, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::CanTransform, intersection::Intersection, dual::Dual, to::To, math::deg::Deg, fmt::Fmt};
+use crate::{node::{N, Node}, edge::{self, E}, gap::Gap, region::{Region, RegionArg}, shape::{S, Shape}, segment::Segment, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::CanTransform, intersection::Intersection, dual::Dual, to::To, math::deg::Deg, fmt::Fmt};
 
 #[derive(Clone, Debug)]
 pub struct Intersections<D> {
@@ -69,7 +69,7 @@ where
                 for i in intersections {
                     let mut merged = false;
                     for node in &nodes {
-                        let d = node.borrow().p.distance(&i.p()).unwrap();
+                        let d = node.borrow().p.gap(&i.p()).unwrap();
                         if d.into() < merge_threshold {
                             // This intersection is close enough to an existing node; merge them
                             let mut node = node.borrow_mut();

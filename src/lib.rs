@@ -8,7 +8,7 @@ pub mod areas;
 pub mod circle;
 pub mod d5;
 pub mod diagram;
-pub mod distance;
+pub mod gap;
 pub mod dual;
 pub mod edge;
 pub mod ellipses;

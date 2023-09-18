@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 use tsify::{declare, Tsify};
 
 use crate::ellipses::xyrr::XYRR;
-use crate::shape::{Input, Shape, Duals};
-use crate::{circle::Circle, intersections::Intersections, r2::R2, areas::Areas, regions::Regions, distance::Distance};
+use crate::shape::{Input, Shape, Duals, self};
+use crate::{circle::Circle, intersections::Intersections, math::is_zero::IsZero, r2::R2, areas::Areas, regions::Regions, gap::Gap};
 use crate::dual::{Dual, D};
 
 #[declare]
@@ -73,6 +73,41 @@ impl Diagram {
         // let error = errors.values().into_iter().map(|e| e.error.clone() * &e.error).sum::<D>().sqrt();
         let regions = Regions::new(&intersections);
 
+        let missing_regions: BTreeMap<Vec<usize>, f64> = errors.iter().filter_map(|(key, error)| {
+            if error.actual_area.clone().filter(|a| !a.is_zero()).is_none() && error.target_area > 0. {
+                let shape_idxs: Vec<usize> = key.chars().enumerate().filter(|(_, c)| *c != '*' && *c != '-').map(|(idx, _)| idx).collect();
+                Some((shape_idxs, error.target_area))
+            } else {
+                None
+            }
+        }).collect();
+
+        for (shape_idxs, target_area) in missing_regions.iter() {
+            let n = shape_idxs.len();
+            for i in 0..(n-1) {
+                let shape0 = &shapes[i];
+                for j in (i+1)..n {
+                    let shape1 = &shapes[j];
+                    match shape0.gap(&shape1) {
+                        Some(gap) => {
+                            debug!("  missing region penalty! {}: {} * {}", shape_idxs.iter().map(|idx| idx.to_string()).collect::<Vec<_>>().join(""), &gap, target_area);
+                            error += gap * target_area;
+                        },
+                        None => (),
+                    }
+                }
+            }
+            let mut key = String::from_utf8(vec![b'*'; shapes.len()]).unwrap();
+            for (idx, shape_idx) in shape_idxs.iter().enumerate() {
+                let ch = char::to_string(&char::from_digit(*shape_idx as u32, 10).unwrap());
+                key.replace_range(idx..idx+1, &ch);
+            }
+            expanded_targets.insert(key, *target_area);
+        }
+        if !missing_regions.is_empty() {
+            info!("missing_regions: {:?}", missing_regions);
+        }
+
         // Include penalties for erroneously-disjoint shapes
         // let mut disjoint_penalties = Vec::<DisjointPenalty>::new();
         let mut total_disjoint_penalty = Dual::zero(error.d().len());
@@ -88,7 +123,7 @@ impl Diagram {
                 let target = expanded_targets.get(&key);
                 match target {
                     Some(target) => {
-                        match ci.distance(&shapes[j]) {
+                        match ci.gap(&shapes[j]) {
                             Some(gap) => {
                                 debug!("  disjoint penalty! {}: {} * {}", key, &gap, target);
                                 total_disjoint_penalty += gap * target;
