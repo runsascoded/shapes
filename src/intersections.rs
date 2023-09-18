@@ -196,7 +196,6 @@ where
                 let arc_midpoint = duals[shape_idx].borrow().arc_midpoint(cur_theta.clone(), nxt_theta.clone());
                 let mut is_component_boundary = true;
                 let mut containers: Vec<S<D>> = Vec::new();
-                let mut containments: Vec<bool> = Vec::new();
                 for cdx in 0..num_shapes {
                     if cdx == shape_idx {
                         continue;
@@ -210,7 +209,6 @@ where
                             is_component_boundary = false;
                         }
                     }
-                    containments.push(contained);
                 }
                 let expected_visits = if is_component_boundary { 1 } else { 2 };
                 total_expected_visits += expected_visits;
@@ -220,7 +218,6 @@ where
                     n0: cur_node, n1: nxt_node,
                     t0: cur_theta, t1: nxt_theta,
                     containers,
-                    containments,
                     expected_visits,
                     visits: 0,
                 }));

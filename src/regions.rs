@@ -18,7 +18,6 @@ pub struct Edge {
     pub t0: f64,
     pub t1: f64,
     pub containers: Vec<usize>,
-    pub containments: Vec<bool>,
 }
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
@@ -58,7 +57,6 @@ impl Regions {
             t0: e.borrow().t0.v(),
             t1: e.borrow().t1.v(),
             containers: e.borrow().containers.iter().map(|c| c.borrow().idx()).collect(),
-            containments: e.borrow().containments.clone(),
             // expected_visits: e.borrow().expected_visits,
             // visits: e.visits,
         }).collect();

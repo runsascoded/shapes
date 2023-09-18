@@ -13,7 +13,6 @@ pub struct Edge<D> {
     pub t0: D,
     pub t1: D,
     pub containers: Vec<S<D>>,
-    pub containments: Vec<bool>,
     pub expected_visits: usize,
     pub visits: usize,
 }
