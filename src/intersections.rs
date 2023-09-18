@@ -4,7 +4,7 @@ use std::{cell::RefCell, rc::Rc, f64::consts::TAU, collections::BTreeSet, ops::{
 use log::{error, debug};
 use ordered_float::OrderedFloat;
 
-use crate::{node::{N, Node}, edge::{self, E}, distance::Distance, region::{Region, RegionArg}, shape::{S, Shape}, segment::Segment, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::CanTransform, intersection::Intersection, dual::Dual, to::To, math::deg::Deg, fmt::Fmt};
+use crate::{node::{N, Node}, edge::{self, E}, contains::Contains, distance::Distance, region::{Region, RegionArg}, shape::{S, Shape}, segment::Segment, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::CanTransform, intersection::Intersection, dual::Dual, to::To, math::deg::Deg, fmt::Fmt};
 
 #[derive(Clone, Debug)]
 pub struct Intersections<D> {
@@ -61,11 +61,23 @@ where
         let duals: Vec<S<D>> = shapes.clone().into_iter().map(|s| Rc::new(RefCell::new(s))).collect();
         let mut nodes: Vec<N<D>> = Vec::new();
         let merge_threshold = 1e-7;
+        let zero = shapes[0].zero();
 
+        let mut is_directly_connected: Vec<Vec<bool>> = Vec::new();
         // Intersect all shapes, pair-wise
         for (idx, dual) in duals.iter().enumerate() {
+            let mut directly_connected: Vec<bool> = Vec::new();
+            for jdx in 0..(idx - 1) {
+                directly_connected.push(is_directly_connected[jdx][idx]);
+            }
+            directly_connected.push(false);
             for jdx in (idx + 1)..num_shapes {
                 let intersections = dual.borrow().intersect(&duals[jdx].borrow());
+                if intersections.is_empty() {
+                    directly_connected.push(false);
+                } else {
+                    directly_connected.push(true);
+                }
                 for i in intersections {
                     let mut merged = false;
                     for node in &nodes {
@@ -93,6 +105,7 @@ where
                     nodes.push(n.clone());
                 }
             }
+            is_directly_connected.push(directly_connected);
         }
 
         debug!("{} nodes", (&nodes).len());
@@ -137,16 +150,17 @@ where
                 })
             });
         }
-        let mut shape_containments: Vec<Vec<usize>> = Vec::new();
-        for shape in &shapes {
-            let mut shape_containment: Vec<usize> = Vec::new();
-            for (idx, dual) in duals.iter().enumerate() {
-                if dual.borrow().contains(&shape()) {
-                    shape_containment.push(idx);
+        let mut shape_containers: Vec<Vec<usize>> = Vec::new();
+        for (idx, shape) in shapes.iter().enumerate() {
+            let mut containers: Vec<usize> = Vec::new();
+            for (jdx, container) in duals.iter().enumerate() {
+                if container.borrow().contains(&shape.point(zero.clone())) && !is_directly_connected[idx][jdx] {
+                    containers.push(jdx);
                 }
             }
-            shape_containments.push(shape_containment);
+            shape_containers.push(containers);
         }
+
         // Sort each circle's nodes in order of where they appear on the circle (from -PI to PI)
         for (idx, nodes) in nodes_by_shape.iter_mut().enumerate() {
             nodes.sort_by_cached_key(|n| OrderedFloat(n.borrow().theta(idx).into()))

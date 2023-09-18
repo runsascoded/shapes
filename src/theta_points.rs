@@ -6,7 +6,6 @@ pub trait ThetaPoints<D> {
     fn theta(&self, p: R2<D>) -> D;
     fn point(&self, t: D) -> R2<D>;
     fn arc_midpoint(&self, t0: D, t1: D) -> R2<D>;
-    fn contains(&self, p: &R2<D>) -> bool;
 }
 
 pub trait ThetaPointsArg
@@ -42,8 +41,5 @@ where
         let t1 = if t1 < t0 { t1 + 2. * PI } else { t1 };
         let t = (t0 + t1) / 2.;
         self.point(t)
-    }
-    fn contains(&self, p: &R2<D>) -> bool {
-        p.apply(&self.projection()).norm().into() <= 1.
     }
 }
