@@ -360,7 +360,7 @@ mod tests {
         check(inputs, FIZZ_BUZZ_BAZZ.into(), "fizz_buzz_bazz_circles", 0.7, 100)
     }
 
-    use crate::intersections::tests::ellipses4;
+    use crate::scene::tests::ellipses4;
 
     #[test]
     fn variant_callers() {

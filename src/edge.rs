@@ -12,8 +12,8 @@ pub struct Edge<D> {
     pub n1: N<D>,
     pub t0: D,
     pub t1: D,
-    pub containers: Vec<S<D>>,
-    pub expected_visits: usize,
+    pub container_idxs: BTreeSet<usize>,
+    pub is_component_boundary: bool,
     pub visits: usize,
 }
 
@@ -39,7 +39,6 @@ impl<D: EdgeArg> Edge<D> {
         let theta = self.theta();
         r2 / 2. * (theta.clone() - theta.sin())
     }
-
     /// Angle span of this Edge, in terms of the shape whose border it is part of
     pub fn theta(&self) -> D {
         let theta = self.t1.clone() - self.t0.clone();
@@ -48,17 +47,20 @@ impl<D: EdgeArg> Edge<D> {
         }
         theta
     }
-
-    /// Return all shape indices that either contain this Edge
-    pub fn container_idxs(&self) -> BTreeSet<usize> {
-        self.containers.iter().map(|c| c.borrow().idx()).collect()
+    pub fn shape_idx(&self) -> usize {
+        self.c.borrow().idx()
     }
-
     /// Return all shape indices that either contain this Edge, or which this Edge runs along the border of
     pub fn all_idxs(&self) -> BTreeSet<usize> {
-        let mut idxs = self.container_idxs();
+        let mut idxs = self.container_idxs.clone();
         idxs.insert(self.c.borrow().idx());
         idxs
+    }
+}
+
+impl<D> Edge<D> {
+    pub fn expected_visits(&self) -> usize {
+        if self.is_component_boundary { 1 } else { 2 }
     }
 }
 
@@ -69,15 +71,15 @@ impl<
     + Into<f64>
 > Display for Edge<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let containers: Vec<String> = self.containers.iter().map(|c| format!("{}", c.borrow().idx())).collect();
+        let containers: Vec<String> = self.container_idxs.iter().map(|idx| format!("{}", idx)).collect();
         write!(
             f,
-            "C{}: {}({}) → {}({}), containers: [{}], expected_visits: {}",
+            "C{}: {}({}) → {}({}), containers: [{}] ({})",
             self.c.borrow().idx(),
             self.n0.borrow().idx, self.t0.clone().into().deg_str(),
             self.n1.borrow().idx, self.t1.clone().into().deg_str(),
             containers.join(","),
-            self.expected_visits,
+            if self.is_component_boundary { "external" } else { "internal" },
         )
     }
 }

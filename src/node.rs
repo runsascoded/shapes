@@ -23,6 +23,22 @@ pub struct Node<D> {
     pub edges: Vec<E<D>>,
 }
 
+impl<D: Clone> Node<D> {
+    pub fn theta(&self, idx: usize) -> D {
+        self.shape_thetas.get(&idx).unwrap().clone()
+    }
+}
+impl<D> Node<D> {
+    pub fn add_edge(&mut self, edge: E<D>) {
+        self.edges.push(edge);
+    }
+}
+impl Node<D> {
+    pub fn v(&self) -> R2<f64> {
+        self.p.v()
+    }
+}
+
 impl<
     D
     : Clone
@@ -30,20 +46,11 @@ impl<
     + Mul<f64, Output = D>
     + Div<f64, Output = D>,
 > Node<D>
-where
-    Intersection<D>: Display,
-    R2<D>
-    : Add<Output = R2<D>>
+where R2<D>: Add<Output = R2<D>>,
     // TODO: can't get these to derive for R2<Dual>
     // + Mul<f64, Output = R2<D>>
     // + Div<f64, Output = R2<D>>,
 {
-    pub fn theta(&self, idx: usize) -> D {
-        self.shape_thetas.get(&idx).unwrap().clone()
-    }
-    pub fn add_edge(&mut self, edge: E<D>) {
-        self.edges.push(edge);
-    }
     pub fn merge(&mut self, intersection: Intersection<D>) {
         let p = self.p.clone();
         let o = intersection.p();
@@ -62,12 +69,6 @@ where
         self.intersections.push(intersection);
     }
 }
-impl Node<D> {
-    pub fn v(&self) -> R2<f64> {
-        self.p.v()
-    }
-}
-
 impl<D: Display + Deg + Fmt> Display for Node<D>
 where
     Intersection<D>: Display,

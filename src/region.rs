@@ -1,4 +1,4 @@
-use std::{fmt::{Formatter, Display, self}, ops::Add, iter::Sum};
+use std::{fmt::{Formatter, Display, self}, ops::Add, iter::Sum, collections::BTreeSet};
 
 use crate::{segment::Segment, intersection::Intersection, edge::{Edge, EdgeArg}, math::abs::{Abs, AbsArg}, r2::R2, to::To, dual::Dual};
 
@@ -6,8 +6,7 @@ use crate::{segment::Segment, intersection::Intersection, edge::{Edge, EdgeArg},
 pub struct Region<D> {
     pub key: String,
     pub segments: Vec<Segment<D>>,
-    pub container_idxs: Vec<usize>,
-    pub container_bmp: Vec<bool>,
+    pub container_idxs: BTreeSet<usize>,
 }
 
 pub trait RegionArg
@@ -46,10 +45,11 @@ where
     }
     pub fn matches(&self, key: &String) -> bool {
         for (idx, ch) in (&key).chars().enumerate() {
-            if ch == '-' && self.container_bmp[idx] {
+            let is_container = self.container_idxs.contains(&idx);
+            if ch == '-' && is_container {
                 return false;
             }
-            if ch != '*' && !self.container_bmp[idx] {
+            if ch != '*' && !is_container {
                 return false
             }
         }

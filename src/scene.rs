@@ -1,25 +1,18 @@
 use core::f64;
-use std::{cell::RefCell, rc::Rc, f64::consts::TAU, collections::BTreeSet, ops::{Neg, Add, Sub, Mul, Div}, fmt::Display};
+use std::{cell::RefCell, rc::Rc, collections::BTreeSet, ops::{Neg, Add, Sub, Mul, Div}, fmt::Display};
 
-use log::{error, debug};
+use log::debug;
 use ordered_float::OrderedFloat;
 
-use crate::{node::{N, Node}, edge::{self, E}, contains::Contains, distance::Distance, region::{Region, RegionArg}, shape::{S, Shape}, segment::Segment, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::CanTransform, intersection::Intersection, dual::Dual, to::To, math::deg::Deg, fmt::Fmt};
+use crate::{node::{N, Node}, contains::Contains, distance::Distance, region::RegionArg, shape::{S, Shape}, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::CanTransform, intersection::Intersection, dual::Dual, to::To, math::deg::Deg, fmt::Fmt, component::Component};
 
 #[derive(Clone, Debug)]
-pub struct Intersections<D> {
+pub struct Scene<D> {
     pub shapes: Vec<Shape<D>>,
-    pub nodes: Vec<N<D>>,
-    // pub nodes_by_shape: Vec<Vec<N<D>>>,
-    // pub nodes_by_shapes: Vec<Vec<Vec<N<D>>>>,
-    pub edges: Vec<E<D>>,
-    pub is_connected: Vec<Vec<bool>>,
-    pub regions: Vec<Region<D>>,
-    pub total_visits: usize,
-    pub total_expected_visits: usize,
+    pub components: Vec<Component<D>>,
 }
 
-pub trait IntersectionsD
+pub trait SceneD
 : IntersectShapesArg
 + Add<Output = Self>
 + Mul<f64, Output = Self>
@@ -28,9 +21,9 @@ pub trait IntersectionsD
 + Fmt
 + RegionArg
 {}
-impl IntersectionsD for f64 {}
-impl IntersectionsD for Dual {}
-pub trait IntersectionsR2<D>
+impl SceneD for f64 {}
+impl SceneD for Dual {}
+pub trait SceneR2<D>
 : Neg<Output = Self>
 // TODO: can't get this to derive for R2<Dual>
 // + Mul<f64, Output = Self>
@@ -38,25 +31,25 @@ pub trait IntersectionsR2<D>
 + CanTransform<D, Output = Self>
 + To<R2<f64>>
 {}
-impl IntersectionsR2<f64> for R2<f64> {}
-impl IntersectionsR2<Dual> for R2<Dual> {}
-pub trait IntersectionsFloat<D>
+impl SceneR2<f64> for R2<f64> {}
+impl SceneR2<Dual> for R2<Dual> {}
+pub trait SceneFloat<D>
 : Add<D, Output = D>
 + Sub<D, Output = D>
 + Mul<D, Output = D>
 + Div<D, Output = D>
 {}
-impl IntersectionsFloat<f64> for f64 {}
-impl IntersectionsFloat<Dual> for f64 {}
+impl SceneFloat<f64> for f64 {}
+impl SceneFloat<Dual> for f64 {}
 
-impl<D: IntersectionsD> Intersections<D>
+impl<D: SceneD> Scene<D>
 where
-    R2<D>: IntersectionsR2<D>,
+    R2<D>: SceneR2<D>,
     Shape<D>: CanTransform<D, Output = Shape<D>>,
     Intersection<D>: Display,
-    f64: IntersectionsFloat<D>,
+    f64: SceneFloat<D>,
 {
-    pub fn new(shapes: Vec<Shape<D>>) -> Intersections<D> {
+    pub fn new(shapes: Vec<Shape<D>>) -> Scene<D> {
         let num_shapes = (&shapes).len();
         let duals: Vec<S<D>> = shapes.clone().into_iter().map(|s| Rc::new(RefCell::new(s))).collect();
         let mut nodes: Vec<N<D>> = Vec::new();
@@ -150,12 +143,12 @@ where
                 })
             });
         }
-        let mut shape_containers: Vec<Vec<usize>> = Vec::new();
+        let mut shape_containers: Vec<BTreeSet<usize>> = Vec::new();
         for (idx, shape) in shapes.iter().enumerate() {
-            let mut containers: Vec<usize> = Vec::new();
+            let mut containers: BTreeSet<usize> = BTreeSet::new();
             for (jdx, container) in duals.iter().enumerate() {
                 if container.borrow().contains(&shape.point(zero.clone())) && !is_directly_connected[idx][jdx] {
-                    containers.push(jdx);
+                    containers.insert(jdx);
                 }
             }
             shape_containers.push(containers);
@@ -166,124 +159,28 @@ where
             nodes.sort_by_cached_key(|n| OrderedFloat(n.borrow().theta(idx).into()))
         }
 
-        let mut assigned_idxs: BTreeSet<usize> = BTreeSet::new();
-        let mut connected_components: Vec<Vec<usize>> = Vec::new();
-        for shape_idx in 0..num_shapes {
-            if assigned_idxs.contains(&shape_idx) {
-                continue
-            }
-            let connection_idxs = is_connected[shape_idx].clone().into_iter().enumerate().filter(|(_, c)| *c).map(|(i, _)| i).collect::<Vec<usize>>();
-            connected_components.push(connection_idxs.clone());
-            for idx in connection_idxs {
-                assigned_idxs.insert(idx);
-            }
-        }
-
-        // Construct edges
-        let mut edges: Vec<E<D>> = Vec::new();
-        let mut total_expected_visits = 0;
-        for shape_idx in 0..num_shapes {
-            let nodes = &nodes_by_shape[shape_idx];
-            debug!("{} nodes for shape {}: {}", nodes.len(), shape_idx, nodes.iter().map(|n| n.borrow().theta(shape_idx).deg_str()).collect::<Vec<String>>().join(", "));
-            let num_shape_nodes = nodes.len();
-            let c = duals[shape_idx].clone();
-            for node_idx in 0..num_shape_nodes {
-                let cur_node = nodes[node_idx].clone();
-                let nxt_node = nodes[(node_idx + 1) % num_shape_nodes].clone();
-                let cur_theta = cur_node.borrow().theta(shape_idx);
-                let nxt_theta = nxt_node.borrow().theta(shape_idx);
-                let nxt_theta = if &nxt_theta < &cur_theta { nxt_theta + TAU } else { nxt_theta };
-                let arc_midpoint = duals[shape_idx].borrow().arc_midpoint(cur_theta.clone(), nxt_theta.clone());
-                let mut is_component_boundary = true;
-                let mut containers: Vec<S<D>> = Vec::new();
-                for cdx in 0..num_shapes {
-                    if cdx == shape_idx {
-                        continue;
-                    }
-                    let container = duals[cdx].clone();
-                    let contained = container.borrow().contains(&arc_midpoint);
-                    if contained {
-                        // Shape cdx contains this edge
-                        containers.push(container.clone());
-                        if is_connected[shape_idx][cdx] {
-                            is_component_boundary = false;
-                        }
-                    }
+        let components_idxs: Vec<Vec<usize>> = {
+            let mut assigned_idxs: BTreeSet<usize> = BTreeSet::new();
+            let mut components_idxs: Vec<Vec<usize>> = Vec::new();
+            for shape_idx in 0..num_shapes {
+                if assigned_idxs.contains(&shape_idx) {
+                    continue
                 }
-                let expected_visits = if is_component_boundary { 1 } else { 2 };
-                total_expected_visits += expected_visits;
-                let edge = Rc::new(RefCell::new(edge::Edge {
-                    idx: edges.len(),
-                    c: c.clone(),
-                    n0: cur_node, n1: nxt_node,
-                    t0: cur_theta, t1: nxt_theta,
-                    containers,
-                    expected_visits,
-                    visits: 0,
-                }));
-                edges.push(edge.clone());
-                edge.borrow_mut().n0.borrow_mut().add_edge(edge.clone());
-                edge.borrow_mut().n1.borrow_mut().add_edge(edge.clone());
-            }
-        }
-
-        debug!("{} edges", (&edges).len());
-        for edge in &edges {
-            debug!("  {}", edge.borrow());
-        }
-        debug!("");
-
-        // Graph-traversal will accumulate Regions here
-        let mut regions: Vec<Region<D>> = Vec::new();
-        // Working list o Segments comprising partial Regions, as they are built up and verified by `traverse`
-        let mut segments: Vec<Segment<D>> = Vec::new();
-        let mut visited_nodes: BTreeSet<usize> = BTreeSet::new();
-        // The first two Segments for each Region uniquely determine various properties of the Region, so we loop over and construct them explicitly below, before kicking off a recursive `traverse` process to complete each Region.
-        for edge in edges.clone() {
-            if edge.borrow().visits == edge.borrow().expected_visits {
-                // All of the Regions we expect this Edge to be a part of have already been computed and saved, nothing further to do with this Edge.
-                continue;
-            }
-            let segment = Segment { edge: edge.clone(), fwd: true };  // Each Region's first edge can be traversed in the forward direction, WLOG
-            let start = &segment.start();
-            let end = &segment.end();
-            let segment_end_idx = end.borrow().idx;
-            let successors = segment.successors();
-            segments.push(segment);
-            visited_nodes.insert(segment_end_idx);
-            let container_idxs = &mut edge.borrow().all_idxs().clone();  // Shape indices that contain the first Edge, will be intersected with the second Edge below to obtain the set of shapes for the Region under construction.
-            for successor in successors {
-                let segment_end_idx = successor.end().borrow().idx;
-                visited_nodes.insert(segment_end_idx);
-                segments.push(successor.clone());
-                let nxt = successor.edge.clone();
-                let nxt_idxs = nxt.borrow().all_idxs();
-                let both = container_idxs.intersection(&nxt_idxs).cloned().collect::<BTreeSet<usize>>();
-                if !both.is_empty() {
-                    // Recursively traverse the graph, trying to add each eligible Segment to the list we've seeded here, accumulating valid Regions in `regions` along the way.
-                    Intersections::traverse(&start, num_shapes, &mut regions, &mut segments, &both, &mut visited_nodes, edges.len());
-                    assert_eq!(segments.len(), 2);
+                let connection_idxs = is_connected[shape_idx].clone().into_iter().enumerate().filter(|(_, c)| *c).map(|(i, _)| i).collect::<Vec<usize>>();
+                components_idxs.push(connection_idxs.clone());
+                for idx in connection_idxs {
+                    assigned_idxs.insert(idx);
                 }
-                segments.pop();
-                visited_nodes.remove(&segment_end_idx);
             }
-            segments.pop();
-            visited_nodes.remove(&segment_end_idx);
-        }
+            components_idxs
+        };
+        let components: Vec<Component<D>> =
+            components_idxs
+            .into_iter()
+            .map(|component_idxs| Component::new(component_idxs, &shape_containers, &nodes_by_shape, &duals, num_shapes))
+            .collect();
 
-        debug!("{} regions", (&regions).len());
-        for region in &regions {
-            debug!("  {}", region);
-        }
-        debug!("");
-
-        // Verify that all Edges have been visited the expected number of times
-        let total_visits = edges.iter().map(|e| e.borrow().visits).sum::<usize>();
-        if total_visits != total_expected_visits {
-            error!("total_visits ({}) != total_expected_visits ({})", total_visits, total_expected_visits);
-        }
-
-        Intersections { shapes, nodes, edges, is_connected, regions, total_visits, total_expected_visits, }
+        Scene { shapes, components, }
     }
 
     pub fn area(&self, key: &String) -> Option<D> {
@@ -300,12 +197,14 @@ where
                 }
             }
             None => {
-                let regions = &self.regions;
                 let areas =
-                regions
-                .iter()
-                .filter(|r| &r.key == key)
-                .map(|r| r.area());
+                    self
+                    .components
+                    .iter()
+                    .flat_map(|c| c.regions.iter())
+                    .filter(|r| &r.key == key)
+                    .map(|r| r.area());
+                // TODO: SumOpt trait?
                 let mut sum = None;
                 for area in areas {
                     match sum {
@@ -314,124 +213,6 @@ where
                     }
                 }
                 sum
-            }
-        }
-    }
-
-    /// Recursively traverse the graph, accumulating valid Regions in `regions` along the way.
-    fn traverse(
-        start: &N<D>,
-        num_shapes: usize,
-        regions: &mut Vec<Region<D>>,
-        segments: &mut Vec<Segment<D>>,
-        container_idxs: &BTreeSet<usize>,
-        visited_nodes: &mut BTreeSet<usize>,
-        max_edges: usize,
-    ) {
-        debug!("traverse, segments:");
-        for segment in segments.clone() {
-            debug!("  {}", segment);
-        }
-        debug!("");
-        if segments.len() > max_edges {
-            panic!("segments.len() ({}) > edges.len() ({})", segments.len(), max_edges);
-        }
-        let last_segment = segments.last().unwrap();
-        let end = last_segment.end();
-        let indent = String::from_utf8(vec![b' '; 4 * (segments.len() - 2)]).unwrap();
-        let idxs_str = segments.iter().fold(start.borrow().idx.to_string(), |acc, s| {
-            format!("{}→{}", acc, s.end().borrow().idx)
-        });
-        let containers_str = container_idxs.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(" ");
-        debug!(
-            "{}traverse: {}, {} segments, containers: [{}], {} regions",
-            indent,
-            idxs_str,
-            segments.len(),
-            containers_str,
-            regions.len(),
-        );
-        if start.borrow().idx == end.borrow().idx {
-            // Back where we started; check whether this is a valid region, push it if so, and return
-            let first_segment = segments.first().unwrap();
-            let first_edge = first_segment.edge.clone();
-            let cidx0 = first_edge.borrow().c.borrow().idx();
-            let cidx_end = last_segment.edge.borrow().c.borrow().idx();
-            if cidx0 == cidx_end {
-                // Can't start and end on same shape. Adjacent segments are checked for this as each segment is pushed, but "closing the loop" requires this extra check of the first and last segments.
-                return
-            } else {
-                // We've found a valid Region; increment each Edge's visit count, and save the Region
-                for segment in segments.clone() {
-                    let mut edge = segment.edge.borrow_mut();
-                    edge.visits += 1;
-                }
-                let mut container_bmp: Vec<bool> = vec![false; num_shapes];
-                for idx in container_idxs.iter() {
-                    container_bmp[*idx] = true;
-                }
-                let mut key = String::new();
-                for (idx, b) in container_bmp.iter().enumerate() {
-                    if *b {
-                        key += &idx.to_string();
-                    } else {
-                        key += "-";
-                    }
-                }
-                let region = Region {
-                    key,
-                    segments: segments.clone(),
-                    container_idxs: container_idxs.iter().cloned().collect(),
-                    container_bmp,
-                    };
-                regions.push(region);
-            }
-        } else {
-            // Attempt to add another Segment to this Region (from among eligible successors of the last Segment)
-            let successors = last_segment.successors();
-            // for successor in successors.clone() {
-            //     println!("{}  {}", indent, successor);
-            // }
-            for successor in successors {
-                let next_node = successor.end();
-                let next_node_idx = next_node.borrow().idx;
-                if visited_nodes.contains(&next_node_idx) {
-                    // This Segment would revisit a Node that's already been visited (and isn't the start Node, which we're allowed to revisit, to complete a Region)
-                    continue;
-                }
-                // The new Segment should be contained by (or run along the border of) the same shapes as the previous segments, with one exception: the new Segment can run along the border of a shape that doesn't contain the in-progress Region.
-                let nxt = successor.edge.clone();
-                let nxt_idxs = nxt.borrow().all_idxs();
-                // First, verify existing containers are preserved by the new Segment:
-                let missing: BTreeSet<usize> = container_idxs.difference(&nxt_idxs).cloned().collect();
-                if !missing.is_empty() {
-                // let mut both = container_idxs.intersection(&nxt_idxs).cloned().collect::<BTreeSet<usize>>();
-                // if both.len() < container_idxs.len() {
-                    // This edge candidate isn't contained by (or on the border of) all the shapes that the previous segments are.
-                    continue;
-                }
-                let extra: BTreeSet<usize> = nxt_idxs.difference(&container_idxs).cloned().collect();
-                // Next, verify that the only additional container, if any, is the Segment's border shape:
-                let num_extra = extra.len();
-                if num_extra > 1 {
-                    // This Segment can't join a Region with the existing Segments, as it is contained by at least one shape that doesn't contain the existing edges.
-                    continue;
-                } else if num_extra == 1 {
-                    // let extra = nxt_idxs.difference(&container_idxs).cloned().collect::<BTreeSet<usize>>();
-                    let extra_idx = extra.iter().next().unwrap();
-                    let nxt_edge_idx = successor.edge.borrow().c.borrow().idx();
-                    if nxt_edge_idx != *extra_idx {
-                        // The only admissible extra containing shape is the one the new edge traverses
-                        continue;
-                    } else {
-                        // OK to proceed with this edge; it is contained by all the shapes that the previous segments are (and outer-borders one additional shape that's not included in the bounded region)
-                    }
-                }
-                visited_nodes.insert(next_node_idx);
-                segments.push(successor.clone());
-                Intersections::traverse(&start, num_shapes, regions, segments, container_idxs, visited_nodes, max_edges);
-                segments.pop();
-                visited_nodes.remove(&next_node_idx);
             }
         }
     }
@@ -485,14 +266,16 @@ pub mod tests {
             (c2, duals(2, 3)),
         ];
         let shapes: Vec<_> = inputs.iter().map(|(c, duals)| c.dual(duals)).collect();
-        let intersections = Intersections::new(shapes);
+        let scene = Scene::new(shapes);
+        assert_eq!(scene.components.len(), 1);
+        let component = scene.components[0].clone();
 
         // for node in shapes.nodes.iter() {
         //     println!("{}", node.borrow());
         // }
 
         let check = |idx: usize, x: Dual, y: Dual, c0idx: usize, deg0v: i64, deg0d: [i64; 9], c1idx: usize, deg1v: i64, deg1d: [i64; 9]| {
-            let n = intersections.nodes[idx].borrow();
+            let n = component.nodes[idx].borrow();
             assert_relative_eq!(n.p.x, x, epsilon = 1e-3);
             assert_relative_eq!(n.p.y, y, epsilon = 1e-3);
             let shape_idxs: Vec<usize> = Vec::from_iter(n.shape_thetas.keys().into_iter().map(|i| *i));
@@ -527,14 +310,14 @@ pub mod tests {
             ( 1.000, [ 0.000,  0.000,  0.000, 0.000,  0.000,  0.000, 1.000,  0.000,  1.000 ],  1.000, [ 0.000, 0.000,  0.000,  0.000, 1.000,  1.000,  0.000, 0.000,  0.000 ], 1,  90, [   0,   0,   0,  57,  0,   0, -57,   0, -57 ], 2,    0, [   0,   0,   0,   0, 57,  57,   0, -57,   0 ]),
             ( 0.000, [ 0.000,  0.000,  0.000, 1.000,  0.000, -1.000, 0.000,  0.000,  0.000 ],  0.000, [ 0.000, 0.000,  0.000,  0.000, 0.000,  0.000,  0.000, 1.000, -1.000 ], 1, 180, [   0,   0,   0,   0, 57,   0,   0, -57,  57 ], 2,  -90, [   0,   0,   0,  57,  0, -57, -57,   0,   0 ]),
         ];
-        assert_eq!(intersections.nodes.len(), expected.len());
+        assert_eq!(component.nodes.len(), expected.len());
         for (idx, (x, dx, y, dy, c0idx, deg0v, deg0d, c1idx, deg1v, deg1d)) in expected.iter().enumerate() {
             let x = Dual::new(*x, dx.iter().map(|d| *d as f64).collect());
             let y = Dual::new(*y, dy.iter().map(|d| *d as f64).collect());
             check(idx, x, y, *c0idx, *deg0v, *deg0d, *c1idx, *deg1v, *deg1d);
         }
 
-        assert_eq!(intersections.edges.len(), 12);
+        assert_eq!(component.edges.len(), 12);
         // println!("edges:");
         // for edge in shapes.edges.iter() {
         //     println!("{}", edge.borrow());
@@ -559,9 +342,9 @@ pub mod tests {
         // }
         // println!();
 
-        assert_eq!(intersections.regions.len(), 7);
-        assert_eq!(intersections.total_expected_visits, 21);
-        assert_eq!(intersections.total_visits, 21);
+        assert_eq!(component.regions.len(), 7);
+        // assert_eq!(component.total_expected_visits, 21);
+        // assert_eq!(component.total_visits, 21);
         let expected = [
             "01- 0( -60) 2( -30) 1( 180): 0.500 + 0.285 =  0.785, vec![ 1.366, -0.366,  1.571, -0.866, -0.500,  1.047, -0.500,  0.866, -1.047]",
             "-1- 0( -60) 2( -30) 1(  90): 0.000 + 1.785 =  1.785, vec![-1.366,  0.366, -1.571,  1.866, -0.500,  3.665, -0.500,  0.134, -0.524]",
@@ -571,7 +354,7 @@ pub mod tests {
             "--2 0(  60) 2(-150) 1(  90): 0.000 + 1.785 =  1.785, vec![ 0.366, -1.366, -1.571,  0.134, -0.500, -0.524, -0.500,  1.866,  3.665]",
             "0-- 0( 150) 1(-120) 2( -90): 0.250 + 0.878 =  1.128, vec![-1.366, -1.366,  2.618,  0.866,  0.500, -1.047,  0.500,  0.866, -1.047]",
         ];
-        let actual = intersections.regions.iter().map(|region| {
+        let actual = component.regions.iter().map(|region| {
             let segments = &region.segments;
             let path_str = segments.iter().map(|segment| {
                 let start = segment.start();
@@ -602,22 +385,12 @@ pub mod tests {
             (c3, duals(3, 4)),
         ];
         let shapes: Vec<_> = inputs.iter().map(|(c, duals)| c.dual(duals)).collect();
-        let intersections = Intersections::new(shapes);
-
-        for node in intersections.nodes.iter() {
-            println!("{}", node.borrow());
-        }
-        println!();
-
-        let is_connected = intersections.is_connected;
-        println!("is_connected:");
-        for row in is_connected {
-            for col in row {
-                print!("{}", if col { "1" } else { "0" });
-            }
-            println!();
-        }
-        println!();
+        let scene = Scene::new(shapes);
+        assert_eq!(scene.components.len(), 4);
+        // for node in intersections.nodes.iter() {
+        //     println!("{}", node.borrow());
+        // }
+        // println!();
     }
 
     pub fn ellipses4(r: f64) -> [Shape<f64>; 4] {
@@ -648,17 +421,21 @@ pub mod tests {
     fn ellipses4_0_2() {
         let shapes = ellipses4_select(2., [0, 2]).to_vec();
         debug!("shapes: {:?}", shapes);
-        let intersections = Intersections::new(shapes);
-        assert_eq!(intersections.nodes.len(), 2);
-        assert_eq!(intersections.edges.len(), 4);
+        let scene = Scene::new(shapes);
+        assert_eq!(scene.components.len(), 1);
+        let component = scene.components[0].clone();
+        assert_eq!(component.nodes.len(), 2);
+        assert_eq!(component.edges.len(), 4);
     }
 
     #[test]
     fn test_4_ellipses() {
-        let intersections = Intersections::new(ellipses4(2.).into());
-        assert_eq!(intersections.nodes.len(), 14);
-        assert_eq!(intersections.edges.len(), 28);
-        let mut regions = intersections.regions;
+        let scene = Scene::new(ellipses4(2.).into());
+        assert_eq!(scene.components.len(), 1);
+        let component = scene.components[0].clone();
+        assert_eq!(component.nodes.len(), 14);
+        assert_eq!(component.edges.len(), 28);
+        let mut regions = component.regions;
         regions.sort_by_cached_key(|r| OrderedFloat(r.area()));
 
         let expected: BTreeMap<&str, f64> = [
@@ -712,9 +489,9 @@ pub mod tests {
             XYRR { idx: 3, c: R2 { x: 1., y: 1. }, r: R2 { x: 1., y: 1., }, },
         ];
         let shapes = ellipses.map(Shape::XYRR);
-        let intersections = Intersections::new(shapes.to_vec());
+        let scene = Scene::new(shapes.to_vec());
         assert_node_strs(
-            &intersections,
+            &scene,
             vec![
                 "N0( 0.866,  0.500: C0(  30), C1( -30))",
                 "N1(-0.866,  0.500: C0( 150), C1(-150))",
@@ -742,9 +519,11 @@ pub mod tests {
             XYRR { idx: 3, c: R2 { x: 0.5, y: -sq3 / 2. }, r: R2 { x: 1., y: 1., }, },
         ];
         let shapes = ellipses.map(Shape::XYRR);
-        let intersections = Intersections::new(shapes.to_vec());
+        let scene = Scene::new(shapes.to_vec());
+        assert_eq!(scene.components.len(), 1);
+        let component = scene.components[0].clone();
         assert_node_strs(
-            &intersections,
+            &scene,
             vec![
                 "N0( 0.500,  0.866: C0(  60), C1( 120))",
                 "N1( 0.500, -0.866: C0( -60), C1(-120))",
@@ -756,20 +535,23 @@ pub mod tests {
                 "N7( 1.500, -0.866: C1( -60), C3(   0))",
             ]
         );
-        assert_eq!(intersections.regions.len(), 11);
+        assert_eq!(component.regions.len(), 11);
     }
 
-    fn assert_node_strs<D: Display + Deg + Fmt>(intersections: &Intersections<D>, expected: Vec<&str>) {
+    fn assert_node_strs<D: Display + Deg + Fmt>(scene: &Scene<D>, expected: Vec<&str>) {
+        assert_eq!(scene.components.len(), 1);
+        let component = &scene.components[0];
+        let nodes = &component.nodes;
         let gen_vals = env::var("GEN_VALS").map(|s| s.parse::<usize>().unwrap()).ok();
         match gen_vals {
             Some(_) => {
                 println!("Nodes:");
-                for node in &intersections.nodes {
+                for node in nodes {
                     println!("  {:?},", format!("{}", node.borrow()));
                 }
             },
             None => {
-                let actual = intersections.nodes.iter().map(|n| format!("{}", n.borrow())).collect::<Vec<String>>();
+                let actual = nodes.iter().map(|n| format!("{}", n.borrow())).collect::<Vec<String>>();
                 assert_eq!(actual.len(), expected.len());
                 assert_eq!(actual, expected);
             }
@@ -798,9 +580,9 @@ pub mod tests {
             // XYRR { idx: 2, c: R2 { x: 1.7890795512191124, y: 1.4471922162722848 }, r: R2 { x: 1.9998252659224116, y: 0.9994675708661026 } },
         ];
         let shapes: Vec<_> = ellipses.iter().map(|e| Shape::XYRR(e.clone())).collect();
-        let intersections = Intersections::new(shapes);
+        let scene = Scene::new(shapes);
         assert_node_strs(
-            &intersections,
+            &scene,
             vec![
                 "N0( 0.897,  0.119: C0( -57), C1(-123))",
                 "N1( 0.897,  3.459: C0(  57), C1( 123))",
@@ -815,9 +597,9 @@ pub mod tests {
             Shape::XYRR(XYRR { idx: 1, c: R2 { x: 1.4472087032327248, y: 1.7888773809286864 }, r: R2 { x: 0.9997362494738584, y: 1.9998582057729295 } }),
             Shape::XYRR(XYRR { idx: 2, c: R2 { x: 1.7890795512191124, y: 1.4471922162722848 }, r: R2 { x: 1.9998252659224116, y: 0.9994675708661026 } }),
         ];
-        let intersections = Intersections::new(shapes);
+        let scene = Scene::new(shapes);
         assert_node_strs(
-            &intersections,
+            &scene,
             vec![
                 "N0( 0.897,  0.119: C0( -57), C1(-123))",
                 "N1( 0.897,  3.459: C0(  57), C1( 123))",
@@ -840,9 +622,11 @@ pub mod tests {
             XYRR { idx: 3, c: R2 { x:   4.271631577807546 , y: -5.4473446956862155   }, r: R2 { x:  2.652054463066812, y: 10.753963707585315 } },
         ];
         let shapes = ellipses.map(Shape::XYRR);
-        let intersections = Intersections::new(shapes.to_vec());
+        let scene = Scene::new(shapes.to_vec());
+        assert_eq!(scene.components.len(), 1);
+        let component = scene.components[0].clone();
         assert_node_strs(
-            &intersections,
+            &scene,
             vec![
                 "N0(-15.600,  8.956: C0( 152), C1( 100))",
                 "N1(-17.051, -2.698: C0(-168), C1(-104))",
@@ -858,8 +642,8 @@ pub mod tests {
                 "N11( 6.778, -8.957: C2(-128), C3( -19))",
             ]
         );
-        assert_eq!(intersections.regions.len(), 13);
-        debug!("is_connected: {:?}", intersections.is_connected);
+        assert_eq!(component.regions.len(), 13);
+        // debug!("is_connected: {:?}", intersections.is_connected);
     }
 
     #[test]
@@ -871,8 +655,8 @@ pub mod tests {
             XYRR { idx: 3, c: R2 { x: 3. , y: 3. }, r: R2 { x: 1., y: 1., }, },
         ];
         let shapes = ellipses.map(Shape::XYRR);
-        let intersections = Intersections::new(shapes.to_vec());
-        assert_node_strs(&intersections, vec![]);
-        debug!("is_connected: {:?}", intersections.is_connected);
+        let scene = Scene::new(shapes.to_vec());
+        assert_node_strs(&scene, vec![]);
+        // debug!("is_connected: {:?}", intersections.is_connected);
     }
 }

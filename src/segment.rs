@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter, self};
 
-use crate::{edge::{E, EdgeArg, Edge}, node::N, intersection::Intersection, r2::R2, to::To};
+use crate::{edge::{E, EdgeArg, Edge}, node::N, r2::R2, to::To};
 
 #[derive(Debug, Clone)]
 pub struct Segment<D> {
@@ -10,7 +10,7 @@ pub struct Segment<D> {
 
 impl<D: EdgeArg> Segment<D>
 where
-    Intersection<D>: Display,
+    // Intersection<D>: Display,
     R2<D>: To<R2<f64>>,
 {
     pub fn secant_area(&self) -> D {
@@ -30,9 +30,9 @@ where
         let end = self.end();
         let end_p: R2<f64> = end.borrow().p.clone().to();
         let edge = self.edge.clone();
-        let idx = edge.borrow().c.borrow().idx();
+        let shape_idx = edge.borrow().shape_idx();
         let successors = end.borrow().edges.iter().filter(|e| {
-            e.borrow().c.borrow().idx() != idx && e.borrow().visits < e.borrow().expected_visits
+            e.borrow().shape_idx() != shape_idx && e.borrow().visits < e.borrow().expected_visits()
         }).map(|e| {
             let p: R2<f64> = e.borrow().n0.borrow().p.clone().to();
             let fwd = p == end_p;
