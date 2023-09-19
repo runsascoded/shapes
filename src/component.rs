@@ -2,7 +2,7 @@ use std::{collections::{BTreeSet, BTreeMap}, cell::RefCell, rc::Rc, f64::consts:
 
 use log::{debug, error};
 
-use crate::{node::{N, Node}, math::deg::Deg, edge::{E, self, EdgeArg, Edge}, contains::Contains, region::Region, segment::Segment, set::S, theta_points::{ThetaPoints, ThetaPointsArg}, r2::R2, to::To, zero::Zero, fmt::Fmt};
+use crate::{node::{N, Node}, math::deg::Deg, edge::{E, self, EdgeArg, Edge}, contains::{Contains, ShapeContainsPoint}, region::{Region, RegionArg}, segment::Segment, set::S, theta_points::{ThetaPoints, ThetaPointsArg}, r2::R2, to::To, zero::Zero, fmt::Fmt};
 
 pub type C<D> = Rc<RefCell<Component<D>>>;
 
@@ -17,7 +17,7 @@ pub struct Component<D> {
     pub hull: Region<D>,
 }
 
-impl<D: Deg + EdgeArg + fmt::Debug + Fmt + ThetaPointsArg + Zero> Component<D>
+impl<D: Deg + EdgeArg + fmt::Debug + Fmt + ShapeContainsPoint + ThetaPointsArg + Zero> Component<D>
 where R2<D>: To<R2<f64>>,
 {
     pub fn new(
@@ -75,6 +75,7 @@ where R2<D>: To<R2<f64>>,
                 key,
                 segments: vec![ Segment { edge: e.clone(), fwd: true } ],
                 container_idxs: container_idxs.clone(),
+                children: vec![],
             };
             node.add_edge(e.clone());
             let component = Component {
@@ -88,6 +89,7 @@ where R2<D>: To<R2<f64>>,
                     key: String::new(),
                     segments: vec![ Segment { edge: e.clone(), fwd: true } ],
                     container_idxs: BTreeSet::new(),
+                    children: vec![],
                 },
             };
             debug!("singleton component: {}", set_idx);
@@ -137,6 +139,7 @@ where R2<D>: To<R2<f64>>,
             key: String::new(),
             segments: hull_segments,
             container_idxs: component_container_idxs.iter().cloned().collect(),
+            children: vec![],
         };
 
         let total_expected_visits = edges.iter().map(|e| e.borrow().expected_visits()).sum::<usize>();
@@ -337,6 +340,7 @@ where R2<D>: To<R2<f64>>,
                     key,
                     segments: segments.clone(),
                     container_idxs: container_idxs.iter().cloned().collect(),
+                    children: vec![],
                 };
                 regions.push(region);
             }
@@ -388,6 +392,14 @@ where R2<D>: To<R2<f64>>,
                 visited_nodes.remove(&next_node_idx);
             }
         }
+    }
+}
+
+impl<D: RegionArg> Component<D>
+where R2<D>: To<R2<f64>>,
+{
+    pub fn area(&self) -> D {
+        self.regions.iter().map(|r| r.total_area()).sum::<D>()
     }
 }
 

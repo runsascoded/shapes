@@ -4,7 +4,7 @@ use std::{cell::RefCell, rc::Rc, collections::BTreeSet, ops::{Neg, Add, Sub, Mul
 use log::debug;
 use ordered_float::OrderedFloat;
 
-use crate::{node::{N, Node}, contains::Contains, distance::Distance, region::RegionArg, set::S, shape::Shape, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::CanTransform, intersection::Intersection, dual::Dual, to::To, math::deg::Deg, fmt::Fmt, component::Component, set::Set};
+use crate::{node::{N, Node}, contains::Contains, distance::Distance, region::{RegionArg, RegionContainsArg}, set::S, shape::Shape, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::{CanTransform, HasProjection, CanProject}, intersection::Intersection, dual::Dual, to::To, math::deg::Deg, fmt::Fmt, component::{Component, self}, set::Set};
 
 #[derive(Clone, Debug)]
 pub struct Scene<D> {
@@ -20,6 +20,7 @@ pub trait SceneD
 + Deg
 + Fmt
 + RegionArg
++ RegionContainsArg
 {}
 impl SceneD for f64 {}
 impl SceneD for Dual {}
@@ -30,6 +31,8 @@ pub trait SceneR2<D>
 // + Div<f64, Output = Self>
 + CanTransform<D, Output = Self>
 + To<R2<f64>>
+// ShapeContainsPoint
++ CanProject<D, Output = R2<D>>
 {}
 impl SceneR2<f64> for R2<f64> {}
 impl SceneR2<Dual> for R2<Dual> {}
@@ -45,7 +48,7 @@ impl SceneFloat<Dual> for f64 {}
 impl<D: SceneD> Scene<D>
 where
     R2<D>: SceneR2<D>,
-    Shape<D>: CanTransform<D, Output = Shape<D>>,
+    Shape<D>: CanTransform<D, Output = Shape<D>> + HasProjection<D>,
     Intersection<D>: Display,
     f64: SceneFloat<D>,
 {
@@ -181,12 +184,13 @@ where
             }
             components_idxs
         };
-        let components: Vec<Component<D>> =
+        let mut components: Vec<Component<D>> =
             components_idxs
             .into_iter()
             .map(|component_idxs| Component::new(component_idxs, &unconnected_containers, &nodes_by_shape, &set_ptrs, num_shapes))
             .collect();
 
+        let component_ptrs = components.iter().map(|c| Rc::new(RefCell::new(c.clone()))).collect::<Vec<_>>();
         for (component_idx, component) in components.iter().enumerate() {
             for container_idx in &component.container_idxs {
                 set_ptrs[*container_idx].borrow_mut().children.insert(component_idx);
@@ -195,7 +199,30 @@ where
         for set in &mut sets {
             set.prune_children(&components);
         }
+
+        for (component_idx, component_ptr) in component_ptrs.iter().enumerate() {
+            let key = (0..num_shapes).map(|i| {
+                if component_ptr.borrow().container_idxs.contains(&i) {
+                    i.to_string()
+                } else {
+                    "-".to_string()
+                }
+            }).collect::<String>();
+            let p = component_ptr.borrow().sets[0].borrow().shape.c();
+            for container_component in &mut components {
+                if container_component.children().contains(&component_idx) {
+                    container_component.regions.iter_mut().filter(|r| r.key == key && r.contains(&p)).for_each(|r| {
+                        r.children.push(component_ptr.clone());
+                    });
+                    break;
+                }
+            }
+        }
         Scene { sets, components, }
+    }
+
+    pub fn total_area(&self) -> D {
+        self.components.iter().filter(|c| c.container_idxs.is_empty()).map(|c| c.area()).sum()
     }
 
     pub fn area(&self, key: &String) -> Option<D> {

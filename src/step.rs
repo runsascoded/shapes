@@ -74,8 +74,11 @@ impl Step {
             }
         }
         let errors = Self::compute_errors(&scene, &targets, &total_target_area, &total_area);
+        for (key, error) in &errors {
+            debug!("  {}: error {}", key, error);
+        }
         let mut error: D = errors.values().into_iter().map(|e| { e.error.abs() }).sum();
-        debug!("step, error {:?}", error);
+        debug!("step error {:?}", error);
         // Optional/Alternate loss function based on per-region squared errors, weights errors by region size:
         // let error = errors.values().into_iter().map(|e| e.error.clone() * &e.error).sum::<D>().sqrt();
         let components: Vec<regions::Component> = scene.components.iter().map(|c| regions::Component::new(&c)).collect();
