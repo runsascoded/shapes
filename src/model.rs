@@ -4,7 +4,7 @@ use log::{info, debug, warn};
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::{step::{Step, Targets}, shape::Input};
+use crate::{step::Step, targets::TargetsMap, shape::Input};
 
 #[derive(Debug, Clone, Tsify, Serialize, Deserialize)]
 pub struct Model {
@@ -15,8 +15,8 @@ pub struct Model {
 }
 
 impl Model {
-    pub fn new(inputs: Vec<Input>, targets: Targets) -> Model {
-        let step = Step::new(inputs, targets, None);
+    pub fn new(inputs: Vec<Input>, targets: TargetsMap<f64>) -> Model {
+        let step = Step::new(inputs, targets.into());
         let min_error = (&step).error.re.clone();
         let mut steps = Vec::<Step>::new();
         steps.push(step);

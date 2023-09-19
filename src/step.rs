@@ -8,11 +8,9 @@ use tsify::{declare, Tsify};
 use crate::ellipses::xyrr::XYRR;
 use crate::math::recip::Recip;
 use crate::shape::{Input, Shape, Duals};
-use crate::{circle::Circle, distance::Distance, scene::Scene, math::is_zero::IsZero, r2::R2, areas::Areas, regions};
+use crate::{circle::Circle, distance::Distance, scene::Scene, math::is_zero::IsZero, r2::R2, targets::{Targets, TargetsMap}, regions};
 use crate::dual::{Dual, D};
 
-#[declare]
-pub type Targets = BTreeMap<String, f64>;
 #[declare]
 pub type Errors = BTreeMap<String, Error>;
 
@@ -20,8 +18,7 @@ pub type Errors = BTreeMap<String, Error>;
 pub struct Step {
     pub inputs: Vec<Input>,
     pub components: Vec<regions::Component>,
-    pub targets: Targets,
-    pub total_target_area: f64,
+    pub targets: Targets<f64>,
     pub total_area: Dual,
     pub errors: Errors,
     pub error: Dual,
@@ -33,7 +30,6 @@ pub struct Error {
     pub actual_area: Option<Dual>,
     pub actual_frac: Dual,
     pub target_area: f64,
-    pub total_target_area: f64,
     pub target_frac: f64,
     pub error: Dual,
 }
@@ -41,9 +37,9 @@ pub struct Error {
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f,
-            "{}: err {:.3}, {:.3} / {:.3} = {:.3}, {} → {:.3}",
+            "{}: err {:.3}, target {:.3} ({:.3}), actual {} → {:.3}",
             self.key, self.error.v(),
-            self.target_area, self.total_target_area, self.target_frac,
+            self.target_area, self.target_frac,
             self.actual_area.clone().map(|a| format!("{:.3}", a.v())).unwrap_or_else(|| "-".to_string()),
             self.actual_frac.v(),
         )
@@ -51,20 +47,11 @@ impl Display for Error {
 }
 
 impl Step {
-    pub fn new(inputs: Vec<Input>, targets: Targets, total_target_area: Option<f64>) -> Step {
+    pub fn new(inputs: Vec<Input>, targets: Targets<f64>) -> Step {
         let shapes: Vec<Shape<D>> = inputs.iter().map(|(c, duals)| c.dual(duals)).collect();
         let scene = Scene::new(shapes);
         let sets = &scene.sets;
-        // let duals = intersections.duals;
         let all_key = String::from_utf8(vec![b'*'; scene.len()]).unwrap();
-        let mut expanded_targets = targets.clone();
-        Areas::expand(&mut expanded_targets);
-        let total_target_area = total_target_area.unwrap_or_else(|| {
-            expanded_targets
-            .get(&all_key)
-            .expect(&format!("{} not found among {} keys", all_key, expanded_targets.len()))
-            .clone()
-        });
         let total_area = scene.area(&all_key).unwrap_or_else(|| scene.zero());
         debug!("scene: {} components, total_area {}", scene.components.len(), total_area);
         for component in &scene.components {
@@ -73,7 +60,7 @@ impl Step {
                 debug!("    {}: {} segments, area {}", region.key, region.segments.len(), region.area());
             }
         }
-        let errors = Self::compute_errors(&scene, &targets, &total_target_area, &total_area);
+        let errors = Self::compute_errors(&scene, &targets, &total_area);
         for (key, error) in &errors {
             debug!("  {}: error {}", key, error);
         }
@@ -121,7 +108,7 @@ impl Step {
             // error += total_disjoint_penalty;
         }
 
-        Step { inputs, components, targets, total_target_area, total_area, errors, error }
+        Step { inputs, components, targets, total_area, errors, error }
     }
 
     pub fn shapes(&self) -> Vec<Shape<f64>> {
@@ -136,7 +123,7 @@ impl Step {
         self.error.1
     }
 
-    pub fn compute_errors(scene: &Scene<D>, targets: &Targets, total_target_area: &f64, total_area: &Dual) -> Errors {
+    pub fn compute_errors(scene: &Scene<D>, targets: &Targets<f64>, total_area: &Dual) -> Errors {
         let n = scene.len();
         // let all_key = String::from_utf8(vec![b'*'; n]).unwrap();
         let none_key = String::from_utf8(vec![b'-'; n]).unwrap();
@@ -145,7 +132,7 @@ impl Step {
                 None
             } else {
                 let actual_area = scene.area(key);
-                let target_frac = target_area / total_target_area;
+                let target_frac = target_area / targets.total_area;
                 let actual_frac = actual_area.clone().unwrap_or_else(|| scene.zero()).clone() / total_area;
                 let error = actual_frac.clone() - target_frac;
                 Some((
@@ -153,7 +140,7 @@ impl Step {
                     Error {
                         key: key.clone(),
                         actual_area,
-                        target_area: target_area.clone(), total_target_area: total_target_area.clone(),
+                        target_area: target_area.clone(),
                         actual_frac,
                         target_frac,
                         error,
@@ -219,6 +206,6 @@ impl Step {
         for (cur, (nxt, _)) in shapes.iter().zip(new_inputs.iter()) {
             debug!("  {} -> {:?}", cur, nxt);
         }
-        Step::new(new_inputs, self.targets.clone(), Some(self.total_target_area))
+        Step::new(new_inputs, self.targets.clone())
     }
 }

@@ -4,7 +4,6 @@
 extern crate approx;
 extern crate console_error_panic_hook;
 
-pub mod areas;
 pub mod circle;
 pub mod component;
 pub mod contains;
@@ -34,6 +33,7 @@ pub mod set;
 pub mod shape;
 pub mod sqrt;
 pub mod step;
+pub mod targets;
 pub mod theta_points;
 pub mod to;
 pub mod transform;
@@ -41,7 +41,7 @@ pub mod trig;
 pub mod zero;
 pub mod js_dual;
 
-use areas::Areas;
+use targets::Targets;
 use shape::Input;
 use step::Step;
 use dual::D;
@@ -50,7 +50,7 @@ use log::{LevelFilter, info, error};
 
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_console_logger::DEFAULT_LOGGER;
-use crate::step::Targets;
+use crate::targets::TargetsMap;
 use crate::model::Model;
 
 pub fn deser_log_level(level: JsValue) -> LevelFilter {
@@ -84,15 +84,15 @@ pub fn update_log_level(level: JsValue) {
 #[wasm_bindgen]
 pub fn make_step(inputs: JsValue, targets: JsValue) -> JsValue {
     let inputs: Vec<Input> = serde_wasm_bindgen::from_value(inputs).unwrap();
-    let targets: Targets = serde_wasm_bindgen::from_value(targets.clone()).unwrap();
-    let step = Step::new(inputs, targets, None);
+    let targets: TargetsMap<f64> = serde_wasm_bindgen::from_value(targets.clone()).unwrap();
+    let step = Step::new(inputs, targets.into());
     serde_wasm_bindgen::to_value(&step).unwrap()
 }
 
 #[wasm_bindgen]
 pub fn make_model(inputs: JsValue, targets: JsValue) -> JsValue {
     let inputs: Vec<Input> = serde_wasm_bindgen::from_value(inputs).unwrap();
-    let targets: Targets = serde_wasm_bindgen::from_value(targets.clone()).unwrap();
+    let targets: TargetsMap<f64> = serde_wasm_bindgen::from_value(targets.clone()).unwrap();
     let model = Model::new(inputs, targets);
     serde_wasm_bindgen::to_value(&model).unwrap()
 }
@@ -114,9 +114,9 @@ pub fn step(step: JsValue, max_step_error_ratio: f64) -> JsValue {
 }
 
 #[wasm_bindgen]
-pub fn expand_areas(targets: JsValue) -> JsValue {
-    let mut targets: Targets = serde_wasm_bindgen::from_value(targets.clone()).unwrap();
-    Areas::expand(&mut targets);
+pub fn expand_targets(targets: JsValue) -> JsValue {
+    let targets: TargetsMap<f64> = serde_wasm_bindgen::from_value(targets.clone()).unwrap();
+    let targets = Targets::new(targets);
     serde_wasm_bindgen::to_value(&targets).unwrap()
 }
 
