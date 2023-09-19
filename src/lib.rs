@@ -30,6 +30,7 @@ pub mod roots;
 pub mod rotate;
 pub mod scene;
 pub mod segment;
+pub mod set;
 pub mod shape;
 pub mod sqrt;
 pub mod step;

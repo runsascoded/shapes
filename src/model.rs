@@ -311,8 +311,8 @@ mod tests {
         // This is the minimal degrees of freedom that can reach any target (relative) distribution between {"0*", "*1", and "01"} (1st circle size, 2nd circle size, intersection size).
         let ( z, d ) = d_fns(2);
         let inputs: Vec<Input> = vec![
-            (Shape::Circle(Circle { idx: 0, c: R2 { x: 0., y: 0. }, r: 1. }), vec![ z( ), z( ), z( ), ]),
-            (Shape::Circle(Circle { idx: 1, c: R2 { x: 1., y: 0. }, r: 1. }), vec![ d(0), z( ), d(1), ]),
+            (Shape::Circle(Circle { c: R2 { x: 0., y: 0. }, r: 1. }), vec![ z( ), z( ), z( ), ]),
+            (Shape::Circle(Circle { c: R2 { x: 1., y: 0. }, r: 1. }), vec![ d(0), z( ), d(1), ]),
         ];
         check(inputs, FIZZ_BUZZ.into(), "fizz_buzz_circles", 0.8, 100);
     }
@@ -322,8 +322,8 @@ mod tests {
         // 2 Circles, initially disjoint, each already ideally sized, only 2nd circle's x can move, needs to "find" the 1st circle to get the intersection area right.
         let ( z, d ) = d_fns(1);
         let inputs: Vec<Input> = vec![
-            (Shape::Circle(Circle { idx: 0, c: R2 { x: 0., y: 0. }, r: 2. }), vec![ z( ), z( ), z( ), ]),
-            (Shape::Circle(Circle { idx: 1, c: R2 { x: 4., y: 0. }, r: 1. }), vec![ d(0), z( ), z( ), ]),
+            (Shape::Circle(Circle { c: R2 { x: 0., y: 0. }, r: 2. }), vec![ z( ), z( ), z( ), ]),
+            (Shape::Circle(Circle { c: R2 { x: 4., y: 0. }, r: 1. }), vec![ d(0), z( ), z( ), ]),
         ];
         let targets = [
             ("0*", 4.),
@@ -338,8 +338,8 @@ mod tests {
         // 2 Circles, initially disjoint, each already ideally sized, only 2nd circle's x can move, needs to "find" the 1st circle to get the intersection area right.
         let ( z, d ) = d_fns(1);
         let inputs: Vec<Input> = vec![
-            (Shape::Circle(Circle { idx: 0, c: R2 { x: 0. , y: 0. }, r: 2. }), vec![ z( ), z( ), z( ), ]),
-            (Shape::Circle(Circle { idx: 1, c: R2 { x: 0.5, y: 0. }, r: 1. }), vec![ d(0), z( ), z( ), ]),
+            (Shape::Circle(Circle { c: R2 { x: 0. , y: 0. }, r: 2. }), vec![ z( ), z( ), z( ), ]),
+            (Shape::Circle(Circle { c: R2 { x: 0.5, y: 0. }, r: 1. }), vec![ d(0), z( ), z( ), ]),
         ];
         let targets = [
             ("0*", 4.),
@@ -353,8 +353,8 @@ mod tests {
     fn fizz_buzz_circle_ellipse() {
         let ( z, d ) = d_fns(3);
         let inputs: Vec<Input> = vec![
-            ( Shape::Circle(Circle { idx: 0, c: R2 { x: 0., y: 0. }, r: 1.                  }), vec![ z( ), z( ), z( ),       ]),
-            ( Shape::  XYRR(  XYRR { idx: 1, c: R2 { x: 1., y: 0. }, r: R2 { x: 1., y: 1. } }), vec![ d(0), z( ), d(1), d(2), ]),
+            ( Shape::Circle(Circle { c: R2 { x: 0., y: 0. }, r: 1.                  }), vec![ z( ), z( ), z( ),       ]),
+            ( Shape::  XYRR(  XYRR { c: R2 { x: 1., y: 0. }, r: R2 { x: 1., y: 1. } }), vec![ d(0), z( ), d(1), d(2), ]),
         ];
         check(inputs, FIZZ_BUZZ.into(), "fizz_buzz_circle_ellipse", 0.8, 100)
     }
@@ -363,8 +363,8 @@ mod tests {
     fn fizz_buzz_ellipses_diag() {
         let ( z, d ) = d_fns(7);
         let inputs: Vec<Input> = vec![
-            ( Shape::XYRR(XYRR { idx: 0, c: R2 { x: 1., y: 0. }, r: R2 { x: 1., y: 1. } }), vec![ d(0), z( ), d(1), d(2), ] ),
-            ( Shape::XYRR(XYRR { idx: 1, c: R2 { x: 0., y: 1. }, r: R2 { x: 1., y: 1. } }), vec![ d(3), d(4), d(5), d(6), ] ),
+            ( Shape::XYRR(XYRR { c: R2 { x: 1., y: 0. }, r: R2 { x: 1., y: 1. } }), vec![ d(0), z( ), d(1), d(2), ] ),
+            ( Shape::XYRR(XYRR { c: R2 { x: 0., y: 1. }, r: R2 { x: 1., y: 1. } }), vec![ d(3), d(4), d(5), d(6), ] ),
         ];
         // TODO: some nondeterminism sets in on the "error" field, from step 15! Debug.
         check(inputs, FIZZ_BUZZ.into(), "fizz_buzz_ellipses_diag", 0.7, 100)
@@ -374,9 +374,9 @@ mod tests {
     fn fizz_buzz_bazz_circle_ellipses() {
         let ( z, d ) = d_fns(7);
         let inputs: Vec<Input> = vec![
-            ( Shape::Circle(Circle { idx: 0, c: R2 { x: 0., y: 0. }, r: 1. }     ), vec![ z( ), z( ), z( ),       ]),
-            ( Shape::  XYRR(Circle { idx: 1, c: R2 { x: 1., y: 0. }, r: 1. }.to()), vec![ d(0), z( ), d(1), d(2), ]),
-            ( Shape::  XYRR(Circle { idx: 2, c: R2 { x: 0., y: 1. }, r: 1. }.to()), vec![ d(3), d(4), d(5), d(6), ]),
+            ( Shape::Circle(Circle { c: R2 { x: 0., y: 0. }, r: 1. }     ), vec![ z( ), z( ), z( ),       ]),
+            ( Shape::  XYRR(Circle { c: R2 { x: 1., y: 0. }, r: 1. }.to()), vec![ d(0), z( ), d(1), d(2), ]),
+            ( Shape::  XYRR(Circle { c: R2 { x: 0., y: 1. }, r: 1. }.to()), vec![ d(3), d(4), d(5), d(6), ]),
         ];
         check(inputs, FIZZ_BUZZ_BAZZ.into(), "fizz_buzz_bazz_circle_ellipses", 0.7, 100)
     }
@@ -385,9 +385,9 @@ mod tests {
     fn fizz_buzz_bazz_circles() {
         let ( z, d ) = d_fns(5);
         let inputs: Vec<Input> = vec![
-            ( Shape::Circle(Circle { idx: 0, c: R2 { x: 0., y: 0. }, r: 1. }), vec![ z( ), z( ), z( ), ] ),
-            ( Shape::Circle(Circle { idx: 1, c: R2 { x: 1., y: 0. }, r: 1. }), vec![ d(0), z( ), d(1), ] ),
-            ( Shape::Circle(Circle { idx: 2, c: R2 { x: 0., y: 1. }, r: 1. }), vec![ d(2), d(3), d(4), ] ),
+            ( Shape::Circle(Circle { c: R2 { x: 0., y: 0. }, r: 1. }), vec![ z( ), z( ), z( ), ] ),
+            ( Shape::Circle(Circle { c: R2 { x: 1., y: 0. }, r: 1. }), vec![ d(0), z( ), d(1), ] ),
+            ( Shape::Circle(Circle { c: R2 { x: 0., y: 1. }, r: 1. }), vec![ d(2), d(3), d(4), ] ),
         ];
         check(inputs, FIZZ_BUZZ_BAZZ.into(), "fizz_buzz_bazz_circles", 0.7, 100)
     }
@@ -406,10 +406,10 @@ mod tests {
             ( e3, vec![ d(8), d(9), d(10), d(11), ] ),
         ];
         // Step size 0.2, #6000, 3.54% error (72.0):
-        // XYRR { idx: 0, c: { x: 0.057842232929273305, y: 1.3421141998408261 }, r: { x: 0.9042484099819306, y: 1.7746711918630136 } },
-        // XYRR { idx: 1, c: { x: 1.1180140103075666, y: 2.702741124677027 }, r: { x: 0.7738576366499212, y: 2.189919683308931 } },
-        // XYRR { idx: 2, c: { x: 1.6046271650155772, y: 0.405655309751768 }, r: { x: 0.9752840313567439, y: 0.5126125569023957 } },
-        // XYRR { idx: 3, c: { x: 2.65823706629625, y: 1.062726304716347 }, r: { x: 2.36947609319204, y: 0.37496988567008666 } }
+        // XYRR { c: { x: 0.057842232929273305, y: 1.3421141998408261 }, r: { x: 0.9042484099819306, y: 1.7746711918630136 } },
+        // XYRR { c: { x: 1.1180140103075666, y: 2.702741124677027 }, r: { x: 0.7738576366499212, y: 2.189919683308931 } },
+        // XYRR { c: { x: 1.6046271650155772, y: 0.405655309751768 }, r: { x: 0.9752840313567439, y: 0.5126125569023957 } },
+        // XYRR { c: { x: 2.65823706629625, y: 1.062726304716347 }, r: { x: 2.36947609319204, y: 0.37496988567008666 } }
         check(inputs, VARIANT_CALLERS.into(), "variant_callers", 0.7, 100)
     }
 }

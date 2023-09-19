@@ -38,7 +38,7 @@ where
     pub fn secant_area(&self) -> D {
         self.segments.iter().map(|s| {
             let area = s.secant_area();
-            let idx = s.edge.borrow().shape_idx();
+            let idx = s.edge.borrow().set_idx();
             if self.container_idxs.contains(&idx) { area } else { -area }
         }).sum::<D>()
     }

@@ -11,7 +11,7 @@ use crate::{
 
 #[derive(Debug, Clone, Copy, From, PartialEq, Tsify, Serialize, Deserialize)]
 pub struct Circle<D> {
-    pub idx: usize,
+    // pub idx: usize,
     pub c: R2<D>,
     pub r: D,
 }
@@ -24,13 +24,13 @@ impl Circle<f64> {
         let y = Dual::new(self.c.y, duals[1].clone());
         let r = Dual::new(self.r  , duals[2].clone());
         let c = R2 { x, y };
-        Circle::from((self.idx, c, r))
+        Circle::from((c, r))
     }
 }
 
 impl Circle<D> {
     pub fn v(&self) -> Circle<f64> {
-        Circle { idx: self.idx, c: self.c.v(), r: self.r.v() }
+        Circle { c: self.c.v(), r: self.r.v() }
     }
     pub fn n(&self) -> usize {
         self.c.x.d().len()
@@ -108,14 +108,13 @@ where
 
 impl<O, I: To<O>> To<Circle<O>> for Circle<I> {
     fn to(self) -> Circle<O> {
-        Circle { idx: self.idx, c: self.c.to(), r: self.r.to() }
+        Circle { c: self.c.to(), r: self.r.to() }
     }
 }
 
 impl<D: Clone> To<XYRR<D>> for Circle<D> {
     fn to(self) -> XYRR<D> {
         XYRR {
-            idx: self.idx,
             c: self.c,
             r: R2 {
                 x: self.r.clone(),
@@ -155,14 +154,12 @@ where R2<D>: TransformR2<D>,
         match transform {
             Translate(v) =>
                 Circle {
-                    idx: self.idx,
                     c: self.c.clone() + v.clone(),
                     r: self.r.clone()
                 }.into(),
             Scale(s) => {
                 let r = &self.r;
                 Circle {
-                    idx: self.idx,
                     c: self.c.clone() * s.clone(),
                     r: r.clone() * s.clone(),
                 }.into()
@@ -170,7 +167,6 @@ where R2<D>: TransformR2<D>,
             ScaleXY(s) => {
                 let r = &self.r;
                 XYRR {
-                    idx: self.idx,
                     c: self.c.clone() * s.clone(),
                     r: s * r.clone(),
                 }.into()
@@ -202,7 +198,6 @@ where
 impl<D: Clone> Circle<D> {
     pub fn xyrr(&self) -> XYRR<D> {
         XYRR {
-            idx: self.idx,
             c: self.c.clone(),
             r: R2 { x: self.r.clone(), y: self.r.clone() },
         }
@@ -218,28 +213,28 @@ impl<D: Display> Display for Circle<D> {
 impl Mul<f64> for Circle<f64> {
     type Output = Circle<f64>;
     fn mul(self, rhs: f64) -> Self::Output {
-        Circle { idx: self.idx, c: self.c * &rhs, r: self.r * rhs }
+        Circle { c: self.c * &rhs, r: self.r * rhs }
     }
 }
 
 impl Mul<i64> for Circle<f64> {
     type Output = Circle<f64>;
     fn mul(self, rhs: i64) -> Self::Output {
-        Circle { idx: self.idx, c: self.c * &(rhs as f64), r: self.r * (rhs as f64) }
+        Circle { c: self.c * &(rhs as f64), r: self.r * (rhs as f64) }
     }
 }
 
 impl Add<R2<f64>> for Circle<f64> {
     type Output = Circle<f64>;
     fn add(self, rhs: R2<f64>) -> Self::Output {
-        Circle { idx: self.idx, c: self.c + rhs, r: self.r }
+        Circle { c: self.c + rhs, r: self.r }
     }
 }
 
 impl Add<R2<i64>> for Circle<f64> {
     type Output = Circle<f64>;
     fn add(self, rhs: R2<i64>) -> Self::Output {
-        Circle { idx: self.idx, c: self.c + R2 { x: rhs.x as f64, y: rhs.y as f64 }, r: self.r }
+        Circle { c: self.c + R2 { x: rhs.x as f64, y: rhs.y as f64 }, r: self.r }
     }
 }
 
@@ -262,8 +257,8 @@ mod tests {
 
     fn check(c0: Circle<f64>, c1: Circle<f64>, expected0: R2<D>, expected1: R2<D>) {
         let intersections = c0.intersect(&c1);
-        let p0 = intersections[0].p();
-        let p1 = intersections[1].p();
+        let p0 = intersections[0].clone();
+        let p1 = intersections[1].clone();
 
         // println!("c0: {}", c0);
         // println!("c1: {}", c1);
@@ -300,8 +295,8 @@ mod tests {
     #[test]
     fn region_r() {
         test(
-            Circle { idx: 0, c: R2 { x: 0., y: 0. }, r: 1. },
-            Circle { idx: 1, c: R2 { x: 1., y: 0. }, r: 1. },
+            Circle { c: R2 { x: 0., y: 0. }, r: 1. },
+            Circle { c: R2 { x: 1., y: 0. }, r: 1. },
             r2(0.5, vec![ 0.500,  0.866, 1.000, 0.500, -0.866, -1.000 ],  0.866, vec![  0.289, 0.500,  0.577, -0.289, 0.500,  0.577 ]),
             r2(0.5, vec![ 0.500, -0.866, 1.000, 0.500,  0.866, -1.000 ], -0.866, vec![ -0.289, 0.500, -0.577,  0.289, 0.500, -0.577 ]),
         );
@@ -310,8 +305,8 @@ mod tests {
     #[test]
     fn region_u() {
         test(
-            Circle { idx: 0, c: R2 { x: 0., y: 0. }, r: 1. },
-            Circle { idx: 1, c: R2 { x: 0., y: 1. }, r: 1. },
+            Circle { c: R2 { x: 0., y: 0. }, r: 1. },
+            Circle { c: R2 { x: 0., y: 1. }, r: 1. },
             r2( 0.866, vec![ 0.500,  0.289,  0.577, 0.500, -0.289,  0.577], 0.500, vec![ 0.866, 0.500, 1.000, -0.866, 0.500, -1.000 ]),
             r2(-0.866, vec![ 0.500, -0.289, -0.577, 0.500,  0.289, -0.577], 0.500, vec![-0.866, 0.500, 1.000,  0.866, 0.500, -1.000 ]),
         );
@@ -320,8 +315,8 @@ mod tests {
     #[test]
     fn region_ur() {
         test(
-            Circle { idx: 0, c: R2 { x: 0., y: 0. }, r: 1. },
-            Circle { idx: 1, c: R2 { x: 1., y: 1. }, r: 1. },
+            Circle { c: R2 { x: 0., y: 0. }, r: 1. },
+            Circle { c: R2 { x: 1., y: 1. }, r: 1. },
             r2( 0., vec![ 0., 0., 0., 1., 0., -1. ], 1., vec![ 0., 1., 1., 0., 0.,  0. ]),
             r2( 1., vec![ 1., 0., 1., 0., 0.,  0. ], 0., vec![ 0., 0., 0., 0., 1., -1. ]),
         );

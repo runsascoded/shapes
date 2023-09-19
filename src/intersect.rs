@@ -1,13 +1,13 @@
 use std::{ops::{Div, Neg, Add, Mul, Sub}, fmt::Display};
 
-use crate::{intersection::Intersection, circle::{Circle, self}, dual::{D, Dual}, ellipses::cdef, r2::R2, transform::{CanProject, CanTransform, HasProjection}, shape::Shape, trig::Trig, theta_points::{ThetaPoints, ThetaPointsArg}};
+use crate::{circle::{Circle, self}, dual::{D, Dual}, ellipses::cdef, r2::R2, transform::{CanProject, CanTransform, HasProjection}, shape::Shape, trig::Trig, theta_points::ThetaPointsArg};
 
 pub trait Intersect<In, Out> {
-    fn intersect(&self, other: &In) -> Vec<Intersection<Out>>;
+    fn intersect(&self, other: &In) -> Vec<R2<Out>>;
 }
 
 impl Intersect<Circle<f64>, D> for Circle<f64> {
-    fn intersect(&self, o: &Circle<f64>) -> Vec<Intersection<D>> {
+    fn intersect(&self, o: &Circle<f64>) -> Vec<R2<D>> {
         let c0 = self.dual(&vec![ vec![ 1., 0., 0., 0., 0., 0., ], vec![ 0., 1., 0., 0., 0., 0., ], vec![ 0., 0., 1., 0., 0., 0., ] ]);
         let c1 =    o.dual(&vec![ vec![ 0., 0., 0., 1., 0., 0., ], vec![ 0., 0., 0., 0., 1., 0., ], vec![ 0., 0., 0., 0., 0., 1., ] ]);
         let s0 = Shape::Circle(c0);
@@ -43,7 +43,7 @@ where
     + Mul<D, Output = D>
     + Div<D, Output = D>,
 {
-    fn intersect(&self, o: &Shape<D>) -> Vec<Intersection<D>> {
+    fn intersect(&self, o: &Shape<D>) -> Vec<R2<D>> {
         let projection = o.projection();
         let rev = -projection.clone();
         let projected = self.apply(&projection);
@@ -57,14 +57,15 @@ where
         // println!("reverse projection: {:?}", rev);
         // println!("points: {:?}", points.clone().collect::<Vec<_>>());
         // println!();
-        points.map(|p| {
-            let x = p.x.clone();
-            let y = p.y.clone();
-            let p = R2 { x: x.clone(), y: y.clone() };
-            let t0 = self.theta(p.clone());
-            let t1 = o.theta(p.clone());
-            Intersection { x, y, c0idx: self.idx(), c1idx: o.idx(), t0, t1, }
-        }).collect()
+        points.collect()
+        // points.map(|p| {
+        //     let x = p.x.clone();
+        //     let y = p.y.clone();
+        //     let p = R2 { x: x.clone(), y: y.clone() };
+        //     let t0 = self.theta(p.clone());
+        //     let t1 = o.theta(p.clone());
+        //     Intersection { x, y, c0idx: self.idx(), c1idx: o.idx(), t0, t1, }
+        // }).collect()
     }
 }
 

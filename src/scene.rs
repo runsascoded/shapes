@@ -4,11 +4,11 @@ use std::{cell::RefCell, rc::Rc, collections::BTreeSet, ops::{Neg, Add, Sub, Mul
 use log::debug;
 use ordered_float::OrderedFloat;
 
-use crate::{node::{N, Node}, contains::Contains, distance::Distance, region::RegionArg, shape::{S, Shape}, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::CanTransform, intersection::Intersection, dual::Dual, to::To, math::deg::Deg, fmt::Fmt, component::Component};
+use crate::{node::{N, Node}, contains::Contains, distance::Distance, region::RegionArg, set::S, shape::Shape, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::CanTransform, intersection::Intersection, dual::Dual, to::To, math::deg::Deg, fmt::Fmt, component::Component, set::Set};
 
 #[derive(Clone, Debug)]
 pub struct Scene<D> {
-    pub shapes: Vec<Shape<D>>,
+    pub sets: Vec<Set<D>>,
     pub components: Vec<Component<D>>,
 }
 
@@ -51,23 +51,26 @@ where
 {
     pub fn new(shapes: Vec<Shape<D>>) -> Scene<D> {
         let num_shapes = (&shapes).len();
-        let duals: Vec<S<D>> = shapes.clone().into_iter().map(|s| Rc::new(RefCell::new(s))).collect();
+        let sets = shapes.clone().into_iter().enumerate().map(|(idx, shape)| Set { idx, shape, children: vec![] }).collect::<Vec<_>>();
+        let set_ptrs: Vec<S<D>> = sets.clone().into_iter().map(|s| Rc::new(RefCell::new(s))).collect();
         let mut nodes: Vec<N<D>> = Vec::new();
         let merge_threshold = 1e-7;
         let zero = shapes[0].zero();
 
         let mut is_directly_connected: Vec<Vec<bool>> = Vec::new();
         // Intersect all shapes, pair-wise
-        for (idx, dual) in duals.iter().enumerate() {
+        for (idx, set_ptr) in set_ptrs.iter().enumerate() {
             let mut directly_connected: Vec<bool> = Vec::new();
             if idx > 0 {
                 for jdx in 0..idx {
                     directly_connected.push(is_directly_connected[jdx][idx]);
                 }
             }
+            let shape0 = &set_ptr.borrow().shape;
             directly_connected.push(true);
             for jdx in (idx + 1)..num_shapes {
-                let intersections = dual.borrow().intersect(&duals[jdx].borrow());
+                let shape1 = set_ptrs[jdx].borrow().shape.clone();
+                let intersections = shape0.intersect(&shape1);
                 if intersections.is_empty() {
                     directly_connected.push(false);
                 } else {
@@ -75,12 +78,14 @@ where
                 }
                 for i in intersections {
                     let mut merged = false;
+                    let theta0 = shape0.theta(&i);
+                    let theta1 = shape1.theta(&i);
                     for node in &nodes {
-                        let d = node.borrow().p.distance(&i.p());
+                        let d = node.borrow().p.distance(&i);
                         if d.into() < merge_threshold {
                             // This intersection is close enough to an existing node; merge them
                             let mut node = node.borrow_mut();
-                            node.merge(i.clone());
+                            node.merge(i.clone(), idx, &theta0, jdx, &theta1);
                             debug!("Merged: {} into {}", i, node);
                             merged = true;
                             break;
@@ -91,9 +96,9 @@ where
                     }
                     let node = Node {
                         idx: nodes.len(),
-                        p: i.p(),
-                        intersections: vec![i.clone()],
-                        shape_thetas: i.thetas(),
+                        p: i,
+                        n: 1,
+                        shape_thetas: vec![(idx, theta0), (jdx, theta1)].into_iter().collect(),
                         edges: Vec::new(),
                     };
                     let n = Rc::new(RefCell::new(node));
@@ -148,8 +153,8 @@ where
         let mut shape_containers: Vec<BTreeSet<usize>> = Vec::new();
         for (idx, shape) in shapes.iter().enumerate() {
             let mut containers: BTreeSet<usize> = BTreeSet::new();
-            for (jdx, container) in duals.iter().enumerate() {
-                if container.borrow().contains(&shape.point(zero.clone())) && !is_directly_connected[idx][jdx] {
+            for (jdx, container) in set_ptrs.iter().enumerate() {
+                if container.borrow().shape.contains(&shape.point(zero.clone())) && !is_directly_connected[idx][jdx] {
                     containers.insert(jdx);
                 }
             }
@@ -179,10 +184,10 @@ where
         let components: Vec<Component<D>> =
             components_idxs
             .into_iter()
-            .map(|component_idxs| Component::new(component_idxs, &shape_containers, &nodes_by_shape, &duals, num_shapes))
+            .map(|component_idxs| Component::new(component_idxs, &shape_containers, &nodes_by_shape, &set_ptrs, num_shapes))
             .collect();
 
-        Scene { shapes, components, }
+        Scene { sets, components, }
     }
 
     pub fn area(&self, key: &String) -> Option<D> {
@@ -220,7 +225,7 @@ where
     }
 
     pub fn len(&self) -> usize {
-        self.shapes.len()
+        self.sets.len()
     }
 
     // pub fn num_vars(&self) -> usize {
@@ -228,7 +233,7 @@ where
     // }
 
     pub fn zero(&self) -> D {
-        self.shapes[0].zero()
+        self.sets[0].zero()
     }
 }
 
@@ -259,9 +264,9 @@ pub mod tests {
 
     #[test]
     fn test_00_10_01() {
-        let c0 = Shape::Circle(Circle { idx: 0, c: R2 { x: 0., y: 0. }, r: 1. });
-        let c1 = Shape::Circle(Circle { idx: 1, c: R2 { x: 1., y: 0. }, r: 1. });
-        let c2 = Shape::Circle(Circle { idx: 2, c: R2 { x: 0., y: 1. }, r: 1. });
+        let c0 = Shape::Circle(Circle { c: R2 { x: 0., y: 0. }, r: 1. });
+        let c1 = Shape::Circle(Circle { c: R2 { x: 1., y: 0. }, r: 1. });
+        let c2 = Shape::Circle(Circle { c: R2 { x: 0., y: 1. }, r: 1. });
         let inputs = vec![
             (c0, duals(0, 3)),
             (c1, duals(1, 3)),
@@ -323,7 +328,7 @@ pub mod tests {
             let path_str = segments.iter().map(|segment| {
                 let start = segment.start();
                 let edge = segment.edge.clone();
-                let cidx = edge.borrow().c.borrow().idx();
+                let cidx = edge.borrow().set.borrow().idx;
                 format!("{}({})", cidx, start.borrow().theta(cidx).v().deg_str())
             }).collect::<Vec<String>>().join(" ");
             format!("{} {}: {:.3} + {:.3} = {}", region.key, path_str, region.polygon_area().v(), region.secant_area().v(), region.area().s(3))
@@ -333,10 +338,10 @@ pub mod tests {
 
     #[test]
     fn test_components() {
-        let c0 = Shape::Circle(Circle { idx: 0, c: R2 { x: 0. , y: 0. }, r: 1. });
-        let c1 = Shape::Circle(Circle { idx: 1, c: R2 { x: 1. , y: 0. }, r: 1. });
-        let c2 = Shape::Circle(Circle { idx: 2, c: R2 { x: 0.5, y: 0. }, r: 3. });
-        let c3 = Shape::Circle(Circle { idx: 3, c: R2 { x: 0. , y: 3. }, r: 1. });
+        let c0 = Shape::Circle(Circle { c: R2 { x: 0. , y: 0. }, r: 1. });
+        let c1 = Shape::Circle(Circle { c: R2 { x: 1. , y: 0. }, r: 1. });
+        let c2 = Shape::Circle(Circle { c: R2 { x: 0.5, y: 0. }, r: 3. });
+        let c3 = Shape::Circle(Circle { c: R2 { x: 0. , y: 3. }, r: 1. });
         let inputs = vec![
             (c0, duals(0, 4)),
             (c1, duals(1, 4)),
@@ -368,17 +373,12 @@ pub mod tests {
         let c0 = 1. / r2sqrt;
         let c1 = r2 * c0;
         let ellipses = [
-            XYRR { idx: 0, c: R2 { x:      c0, y:      c1, }, r: R2 { x: 1., y: r , }, },
-            XYRR { idx: 1, c: R2 { x: 1. + c0, y:      c1, }, r: R2 { x: 1., y: r , }, },
-            XYRR { idx: 2, c: R2 { x:      c1, y: 1. + c0, }, r: R2 { x: r , y: 1., }, },
-            XYRR { idx: 3, c: R2 { x:      c1, y:      c0, }, r: R2 { x: r , y: 1., }, },
+            XYRR { c: R2 { x:      c0, y:      c1, }, r: R2 { x: 1., y: r , }, },
+            XYRR { c: R2 { x: 1. + c0, y:      c1, }, r: R2 { x: 1., y: r , }, },
+            XYRR { c: R2 { x:      c1, y: 1. + c0, }, r: R2 { x: r , y: 1., }, },
+            XYRR { c: R2 { x:      c1, y:      c0, }, r: R2 { x: r , y: 1., }, },
         ];
-        let mut ellipses = mask.map(|i| ellipses[i].clone());
-        for i in 0..N {
-            let mut e = ellipses[i].clone();
-            e.idx = i;
-            ellipses[i] = e;
-        }
+        let ellipses = mask.map(|i| ellipses[i].clone());
         ellipses.map(|e| Shape::XYRR(e))
     }
 
@@ -448,10 +448,10 @@ pub mod tests {
     #[test]
     fn test_4_circles_lattice_0_1() {
         let ellipses = [
-            XYRR { idx: 0, c: R2 { x: 0., y: 0. }, r: R2 { x: 1., y: 1., }, },
-            XYRR { idx: 1, c: R2 { x: 0., y: 1. }, r: R2 { x: 1., y: 1., }, },
-            XYRR { idx: 2, c: R2 { x: 1., y: 0. }, r: R2 { x: 1., y: 1., }, },
-            XYRR { idx: 3, c: R2 { x: 1., y: 1. }, r: R2 { x: 1., y: 1., }, },
+            XYRR { c: R2 { x: 0., y: 0. }, r: R2 { x: 1., y: 1., }, },
+            XYRR { c: R2 { x: 0., y: 1. }, r: R2 { x: 1., y: 1., }, },
+            XYRR { c: R2 { x: 1., y: 0. }, r: R2 { x: 1., y: 1., }, },
+            XYRR { c: R2 { x: 1., y: 1. }, r: R2 { x: 1., y: 1., }, },
         ];
         let shapes = ellipses.map(Shape::XYRR);
         let scene = Scene::new(shapes.to_vec());
@@ -478,10 +478,10 @@ pub mod tests {
     fn test_4_circles_diamond() {
         let sq3 = 3_f64.sqrt();
         let ellipses = [
-            XYRR { idx: 0, c: R2 { x: 0. , y:  0.       }, r: R2 { x: 1., y: 1., }, },
-            XYRR { idx: 1, c: R2 { x: 1. , y:  0.       }, r: R2 { x: 1., y: 1., }, },
-            XYRR { idx: 2, c: R2 { x: 0.5, y:  sq3 / 2. }, r: R2 { x: 1., y: 1., }, },
-            XYRR { idx: 3, c: R2 { x: 0.5, y: -sq3 / 2. }, r: R2 { x: 1., y: 1., }, },
+            XYRR { c: R2 { x: 0. , y:  0.       }, r: R2 { x: 1., y: 1., }, },
+            XYRR { c: R2 { x: 1. , y:  0.       }, r: R2 { x: 1., y: 1., }, },
+            XYRR { c: R2 { x: 0.5, y:  sq3 / 2. }, r: R2 { x: 1., y: 1., }, },
+            XYRR { c: R2 { x: 0.5, y: -sq3 / 2. }, r: R2 { x: 1., y: 1., }, },
         ];
         let shapes = ellipses.map(Shape::XYRR);
         let scene = Scene::new(shapes.to_vec());
@@ -538,12 +538,8 @@ pub mod tests {
         // Actual roots ≈ ±0.835153846196954, per:
         // https://www.wolframalpha.com/input?i=0.000000030743755847066437+x%5E4++%2B0.000000003666731306801131+x%5E3+%2B+1.0001928389119579+x%5E2++%2B0.000011499702220469921+x+-+0.6976068572771268
         let ellipses = [
-            // XYRR { idx: 0, c: R2 { x: 0.347, y: 1.789 }, r: R2 { x: 1.000, y: 2.000 } },
-            // XYRR { idx: 1, c: R2 { x: 1.447, y: 1.789 }, r: R2 { x: 1.000, y: 2.000 } },
-            // XYRR { idx: 2, c: R2 { x: 1.789, y: 1.447 }, r: R2 { x: 2.000, y: 0.999 } },
-            XYRR { idx: 0, c: R2 { x: 0.3472135954999579, y: 1.7888543819998317 }, r: R2 { x: 1.0,                y: 2.0                } },
-            XYRR { idx: 1, c: R2 { x: 1.4472087032327248, y: 1.7888773809286864 }, r: R2 { x: 0.9997362494738584, y: 1.9998582057729295 } },
-            // XYRR { idx: 2, c: R2 { x: 1.7890795512191124, y: 1.4471922162722848 }, r: R2 { x: 1.9998252659224116, y: 0.9994675708661026 } },
+            XYRR { c: R2 { x: 0.3472135954999579, y: 1.7888543819998317 }, r: R2 { x: 1.0,                y: 2.0                } },
+            XYRR { c: R2 { x: 1.4472087032327248, y: 1.7888773809286864 }, r: R2 { x: 0.9997362494738584, y: 1.9998582057729295 } },
         ];
         let shapes: Vec<_> = ellipses.iter().map(|e| Shape::XYRR(e.clone())).collect();
         let scene = Scene::new(shapes);
@@ -559,9 +555,9 @@ pub mod tests {
     #[test]
     fn tweaked_3_ellipses_f64() {
         let shapes = vec![
-            Shape::XYRR(XYRR { idx: 0, c: R2 { x: 0.3472135954999579, y: 1.7888543819998317 }, r: R2 { x: 1.0,                y: 2.0                } }),
-            Shape::XYRR(XYRR { idx: 1, c: R2 { x: 1.4472087032327248, y: 1.7888773809286864 }, r: R2 { x: 0.9997362494738584, y: 1.9998582057729295 } }),
-            Shape::XYRR(XYRR { idx: 2, c: R2 { x: 1.7890795512191124, y: 1.4471922162722848 }, r: R2 { x: 1.9998252659224116, y: 0.9994675708661026 } }),
+            Shape::XYRR(XYRR { c: R2 { x: 0.3472135954999579, y: 1.7888543819998317 }, r: R2 { x: 1.0,                y: 2.0                } }),
+            Shape::XYRR(XYRR { c: R2 { x: 1.4472087032327248, y: 1.7888773809286864 }, r: R2 { x: 0.9997362494738584, y: 1.9998582057729295 } }),
+            Shape::XYRR(XYRR { c: R2 { x: 1.7890795512191124, y: 1.4471922162722848 }, r: R2 { x: 1.9998252659224116, y: 0.9994675708661026 } }),
         ];
         let scene = Scene::new(shapes);
         assert_node_strs(
@@ -582,10 +578,10 @@ pub mod tests {
     #[test]
     fn fizz_bazz_buzz_qux_error() {
         let ellipses = [
-            XYRR { idx: 0, c: R2 { x:  -2.0547374714862916, y:  0.7979432881804286   }, r: R2 { x: 15.303664487498873, y: 17.53077114567813  } },
-            XYRR { idx: 1, c: R2 { x: -11.526407092112622 , y:  3.0882189920409058   }, r: R2 { x: 22.75383340199038 , y:  5.964648612528639 } },
-            XYRR { idx: 2, c: R2 { x:  10.550418544451459 , y:  0.029458342547552023 }, r: R2 { x:  6.102407875525676, y: 11.431493472697646 } },
-            XYRR { idx: 3, c: R2 { x:   4.271631577807546 , y: -5.4473446956862155   }, r: R2 { x:  2.652054463066812, y: 10.753963707585315 } },
+            XYRR { c: R2 { x:  -2.0547374714862916, y:  0.7979432881804286   }, r: R2 { x: 15.303664487498873, y: 17.53077114567813  } },
+            XYRR { c: R2 { x: -11.526407092112622 , y:  3.0882189920409058   }, r: R2 { x: 22.75383340199038 , y:  5.964648612528639 } },
+            XYRR { c: R2 { x:  10.550418544451459 , y:  0.029458342547552023 }, r: R2 { x:  6.102407875525676, y: 11.431493472697646 } },
+            XYRR { c: R2 { x:   4.271631577807546 , y: -5.4473446956862155   }, r: R2 { x:  2.652054463066812, y: 10.753963707585315 } },
         ];
         let shapes = ellipses.map(Shape::XYRR);
         let scene = Scene::new(shapes.to_vec());
@@ -615,10 +611,10 @@ pub mod tests {
     #[test]
     fn disjoint() {
         let ellipses = [
-            XYRR { idx: 0, c: R2 { x: 0. , y: 0. }, r: R2 { x: 1., y: 1., }, },
-            XYRR { idx: 1, c: R2 { x: 3. , y: 0. }, r: R2 { x: 1., y: 1., }, },
-            XYRR { idx: 2, c: R2 { x: 0. , y: 3. }, r: R2 { x: 1., y: 1., }, },
-            XYRR { idx: 3, c: R2 { x: 3. , y: 3. }, r: R2 { x: 1., y: 1., }, },
+            XYRR { c: R2 { x: 0. , y: 0. }, r: R2 { x: 1., y: 1., }, },
+            XYRR { c: R2 { x: 3. , y: 0. }, r: R2 { x: 1., y: 1., }, },
+            XYRR { c: R2 { x: 0. , y: 3. }, r: R2 { x: 1., y: 1., }, },
+            XYRR { c: R2 { x: 3. , y: 3. }, r: R2 { x: 1., y: 1., }, },
         ];
         let shapes = ellipses.map(Shape::XYRR);
         let scene = Scene::new(shapes.to_vec());

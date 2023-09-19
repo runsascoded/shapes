@@ -3,7 +3,7 @@ use std::{ops::{Div, Neg, Add, Mul}, f64::consts::PI, fmt::Display};
 use crate::{dual::Dual, r2::R2, transform::{CanProject, HasProjection}, shape::Shape, trig::Trig, sqrt::Sqrt, math::recip::Recip};
 
 pub trait ThetaPoints<D> {
-    fn theta(&self, p: R2<D>) -> D;
+    fn theta(&self, p: &R2<D>) -> D;
     fn point(&self, t: D) -> R2<D>;
     fn arc_midpoint(&self, t0: D, t1: D) -> R2<D>;
 }
@@ -30,7 +30,7 @@ impl<D: ThetaPointsArg> ThetaPoints<D> for Shape<D>
 where
     R2<D>: Neg<Output = R2<D>> + CanProject<D, Output = R2<D>>,
 {
-    fn theta(&self, p: R2<D>) -> D {
+    fn theta(&self, p: &R2<D>) -> D {
         p.apply(&self.projection()).atan2()
     }
     fn point(&self, t: D) -> R2<D> {

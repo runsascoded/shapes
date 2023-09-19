@@ -11,7 +11,7 @@ use super::{xyrrt::XYRRT, cdef::{CDEF, self}};
 
 #[derive(Debug, Clone, From, PartialEq, Serialize, Deserialize, Tsify)]
 pub struct XYRR<D> {
-    pub idx: usize,
+    // pub idx: usize,
     pub c: R2<D>,
     pub r: R2<D>,
 }
@@ -24,14 +24,13 @@ impl XYRR<f64> {
         let ry = Dual::new(self.r.y, duals[3].clone());
         let c = R2 { x: cx, y: cy };
         let r = R2 { x: rx, y: ry };
-        XYRR::from((self.idx, c, r))
+        XYRR::from((c, r))
     }
 }
 
 impl<D: RotateArg> XYRR<D> {
     pub fn rotate(&self, t: &D) -> XYRRT<D> {
         XYRRT {
-            idx: self.idx,
             c: self.c.clone().rotate(t),
             r: self.r.clone(),
             t: t.clone(),
@@ -75,7 +74,7 @@ where
 
 impl XYRR<D> {
     pub fn v(&self) -> XYRR<f64> {
-        XYRR { idx: self.idx, c: self.c.v(), r: self.r.v() }
+        XYRR { c: self.c.v(), r: self.r.v() }
     }
     pub fn n(&self) -> usize {
         self.c.x.d().len()
@@ -84,7 +83,7 @@ impl XYRR<D> {
 
 impl<D: Display> Display for XYRR<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{{ idx: {}, c: {}, r: {} }}", self.idx, self.c, self.r)
+        write!(f, "{{ c: {}, r: {} }}", self.c, self.r)
     }
 }
 
@@ -126,17 +125,14 @@ where R2<D>: TransformR2<D>,
         // println!("transform: {}", t);
         let rv = match t.clone() {
             Translate(v) => XYRR {
-                idx: self.idx,
                 c: self.c.clone() + v,
                 r: self.r.clone(),
             },
             Scale(v) => XYRR {
-                idx: self.idx,
                 c: self.c.clone() * v.clone(),
                 r: self.r.clone() * v,
             },
             ScaleXY(v) => XYRR {
-                idx: self.idx,
                 c: self.c.clone() * v.clone(),
                 r: self.r.clone() * v,
             },
@@ -152,14 +148,14 @@ where R2<D>: TransformR2<D>,
 mod tests {
     use std::{env, fmt};
 
-    use crate::{dual::Dual, circle::Circle, intersect::Intersect, to::To, shape::Shape, math::deg::Deg, fmt::Fmt, intersection::Intersection};
+    use crate::{dual::Dual, circle::Circle, intersect::Intersect, to::To, shape::Shape, math::deg::Deg, fmt::Fmt};
 
     use super::*;
     use approx::{AbsDiffEq, RelativeEq};
     use ordered_float::OrderedFloat;
     use test_log::test;
 
-    fn assert_intersections<D: Display + Deg + Fmt>(intersections: Vec<Intersection<D>>, expected: Vec<&str>) {
+    fn assert_intersections<D: Display + Deg + Fmt>(intersections: Vec<R2<D>>, expected: Vec<&str>) {
         let gen_vals = env::var("GEN_VALS").map(|s| s.parse::<usize>().unwrap()).ok();
         match gen_vals {
             Some(_) => {
@@ -213,7 +209,7 @@ mod tests {
 
     #[test]
     fn test_unit_intersections_d() {
-        let e: XYRR<f64> = Circle { idx: 0, c: R2 { x: 0., y: -1. }, r: 1. }.to();
+        let e: XYRR<f64> = Circle { c: R2 { x: 0., y: -1. }, r: 1. }.to();
         let points = e.unit_intersections();
         check(points, [
             R2 { x: -0.8660254037844386, y: -0.5 },
@@ -225,7 +221,6 @@ mod tests {
     fn test_perturbed_unit_circle1() {
         // Quartic solvers struggle to retain accuracy computing this slightly-perturbed unit-circle
         let e = XYRR {
-            idx: 0,
             c: R2 { x: -1.100285308561806, y: -1.1500279763995946e-5 },
             r: R2 { x:  1.000263820108834, y:  1.0000709021402923 }
         };
@@ -241,7 +236,6 @@ mod tests {
     fn test_perturbed_unit_circle2() {
         // Quartic solvers struggle to retain accuracy computing this slightly-perturbed unit-circle
         let e = XYRR {
-            idx: 0,
             c: R2 { x: -1.1, y: -1e-5 },
             r: R2 { x:  1.0002, y:  1.00007 }
         };
@@ -256,7 +250,6 @@ mod tests {
     #[test]
     fn test_unit_intersections_1_1_2_3() {
         let e = XYRR {
-            idx: 0,
             c: R2 { x: Dual::new(1., vec![1.,0.,0.,0.]),
                     y: Dual::new(1., vec![0.,1.,0.,0.]), },
             r: R2 { x: Dual::new(2., vec![0.,0.,1.,0.]),
@@ -274,7 +267,6 @@ mod tests {
     #[test]
     fn test_unit_intersections_1_n1_1_1() {
         let e = XYRR {
-            idx: 0,
             c: R2 { x: Dual::new( 1., vec![1.,0.,0.,0.]),
                     y: Dual::new(-1., vec![0.,1.,0.,0.]), },
             r: R2 { x: Dual::new( 1., vec![0.,0.,1.,0.]),
@@ -292,7 +284,6 @@ mod tests {
     #[test]
     fn circle_l() {
         let e = XYRR {
-            idx: 0,
             c: R2 { x: -1.4489198414355153, y: 0.               , },
             r: R2 { x:  1.29721671027373  , y: 1.205758072744277, },
         };
@@ -310,7 +301,7 @@ mod tests {
 
     #[test]
     fn ellipses4_0_2() {
-        let e = XYRR { idx: 0, c: R2 { x: -0.6708203932499369, y: 0.34164078649987384 }, r: R2 { x: 0.5, y: 2.0 } };
+        let e = XYRR { c: R2 { x: -0.6708203932499369, y: 0.34164078649987384 }, r: R2 { x: 0.5, y: 2.0 } };
         let points = e.unit_intersections();
         check(points, [
             R2 { x: -0.19700713608839127, y:  0.9804020544298395 },
@@ -320,8 +311,8 @@ mod tests {
 
     #[test]
     fn ellipses4_0_1() {
-        let e0 = XYRR { idx: 0, c: R2 { x: 0.4472135954999579, y: 1.7888543819998317 }, r: R2 { x: 1.,                y: 2. } };
-        let e1 = XYRR { idx: 1, c: R2 { x: 1.447213595499943 , y: 1.7888543819998468 }, r: R2 { x: 1.000000000000004, y: 1.9999999999999956 } };
+        let e0 = XYRR { c: R2 { x: 0.4472135954999579, y: 1.7888543819998317 }, r: R2 { x: 1.,                y: 2. } };
+        let e1 = XYRR { c: R2 { x: 1.447213595499943 , y: 1.7888543819998468 }, r: R2 { x: 1.000000000000004, y: 1.9999999999999956 } };
         let points = Shape::XYRR(e0).intersect(&Shape::XYRR(e1));
         debug!("points: {:?}", points);
         assert_intersections(points, vec![
@@ -333,8 +324,8 @@ mod tests {
     #[test]
     fn fizz_buzz_bazz_step2() {
         let [ e0, e1 ] = [
-            XYRR { idx: 0, c: R2 { x: 0.9640795213008657, y: 0.14439141636463643 }, r: R2 { x: 1.022261085060523, y: 1.0555121335932487 } },
-            XYRR { idx: 1, c: R2 { x: 0.1445171704183926, y: 0.964205275354622   }, r: R2 { x: 0.9998075759976, y: 0.9049240408142587 } },
+            XYRR { c: R2 { x: 0.9640795213008657, y: 0.14439141636463643 }, r: R2 { x: 1.022261085060523, y: 1.0555121335932487 } },
+            XYRR { c: R2 { x: 0.1445171704183926, y: 0.964205275354622   }, r: R2 { x: 0.9998075759976, y: 0.9049240408142587 } },
         ];
         let shapes = [ e0, e1 ].map(|e| Shape::XYRR(e));
         let points = shapes[0].intersect(&shapes[1]);

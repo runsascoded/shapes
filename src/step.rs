@@ -54,7 +54,7 @@ impl Step {
     pub fn new(inputs: Vec<Input>, targets: Targets, total_target_area: Option<f64>) -> Step {
         let shapes: Vec<Shape<D>> = inputs.iter().map(|(c, duals)| c.dual(duals)).collect();
         let scene = Scene::new(shapes);
-        let shapes = &scene.shapes;
+        let sets = &scene.sets;
         // let duals = intersections.duals;
         let all_key = String::from_utf8(vec![b'*'; scene.len()]).unwrap();
         let mut expanded_targets = targets.clone();
@@ -82,8 +82,8 @@ impl Step {
 
         let missing_regions: BTreeMap<Vec<usize>, f64> = errors.iter().filter_map(|(key, error)| {
             if error.actual_area.clone().filter(|a| !a.is_zero()).is_none() && error.target_area > 0. {
-                let shape_idxs: Vec<usize> = key.chars().enumerate().filter(|(_, c)| *c != '*' && *c != '-').map(|(idx, _)| idx).collect();
-                Some((shape_idxs, error.target_area))
+                let set_idxs: Vec<usize> = key.chars().enumerate().filter(|(_, c)| *c != '*' && *c != '-').map(|(idx, _)| idx).collect();
+                Some((set_idxs, error.target_area))
             } else {
                 None
             }
@@ -94,15 +94,15 @@ impl Step {
         // let mut disjoint_penalties = Vec::<DisjointPenalty>::new();
         let mut total_disjoint_penalty = Dual::zero(error.d().len());
 
-        for (shape_idxs, target_area) in missing_regions.iter() {
-            let n = shape_idxs.len();
+        for (set_idxs, target_area) in missing_regions.iter() {
+            let n = set_idxs.len();
             let nf = n as f64;
-            let centroid: R2<Dual> = shape_idxs.iter().map(|idx| shapes[*idx].center()).sum::<R2<Dual>>();
+            let centroid: R2<Dual> = set_idxs.iter().map(|idx| sets[*idx].shape.center()).sum::<R2<Dual>>();
             let centroid = R2 { x: centroid.x / nf, y: centroid.y / nf };
-            debug!("missing region {:?}, centroid {:?}", shape_idxs, centroid);
-            shape_idxs.iter().for_each(|idx| {
-                let shape = &shapes[*idx];
-                let distance = shape.center().distance(&centroid);
+            debug!("missing region {:?}, centroid {:?}", set_idxs, centroid);
+            set_idxs.iter().for_each(|idx| {
+                let set = &sets[*idx];
+                let distance = set.shape.center().distance(&centroid);
                 debug!("  missing region penalty: {}: {}", idx, &distance);
                 total_disjoint_penalty += distance * target_area / nf;
             });
@@ -192,7 +192,7 @@ impl Step {
                             x: s.c.x + dx,
                             y: s.c.y + dy,
                         };
-                        Shape::Circle(Circle { idx: s.idx, c, r: s.r + dr })
+                        Shape::Circle(Circle { c, r: s.r + dr })
                     },
                     Shape::XYRR(e) => {
                         if duals.len() != 4 {
@@ -207,7 +207,7 @@ impl Step {
                         let [ dcx, dcy, drx, dry ]: [f64; 4] = duals.map(|d| d.iter().zip(&step_vec).map(|(mask, step)| mask * step).sum());
                         let c = e.c + R2 { x: dcx, y: dcy, };
                         let r = e.r + R2 { x: drx, y: dry };
-                        Shape::XYRR(XYRR { idx: e.idx, c, r })
+                        Shape::XYRR(XYRR { c, r })
                     },
                 },
                 duals ,

@@ -46,13 +46,13 @@ pub struct Component {
 
 impl Component {
     pub fn new(component: &component::Component<D>) -> Self {
-        let shapes = component.shapes.clone();
+        let shapes = component.sets.clone();
         let points = component.nodes.iter().map(|n| Point {
             p: n.borrow().p.clone(),
             edge_idxs: n.borrow().edges.iter().map(|e| e.borrow().idx).collect(),
         }).collect();
         let edges = component.edges.iter().map(|e| Edge {
-            cidx: e.borrow().c.borrow().idx(),
+            cidx: e.borrow().set.borrow().idx,
             i0: e.borrow().n0.borrow().idx,
             i1: e.borrow().n1.borrow().idx,
             t0: e.borrow().t0.v(),
@@ -69,7 +69,7 @@ impl Component {
             container_idxs: r.container_idxs.clone().into_iter().collect(),
         }).collect();
         Component {
-            shapes: shapes.iter().map(|s| s.borrow().v()).collect(),
+            shapes: shapes.iter().map(|s| s.borrow().shape.v()).collect(),
             points,
             edges,
             regions,

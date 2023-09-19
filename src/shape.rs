@@ -1,4 +1,4 @@
-use std::{rc::Rc, cell::RefCell, ops::Neg, fmt};
+use std::{ops::Neg, fmt};
 
 use derive_more::{From, Display};
 use serde::{Deserialize, Serialize};
@@ -10,8 +10,6 @@ use crate::{dual::D, circle, ellipses::xyrr, zero::Zero, transform::{Transform, 
 pub type Duals = Vec<Vec<f64>>;
 #[declare]
 pub type Input = (Shape<f64>, Duals);
-
-pub type S<D> = Rc<RefCell<Shape<D>>>;
 
 #[derive(Debug, Display, Clone, From, PartialEq, Serialize, Deserialize, Tsify)]
 pub enum Shape<D> {
@@ -29,12 +27,6 @@ impl Shape<f64> {
 }
 
 impl<D: Clone> Shape<D> {
-    pub fn idx(&self) -> usize {
-        match self {
-            Shape::Circle(c) => c.idx,
-            Shape::XYRR(e) => e.idx,
-        }
-    }
     pub fn center(&self) -> R2<D> {
         match self {
             Shape::Circle(c) => c.c.clone(),

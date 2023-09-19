@@ -30,9 +30,9 @@ where
         let end = self.end();
         let end_p: R2<f64> = end.borrow().p.clone().to();
         let edge = self.edge.clone();
-        let shape_idx = edge.borrow().shape_idx();
+        let shape_idx = edge.borrow().set_idx();
         let successors = end.borrow().edges.iter().filter(|e| {
-            e.borrow().shape_idx() != shape_idx && e.borrow().visits < e.borrow().expected_visits()
+            e.borrow().set_idx() != shape_idx && e.borrow().visits < e.borrow().expected_visits()
         }).map(|e| {
             let p: R2<f64> = e.borrow().n0.borrow().p.clone().to();
             let fwd = p == end_p;

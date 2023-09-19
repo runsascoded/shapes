@@ -18,7 +18,7 @@ pub type N<D> = Rc<RefCell<Node<D>>>;
 pub struct Node<D> {
     pub idx: usize,
     pub p: R2<D>,
-    pub intersections: Vec<Intersection<D>>,
+    pub n: usize,
     pub shape_thetas: BTreeMap<usize, D>,
     pub edges: Vec<E<D>>,
 }
@@ -51,22 +51,21 @@ where R2<D>: Add<Output = R2<D>>,
     // + Mul<f64, Output = R2<D>>
     // + Div<f64, Output = R2<D>>,
 {
-    pub fn merge(&mut self, intersection: Intersection<D>) {
+    pub fn merge(&mut self, o: R2<D>, set0_idx: usize, set0_theta: &D, set1_idx: usize, set1_theta: &D) {
         let p = self.p.clone();
-        let o = intersection.p();
-        let n: f64 = self.intersections.len() as f64;
+        let n: f64 = self.n as f64;
         self.p = R2 {
             x: p.x * n / (n + 1.) + o.x / (n + 1.),
             y: p.y * n / (n + 1.) + o.y / (n + 1.),
         };
         // self.p = p * n / (n + 1.) + o / (n + 1.);
-        if !self.shape_thetas.contains_key(&intersection.c0idx) {
-            self.shape_thetas.insert(intersection.c0idx, intersection.t0.clone());
+        self.n += 1;
+        if !self.shape_thetas.contains_key(&set0_idx) {
+            self.shape_thetas.insert(set0_idx, set0_theta.clone());
         }
-        if !self.shape_thetas.contains_key(&intersection.c1idx) {
-            self.shape_thetas.insert(intersection.c1idx, intersection.t1.clone());
+        if !self.shape_thetas.contains_key(&set1_idx) {
+            self.shape_thetas.insert(set1_idx, set1_theta.clone());
         }
-        self.intersections.push(intersection);
     }
 }
 impl<D: Display + Deg + Fmt> Display for Node<D>

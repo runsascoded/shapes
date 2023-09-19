@@ -70,14 +70,14 @@ where
 {
     type Output = D;
     fn gap(&self, o: &XYRR<D>) -> Option<D> {
-        let t0 = Shape::XYRR(self.clone()).theta(o.c.clone());
+        let t0 = Shape::XYRR(self.clone()).theta(&o.c);
         let distance = (self.c.clone() - o.c.clone()).norm();
         let p0 = Shape::XYRR(self.clone()).point(t0.clone());
         let p1 = Shape::XYRR(o.clone()).point(-t0);
         let radii = (p0.clone() - self.c.clone()).norm() + (p1.clone() - o.c.clone()).norm();
         let gap = distance.clone() - radii.clone();
         if gap.clone().into() > 0. {
-            debug!("gap {}-{}: {} - {} = {}", self.idx, o.idx, distance, radii, gap.clone());
+            debug!("gap: {} - {} = {}", distance, radii, gap.clone());
             Some(gap)
         } else {
             None

@@ -1,13 +1,13 @@
 use std::{fmt::Display, rc::Rc, cell::RefCell, collections::BTreeSet, ops::{Mul, Div, Sub}};
 
-use crate::{math::deg::Deg, node::N, shape::{S, Shape}, trig::Trig, dual::Dual};
+use crate::{math::deg::Deg, node::N, set::S, shape::Shape::{Circle, XYRR}, trig::Trig, dual::Dual};
 
 pub type E<D> = Rc<RefCell<Edge<D>>>;
 
 #[derive(Debug, Clone)]
 pub struct Edge<D> {
     pub idx: usize,
-    pub c: S<D>,
+    pub set: S<D>,
     pub n0: N<D>,
     pub n1: N<D>,
     pub t0: D,
@@ -32,9 +32,9 @@ impl EdgeArg for Dual {}
 
 impl<D: EdgeArg> Edge<D> {
     pub fn secant_area(&self) -> D {
-        let r2 = match &*self.c.borrow() {
-            Shape::Circle(c) => c.clone().r * c.clone().r,
-            Shape::XYRR(e) => e.r.clone().x * e.clone().r.y,
+        let r2 = match &self.set.borrow().shape {
+            Circle(c) => c.clone().r * c.clone().r,
+            XYRR(e) => e.r.clone().x * e.clone().r.y,
         };
         let theta = self.theta();
         r2 / 2. * (theta.clone() - theta.sin())
@@ -47,13 +47,13 @@ impl<D: EdgeArg> Edge<D> {
         }
         theta
     }
-    pub fn shape_idx(&self) -> usize {
-        self.c.borrow().idx()
+    pub fn set_idx(&self) -> usize {
+        self.set.borrow().idx
     }
     /// Return all shape indices that either contain this Edge, or which this Edge runs along the border of
     pub fn all_idxs(&self) -> BTreeSet<usize> {
         let mut idxs = self.container_idxs.clone();
-        idxs.insert(self.c.borrow().idx());
+        idxs.insert(self.set.borrow().idx);
         idxs
     }
 }
@@ -75,7 +75,7 @@ impl<
         write!(
             f,
             "C{}: {}({}) → {}({}), containers: [{}] ({})",
-            self.c.borrow().idx(),
+            self.set.borrow().idx,
             self.n0.borrow().idx, self.t0.clone().into().deg_str(),
             self.n1.borrow().idx, self.t1.clone().into().deg_str(),
             containers.join(","),
