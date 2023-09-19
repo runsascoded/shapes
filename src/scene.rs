@@ -51,7 +51,7 @@ where
 {
     pub fn new(shapes: Vec<Shape<D>>) -> Scene<D> {
         let num_shapes = (&shapes).len();
-        let sets = shapes.clone().into_iter().enumerate().map(|(idx, shape)| Set { idx, shape, children: vec![] }).collect::<Vec<_>>();
+        let mut sets = shapes.clone().into_iter().enumerate().map(|(idx, shape)| Set::new(idx, shape)).collect::<Vec<_>>();
         let set_ptrs: Vec<S<D>> = sets.clone().into_iter().map(|s| Rc::new(RefCell::new(s))).collect();
         let mut nodes: Vec<N<D>> = Vec::new();
         let merge_threshold = 1e-7;
@@ -150,15 +150,15 @@ where
                 })
             });
         }
-        let mut shape_containers: Vec<BTreeSet<usize>> = Vec::new();
+        let mut unconnected_containers: Vec<BTreeSet<usize>> = Vec::new();
         for (idx, shape) in shapes.iter().enumerate() {
             let mut containers: BTreeSet<usize> = BTreeSet::new();
             for (jdx, container) in set_ptrs.iter().enumerate() {
-                if container.borrow().shape.contains(&shape.point(zero.clone())) && !is_directly_connected[idx][jdx] {
+                if container.borrow().shape.contains(&shape.point(zero.clone())) && !is_connected[idx][jdx] {
                     containers.insert(jdx);
                 }
             }
-            shape_containers.push(containers);
+            unconnected_containers.push(containers);
         }
 
         // Sort each circle's nodes in order of where they appear on the circle (from -PI to PI)
@@ -184,9 +184,17 @@ where
         let components: Vec<Component<D>> =
             components_idxs
             .into_iter()
-            .map(|component_idxs| Component::new(component_idxs, &shape_containers, &nodes_by_shape, &set_ptrs, num_shapes))
+            .map(|component_idxs| Component::new(component_idxs, &unconnected_containers, &nodes_by_shape, &set_ptrs, num_shapes))
             .collect();
 
+        for (component_idx, component) in components.iter().enumerate() {
+            for container_idx in &component.container_idxs {
+                set_ptrs[*container_idx].borrow_mut().children.insert(component_idx);
+            }
+        }
+        for set in &mut sets {
+            set.prune_children(&components);
+        }
         Scene { sets, components, }
     }
 

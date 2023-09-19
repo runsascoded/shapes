@@ -22,18 +22,17 @@ where R2<D>: To<R2<f64>>,
 {
     pub fn new(
         set_idxs: Vec<usize>,
-        set_containers: &Vec<BTreeSet<usize>>,
+        unconnected_containers: &Vec<BTreeSet<usize>>,
         nodes_by_set: &Vec<Vec<N<D>>>,
         sets: &Vec<S<D>>,
         num_sets: usize,
     ) -> Component<D> {
-        let mut set_idxs_iter = set_idxs.iter().map(|i| set_containers[*i].clone());
-        let mut component_container_idxs = set_idxs_iter.next().unwrap();
-        for containers in set_idxs_iter {
-            if component_container_idxs.is_empty() {
-                break;
+        let mut set_idxs_iter = set_idxs.iter().map(|i| unconnected_containers[*i].clone()).enumerate();
+        let mut component_container_idxs = set_idxs_iter.next().unwrap().1;
+        for (jdx, containers) in set_idxs_iter {
+            if component_container_idxs != containers {
+                panic!("Expected all sets to share the same container_idxs, but found {}: {:?} vs. {}: {:?}", 0, component_container_idxs, jdx, containers);
             }
-            component_container_idxs = component_container_idxs.intersection(&containers).cloned().collect();
         }
 
         if set_idxs.len() == 1 {
@@ -389,5 +388,11 @@ where R2<D>: To<R2<f64>>,
                 visited_nodes.remove(&next_node_idx);
             }
         }
+    }
+}
+
+impl<D> Component<D> {
+    pub fn children(&self) -> BTreeSet<usize> {
+        self.sets.iter().flat_map(|set| set.borrow().children.clone()).collect()
     }
 }
