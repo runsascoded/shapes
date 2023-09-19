@@ -346,7 +346,7 @@ mod tests {
             ("*1", 1.),
             ("01", 0.5),
         ];
-        check(inputs, targets.into(), "two_circle_containment", 0.5, 0);
+        check(inputs, targets.into(), "two_circle_containment", 0.5, 100);
     }
 
     #[test]

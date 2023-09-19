@@ -154,7 +154,27 @@ impl<D: Arg> Targets<D>
             total_area,
         }
     }
-
+    pub fn disjoints(&self) -> TargetsMap<D> {
+        let mut map: TargetsMap<D> = BTreeMap::new();
+        self.disjoints_rec(String::new(), &mut map);
+        let none_key = self.none_key();
+        map.into_iter().filter(|(k, _)| k != &none_key).collect()
+    }
+    pub fn disjoints_rec(&self, prefix: String, map: &mut TargetsMap<D>) {
+        let idx = prefix.len();
+        if idx == self.n {
+            let value = self.all.get(&prefix).unwrap();
+            map.insert(prefix, value.clone());
+        } else {
+            self.disjoints_rec(format!("{}{}", prefix, '-'), map);
+            self.disjoints_rec(format!("{}{}", prefix, Targets::<D>::idx(idx)), map);
+        }
+    }
+}
+impl<D> Targets<D> {
+    pub fn none_key(&self) -> String {
+        String::from_utf8(vec![b'-'; self.n]).unwrap()
+    }
     pub fn idx(idx: usize) -> char {
         if idx < 10 {
             char::from_digit(idx as u32, 10).unwrap()

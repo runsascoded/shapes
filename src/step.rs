@@ -1,10 +1,11 @@
 use std::collections::BTreeMap;
 use std::fmt::Display;
 
-use log::{info, debug};
+use log::{info, debug, warn};
 use serde::{Deserialize, Serialize};
 use tsify::{declare, Tsify};
 
+use crate::distance;
 use crate::ellipses::xyrr::XYRR;
 use crate::math::recip::Recip;
 use crate::shape::{Input, Shape, Duals};
@@ -70,42 +71,85 @@ impl Step {
         // let error = errors.values().into_iter().map(|e| e.error.clone() * &e.error).sum::<D>().sqrt();
         let components: Vec<regions::Component> = scene.components.iter().map(|c| regions::Component::new(&c)).collect();
 
-        let missing_regions: BTreeMap<Vec<usize>, f64> = errors.iter().filter_map(|(key, error)| {
-            if error.actual_area.clone().filter(|a| !a.is_zero()).is_none() && error.target_area > 0. {
-                let set_idxs: Vec<usize> = key.chars().enumerate().filter(|(_, c)| *c != '*' && *c != '-').map(|(idx, _)| idx).collect();
-                Some((set_idxs, error.target_area))
+        // Include penalties for erroneously-disjoint shapes
+        // let mut disjoint_penalties = Vec::<DisjointPenalty>::new();
+        let mut total_disjoint_penalty = scene.zero();
+        let mut total_contained_penalty = scene.zero();
+
+        debug!("all targets: {}", targets.iter().map(|(k, v)| format!("{}: {}", k, v)).collect::<Vec<String>>().join(", "));
+        let missing_regions: BTreeMap<String, f64> = targets.disjoints().into_iter().filter(|(key, target)| {
+            let err = errors.get(key).expect(&format!("No key {} among error keys {}", key, errors.keys().cloned().collect::<Vec<String>>().join(", ")));
+            let region_should_exist = target > &0.;
+            let region_exists = err.actual_area.clone().filter(|a| !a.is_zero()).is_some();
+            if region_should_exist && !region_exists {
+                true
             } else {
-                None
+                false
             }
         }).collect();
 
-        let total_missing = missing_regions.values().sum::<f64>();
-        // Include penalties for erroneously-disjoint shapes
-        // let mut disjoint_penalties = Vec::<DisjointPenalty>::new();
-        let mut total_disjoint_penalty = Dual::zero(error.d().len());
-
-        for (set_idxs, target_area) in missing_regions.iter() {
+        let mut total_missing_disjoint = 0.;
+        let mut total_missing_contained = 0.;
+        for (key, target) in missing_regions.iter() {
+            let set_idxs: Vec<usize> = key.chars().enumerate().filter(|(_, c)| *c != '*' && *c != '-').map(|(idx, _)| idx).collect();
             let n = set_idxs.len();
             let nf = n as f64;
             let centroid: R2<Dual> = set_idxs.iter().map(|idx| sets[*idx].shape.center()).sum::<R2<Dual>>();
             let centroid = R2 { x: centroid.x / nf, y: centroid.y / nf };
-            debug!("missing region {:?}, centroid {:?}", set_idxs, centroid);
-            set_idxs.iter().for_each(|idx| {
-                let set = &sets[*idx];
-                let distance = set.shape.center().distance(&centroid);
-                debug!("  missing region penalty: {}: {}", idx, &distance);
-                total_disjoint_penalty += distance * target_area / nf;
-            });
+            let parents_key = key.replace('-', "*");
+            let parent_regions_exist = errors.get(&parents_key).unwrap().actual_area.clone().filter(|a| !a.is_zero()).is_some();
+            debug!("missing region {:?}, centroid {:?}, parents {} ({})", set_idxs, centroid, parents_key, parent_regions_exist);
+            if parent_regions_exist {
+                let mut parents = Vec::<usize>::new();
+                for (idx, ch) in parents_key.char_indices() {
+                    if ch == '*' {
+                        let parent_key = format!("{}{}{}", &key[..idx], Targets::<f64>::idx(idx), &key[idx+1..]);
+                        let parent_region_exists = errors.get(&parent_key).unwrap().actual_area.clone().filter(|a| !a.is_zero()).is_some();
+                        if parent_region_exists {
+                            parents.push(idx);
+                        }
+                    }
+                }
+                let np = parents.len() as f64;
+                debug!("  {} parents: {}", np, parents.iter().map(|idx| format!("{}", idx)).collect::<Vec<String>>().join(", "));
+                for parent_idx in &parents {
+                    let center = scene.sets[*parent_idx].shape.center();
+                    let distance = center.distance(&centroid);
+                    if distance.is_zero() {
+                        warn!("  missing region penalty: {}, parent {}, distance {}, skipping", key, parent_idx, &distance);
+                    } else {
+                        debug!("  missing region penalty: {}, parent {}, distance {}", key, parent_idx, &distance);
+                        total_contained_penalty += distance.recip() * target / np;
+                    }
+                }
+                total_missing_contained += target;
+            } else {
+                set_idxs.iter().for_each(|idx| {
+                    let set = &sets[*idx];
+                    let distance = set.shape.center().distance(&centroid);
+                    debug!("  missing region penalty: {}, shape {}, distance {}", key, idx, &distance);
+                    total_disjoint_penalty += distance * target / nf;
+                });
+                total_missing_disjoint += target;
+            }
         }
-        if !missing_regions.is_empty() {
-            info!("missing_regions ({}): {:?}, unscaled penalty {}", total_missing, missing_regions, total_disjoint_penalty);
-        }
-        total_disjoint_penalty = total_disjoint_penalty.recip() * total_missing;
 
-        if total_disjoint_penalty.v() > 0. {
+        if !missing_regions.is_empty() {
+            info!("missing_regions: {:?}", total_missing_disjoint);
+            info!("   disjoint: total {}, unscaled penalty {}", total_missing_disjoint, total_disjoint_penalty);
+            info!("  contained: total {}, unscaled penalty {}", total_missing_contained, total_contained_penalty);
+        }
+        let total_disjoint_penalty_v = total_disjoint_penalty.v();
+        if total_disjoint_penalty_v > 0. {
+            total_disjoint_penalty = total_disjoint_penalty * (total_missing_disjoint / total_disjoint_penalty_v);
             info!("  total_disjoint_penalty: {}", total_disjoint_penalty);
-            error += Dual::new(total_disjoint_penalty.v(), total_disjoint_penalty.d().iter().map(|d| -d).collect());
-            // error += total_disjoint_penalty;
+            error += total_disjoint_penalty;
+        }
+        let total_contained_penalty_v = total_contained_penalty.v();
+        if total_contained_penalty_v > 0. {
+            total_contained_penalty = total_contained_penalty * (total_missing_contained / total_contained_penalty_v);
+            info!("  total_contained_penalty: {}", total_contained_penalty);
+            error += total_contained_penalty;
         }
 
         Step { inputs, components, targets, total_area, errors, error }
@@ -124,9 +168,7 @@ impl Step {
     }
 
     pub fn compute_errors(scene: &Scene<D>, targets: &Targets<f64>, total_area: &Dual) -> Errors {
-        let n = scene.len();
-        // let all_key = String::from_utf8(vec![b'*'; n]).unwrap();
-        let none_key = String::from_utf8(vec![b'-'; n]).unwrap();
+        let none_key = targets.none_key();
         targets.iter().filter_map(|(key, target_area)| {
             if key == &none_key {
                 None
