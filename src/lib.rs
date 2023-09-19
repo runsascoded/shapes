@@ -9,7 +9,6 @@ pub mod circle;
 pub mod component;
 pub mod contains;
 pub mod d5;
-pub mod diagram;
 pub mod distance;
 pub mod dual;
 pub mod edge;
@@ -33,6 +32,7 @@ pub mod scene;
 pub mod segment;
 pub mod shape;
 pub mod sqrt;
+pub mod step;
 pub mod theta_points;
 pub mod to;
 pub mod transform;
@@ -42,14 +42,14 @@ pub mod js_dual;
 
 use areas::Areas;
 use shape::Input;
-use diagram::Diagram;
+use step::Step;
 use dual::D;
 use ellipses::xyrr::XYRR;
 use log::{LevelFilter, info, error};
 
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_console_logger::DEFAULT_LOGGER;
-use crate::diagram::Targets;
+use crate::step::Targets;
 use crate::model::Model;
 
 pub fn deser_log_level(level: JsValue) -> LevelFilter {
@@ -81,11 +81,11 @@ pub fn update_log_level(level: JsValue) {
 }
 
 #[wasm_bindgen]
-pub fn make_diagram(inputs: JsValue, targets: JsValue) -> JsValue {
+pub fn make_step(inputs: JsValue, targets: JsValue) -> JsValue {
     let inputs: Vec<Input> = serde_wasm_bindgen::from_value(inputs).unwrap();
     let targets: Targets = serde_wasm_bindgen::from_value(targets.clone()).unwrap();
-    let diagram = Diagram::new(inputs, targets, None);
-    serde_wasm_bindgen::to_value(&diagram).unwrap()
+    let step = Step::new(inputs, targets, None);
+    serde_wasm_bindgen::to_value(&step).unwrap()
 }
 
 #[wasm_bindgen]
@@ -105,11 +105,11 @@ pub fn train(model: JsValue, max_step_error_ratio: f64, max_steps: usize) -> JsV
 }
 
 #[wasm_bindgen]
-pub fn step(diagram: JsValue, max_step_error_ratio: f64) -> JsValue {
-    let diagram: Diagram = serde_wasm_bindgen::from_value(diagram).unwrap();
-    let diagram = diagram.step(max_step_error_ratio);
-    let diagram = serde_wasm_bindgen::to_value(&diagram.clone()).unwrap();
-    diagram
+pub fn step(step: JsValue, max_step_error_ratio: f64) -> JsValue {
+    let step: Step = serde_wasm_bindgen::from_value(step).unwrap();
+    let step = step.step(max_step_error_ratio);
+    let step = serde_wasm_bindgen::to_value(&step.clone()).unwrap();
+    step
 }
 
 #[wasm_bindgen]

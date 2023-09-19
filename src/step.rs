@@ -17,7 +17,7 @@ pub type Targets = BTreeMap<String, f64>;
 pub type Errors = BTreeMap<String, Error>;
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
-pub struct Diagram {
+pub struct Step {
     pub inputs: Vec<Input>,
     pub components: Vec<regions::Component>,
     pub targets: Targets,
@@ -50,8 +50,8 @@ impl Display for Error {
     }
 }
 
-impl Diagram {
-    pub fn new(inputs: Vec<Input>, targets: Targets, total_target_area: Option<f64>) -> Diagram {
+impl Step {
+    pub fn new(inputs: Vec<Input>, targets: Targets, total_target_area: Option<f64>) -> Step {
         let shapes: Vec<Shape<D>> = inputs.iter().map(|(c, duals)| c.dual(duals)).collect();
         let scene = Scene::new(shapes);
         let shapes = &scene.shapes;
@@ -75,7 +75,7 @@ impl Diagram {
         }
         let errors = Self::compute_errors(&scene, &targets, &total_target_area, &total_area);
         let mut error: D = errors.values().into_iter().map(|e| { e.error.abs() }).sum();
-        debug!("diagram, error {:?}", error);
+        debug!("step, error {:?}", error);
         // Optional/Alternate loss function based on per-region squared errors, weights errors by region size:
         // let error = errors.values().into_iter().map(|e| e.error.clone() * &e.error).sum::<D>().sqrt();
         let components: Vec<regions::Component> = scene.components.iter().map(|c| regions::Component::new(&c)).collect();
@@ -118,7 +118,7 @@ impl Diagram {
             // error += total_disjoint_penalty;
         }
 
-        Diagram { inputs, components, targets, total_target_area, total_area, errors, error }
+        Step { inputs, components, targets, total_target_area, total_area, errors, error }
     }
 
     pub fn shapes(&self) -> Vec<Shape<f64>> {
@@ -164,7 +164,7 @@ impl Diagram {
         self.inputs.iter().map(|(_, duals)| duals.clone()).collect()
     }
 
-    pub fn step(&self, max_step_error_ratio: f64) -> Diagram {
+    pub fn step(&self, max_step_error_ratio: f64) -> Step {
         let error = self.error.clone();
         // let error = self.errors.values().into_iter().map(|e| e.error.clone() * &e.error).sum::<D>().sqrt();
         let error_size = &error.v();
@@ -216,6 +216,6 @@ impl Diagram {
         for (cur, (nxt, _)) in shapes.iter().zip(new_inputs.iter()) {
             debug!("  {} -> {:?}", cur, nxt);
         }
-        Diagram::new(new_inputs, self.targets.clone(), Some(self.total_target_area))
+        Step::new(new_inputs, self.targets.clone(), Some(self.total_target_area))
     }
 }

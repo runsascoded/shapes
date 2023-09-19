@@ -4,11 +4,11 @@ use log::{info, debug, warn};
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::{diagram::{Diagram, Targets}, shape::Input};
+use crate::{step::{Step, Targets}, shape::Input};
 
 #[derive(Debug, Clone, Tsify, Serialize, Deserialize)]
 pub struct Model {
-    pub steps: Vec<Diagram>,
+    pub steps: Vec<Step>,
     pub repeat_idx: Option<usize>,
     pub min_idx: usize,
     pub min_error: f64,
@@ -16,20 +16,20 @@ pub struct Model {
 
 impl Model {
     pub fn new(inputs: Vec<Input>, targets: Targets) -> Model {
-        let diagram = Diagram::new(inputs, targets, None);
-        let min_error = (&diagram).error.re.clone();
-        let mut steps = Vec::<Diagram>::new();
-        steps.push(diagram);
+        let step = Step::new(inputs, targets, None);
+        let min_error = (&step).error.re.clone();
+        let mut steps = Vec::<Step>::new();
+        steps.push(step);
         let repeat_idx: Option<usize> = None;
         Model { steps, min_idx: 0, repeat_idx, min_error }
     }
     pub fn train(&mut self, max_step_error_ratio: f64, max_steps: usize) {
         let num_steps = self.steps.len().clone();
-        let mut diagram = self.steps[num_steps - 1].clone();
+        let mut step = self.steps[num_steps - 1].clone();
         for idx in 0..max_steps {
             let step_idx = idx + num_steps;
             debug!("Step {}:", step_idx);
-            let nxt = diagram.step(max_step_error_ratio);
+            let nxt = step.step(max_step_error_ratio);
             let nxt_err = nxt.error.re;
             if nxt_err.is_nan() {
                 warn!("NaN err at step {}: {:?}", step_idx, nxt);
@@ -65,7 +65,7 @@ impl Model {
             if self.repeat_idx.is_some() {
                 break;
             }
-            diagram = nxt;
+            step = nxt;
         }
     }
     pub fn grad_size(&self) -> usize {
@@ -138,7 +138,7 @@ mod tests {
         }
     }
 
-    fn get_actual(step: &Diagram, getters: &Vec<CoordGetter>) -> ExpectedStep {
+    fn get_actual(step: &Step, getters: &Vec<CoordGetter>) -> ExpectedStep {
         let error = step.error.clone();
         let err = error.v();
         let mut vals: Vec<f64> = Vec::new();
@@ -218,7 +218,7 @@ mod tests {
         Ok(df)
     }
 
-    pub struct CoordGetter(pub Box<dyn Fn(Diagram) -> f64>);
+    pub struct CoordGetter(pub Box<dyn Fn(Step) -> f64>);
 
     fn check(
         inputs: Vec<Input>,
@@ -243,7 +243,7 @@ mod tests {
                         is_one_hot(dual).map(|grad_idx| (
                             grad_idx,
                             CoordGetter(
-                                Box::new(move |step: Diagram| match step.shapes()[shape_idx] {
+                                Box::new(move |step: Step| match step.shapes()[shape_idx] {
                                     Shape::Circle(c) => getter(c),
                                     _ => panic!("Expected Circle at idx {}", shape_idx),
                                 })
@@ -263,7 +263,7 @@ mod tests {
                         is_one_hot(dual).map(|grad_idx| (
                             grad_idx,
                             CoordGetter(
-                                Box::new(move |step: Diagram| match step.shapes()[shape_idx].clone() {
+                                Box::new(move |step: Step| match step.shapes()[shape_idx].clone() {
                                     Shape::XYRR(e) => getter(e),
                                     _ => panic!("Expected XYRR at idx {}", shape_idx),
                                 })
@@ -315,6 +315,38 @@ mod tests {
             (Shape::Circle(Circle { idx: 1, c: R2 { x: 1., y: 0. }, r: 1. }), vec![ d(0), z( ), d(1), ]),
         ];
         check(inputs, FIZZ_BUZZ.into(), "fizz_buzz_circles", 0.8, 100);
+    }
+
+    #[test]
+    fn two_circles_disjoint() {
+        // 2 Circles, initially disjoint, each already ideally sized, only 2nd circle's x can move, needs to "find" the 1st circle to get the intersection area right.
+        let ( z, d ) = d_fns(1);
+        let inputs: Vec<Input> = vec![
+            (Shape::Circle(Circle { idx: 0, c: R2 { x: 0., y: 0. }, r: 2. }), vec![ z( ), z( ), z( ), ]),
+            (Shape::Circle(Circle { idx: 1, c: R2 { x: 4., y: 0. }, r: 1. }), vec![ d(0), z( ), z( ), ]),
+        ];
+        let targets = [
+            ("0*", 4.),
+            ("*1", 1.),
+            ("01", 0.5),
+        ];
+        check(inputs, targets.into(), "two_circles_disjoint", 0.5, 100);
+    }
+
+    #[test]
+    fn two_circle_containment() {
+        // 2 Circles, initially disjoint, each already ideally sized, only 2nd circle's x can move, needs to "find" the 1st circle to get the intersection area right.
+        let ( z, d ) = d_fns(1);
+        let inputs: Vec<Input> = vec![
+            (Shape::Circle(Circle { idx: 0, c: R2 { x: 0. , y: 0. }, r: 2. }), vec![ z( ), z( ), z( ), ]),
+            (Shape::Circle(Circle { idx: 1, c: R2 { x: 0.5, y: 0. }, r: 1. }), vec![ d(0), z( ), z( ), ]),
+        ];
+        let targets = [
+            ("0*", 4.),
+            ("*1", 1.),
+            ("01", 0.5),
+        ];
+        check(inputs, targets.into(), "two_circle_containment", 0.5, 0);
     }
 
     #[test]
