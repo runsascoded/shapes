@@ -62,11 +62,15 @@ impl Step {
             }
         }
         let errors = Self::compute_errors(&scene, &targets, &total_area);
-        for (key, error) in &errors {
-            debug!("  {}: error {}", key, error);
-        }
         let disjoint_targets = targets.disjoints();
-        let mut error: D = disjoint_targets.iter().map(|(key, _)| errors.get(key).unwrap().error.abs()).sum();
+        let mut error = scene.zero();
+        for key in disjoint_targets.keys() {
+            let e = errors.get(key).unwrap();
+            let err = e.error.abs();
+            debug!("  {}: error {}, {}", key, e, err);
+            error += err;
+        }
+        // let mut error: D = disjoint_targets.iter().map(|(key, _)| errors.get(key).unwrap().error.abs()).sum();
         debug!("step error {:?}", error);
         // Optional/Alternate loss function based on per-region squared errors, weights errors by region size:
         // let error = errors.values().into_iter().map(|e| e.error.clone() * &e.error).sum::<D>().sqrt();
@@ -143,17 +147,18 @@ impl Step {
         }
         let total_disjoint_penalty_v = total_disjoint_penalty.v();
         if total_disjoint_penalty_v > 0. {
-            total_disjoint_penalty = total_disjoint_penalty * (total_missing_disjoint / total_disjoint_penalty_v);
-            info!("  total_disjoint_penalty: {}", total_disjoint_penalty);
-            error += total_disjoint_penalty;
+            total_disjoint_penalty = total_disjoint_penalty * (total_missing_disjoint / total_disjoint_penalty_v / targets.total_area);
+            debug!("  total_disjoint_penalty: {}", total_disjoint_penalty);
+            error += Dual::new(0., total_disjoint_penalty.d());
         }
         let total_contained_penalty_v = total_contained_penalty.v();
         if total_contained_penalty_v > 0. {
-            total_contained_penalty = total_contained_penalty * (total_missing_contained / total_contained_penalty_v);
-            info!("  total_contained_penalty: {}", total_contained_penalty);
-            error += total_contained_penalty;
+            total_contained_penalty = total_contained_penalty * (total_missing_contained / total_contained_penalty_v / targets.total_area);
+            debug!("  total_contained_penalty: {}", total_contained_penalty);
+            error += Dual::new(0., total_contained_penalty.d());
         }
 
+        debug!("all-in error: {:?}", error);
         Step { inputs, components, targets, total_area, errors, error }
     }
 
