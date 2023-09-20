@@ -8,10 +8,10 @@ pub type E<D> = Rc<RefCell<Edge<D>>>;
 pub struct Edge<D> {
     pub idx: usize,
     pub set: S<D>,
-    pub n0: N<D>,
-    pub n1: N<D>,
-    pub t0: D,
-    pub t1: D,
+    pub node0: N<D>,
+    pub node1: N<D>,
+    pub theta0: D,
+    pub theta1: D,
     pub container_idxs: BTreeSet<usize>,
     pub is_component_boundary: bool,
     pub visits: usize,
@@ -41,7 +41,7 @@ impl<D: EdgeArg> Edge<D> {
     }
     /// Angle span of this Edge, in terms of the shape whose border it is part of
     pub fn theta(&self) -> D {
-        let theta = self.t1.clone() - self.t0.clone();
+        let theta = self.theta1.clone() - self.theta0.clone();
         if theta.clone().into() < 0. {
             panic!("Invalid edge {}, negative theta: {}", self, theta)
         }
@@ -76,8 +76,8 @@ impl<
             f,
             "C{}: {}({}) → {}({}), containers: [{}] ({})",
             self.set.borrow().idx,
-            self.n0.borrow().idx, self.t0.clone().into().deg_str(),
-            self.n1.borrow().idx, self.t1.clone().into().deg_str(),
+            self.node0.borrow().idx, self.theta0.clone().into().deg_str(),
+            self.node1.borrow().idx, self.theta1.clone().into().deg_str(),
             containers.join(","),
             if self.is_component_boundary { "external" } else { "internal" },
         )

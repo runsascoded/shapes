@@ -54,7 +54,7 @@ impl Step {
         let sets = &scene.sets;
         let all_key = String::from_utf8(vec![b'*'; scene.len()]).unwrap();
         let total_area = scene.area(&all_key).unwrap_or_else(|| scene.zero());
-        debug!("scene: {} components, total_area {}", scene.components.len(), total_area);
+        debug!("scene: {} components, total_area {}, component sizes {}", scene.components.len(), total_area, scene.components.iter().map(|c| c.sets.len().to_string()).collect::<Vec<_>>().join(", "));
         for component in &scene.components {
             debug!("  {} regions", component.regions.len());
             for region in &component.regions {
@@ -65,11 +65,13 @@ impl Step {
         for (key, error) in &errors {
             debug!("  {}: error {}", key, error);
         }
-        let mut error: D = errors.values().into_iter().map(|e| { e.error.abs() }).sum();
+        let disjoint_targets = targets.disjoints();
+        let mut error: D = disjoint_targets.iter().map(|(key, _)| errors.get(key).unwrap().error.abs()).sum();
         debug!("step error {:?}", error);
         // Optional/Alternate loss function based on per-region squared errors, weights errors by region size:
         // let error = errors.values().into_iter().map(|e| e.error.clone() * &e.error).sum::<D>().sqrt();
         let components: Vec<regions::Component> = scene.components.iter().map(|c| regions::Component::new(&c)).collect();
+        debug!("{} components, num sets {}", components.len(), components.iter().map(|c| c.sets.len().to_string()).collect::<Vec<_>>().join(", "));
 
         // Include penalties for erroneously-disjoint shapes
         // let mut disjoint_penalties = Vec::<DisjointPenalty>::new();
@@ -77,7 +79,7 @@ impl Step {
         let mut total_contained_penalty = scene.zero();
 
         debug!("all targets: {}", targets.iter().map(|(k, v)| format!("{}: {}", k, v)).collect::<Vec<String>>().join(", "));
-        let missing_regions: BTreeMap<String, f64> = targets.disjoints().into_iter().filter(|(key, target)| {
+        let missing_regions: BTreeMap<String, f64> = disjoint_targets.into_iter().filter(|(key, target)| {
             let err = errors.get(key).expect(&format!("No key {} among error keys {}", key, errors.keys().cloned().collect::<Vec<String>>().join(", ")));
             let region_should_exist = target > &0.;
             let region_exists = err.actual_area.clone().filter(|a| !a.is_zero()).is_some();
@@ -135,7 +137,7 @@ impl Step {
         }
 
         if !missing_regions.is_empty() {
-            info!("missing_regions: {:?}", total_missing_disjoint);
+            info!("missing_regions: {:?}, {:?}", total_missing_disjoint, missing_regions);
             info!("   disjoint: total {}, unscaled penalty {}", total_missing_disjoint, total_disjoint_penalty);
             info!("  contained: total {}, unscaled penalty {}", total_missing_contained, total_contained_penalty);
         }

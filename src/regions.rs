@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use serde::{Serialize, Deserialize};
 use tsify::Tsify;
 
-use crate::{dual::{Dual, D}, shape::Shape, r2::R2, component};
+use crate::{dual::{Dual, D}, shape::Shape, r2::R2, component, set::Set};
 
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
@@ -14,11 +14,11 @@ pub struct Point {
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
 pub struct Edge {
-    pub cidx: usize,
-    pub i0: usize,
-    pub i1: usize,
-    pub t0: f64,
-    pub t1: f64,
+    pub set_idx: usize,
+    pub node0_idx: usize,
+    pub node1_idx: usize,
+    pub theta0: f64,
+    pub theta1: f64,
     pub container_idxs: BTreeSet<usize>,
 }
 
@@ -38,7 +38,7 @@ pub struct Region {
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
 pub struct Component {
-    pub shapes: Vec<Shape<f64>>,
+    pub sets: Vec<Set<f64>>,
     pub points: Vec<Point>,
     pub edges: Vec<Edge>,
     pub regions: Vec<Region>,
@@ -46,17 +46,17 @@ pub struct Component {
 
 impl Component {
     pub fn new(component: &component::Component<D>) -> Self {
-        let shapes = component.sets.clone();
+        let sets: Vec<Set<f64>> = component.sets.iter().map(|set| set.borrow().v()).collect();
         let points = component.nodes.iter().map(|n| Point {
             p: n.borrow().p.clone(),
             edge_idxs: n.borrow().edges.iter().map(|e| e.borrow().idx).collect(),
         }).collect();
         let edges = component.edges.iter().map(|e| Edge {
-            cidx: e.borrow().set.borrow().idx,
-            i0: e.borrow().n0.borrow().idx,
-            i1: e.borrow().n1.borrow().idx,
-            t0: e.borrow().t0.v(),
-            t1: e.borrow().t1.v(),
+            set_idx: e.borrow().set.borrow().idx,
+            node0_idx: e.borrow().node0.borrow().idx,
+            node1_idx: e.borrow().node1.borrow().idx,
+            theta0: e.borrow().theta0.v(),
+            theta1: e.borrow().theta1.v(),
             container_idxs: e.borrow().container_idxs.clone(),
         }).collect();
         let regions = component.regions.iter().map(|r| Region {
@@ -69,7 +69,7 @@ impl Component {
             container_idxs: r.container_idxs.clone().into_iter().collect(),
         }).collect();
         Component {
-            shapes: shapes.iter().map(|s| s.borrow().shape.v()).collect(),
+            sets,
             points,
             edges,
             regions,

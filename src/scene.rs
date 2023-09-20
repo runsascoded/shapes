@@ -153,6 +153,7 @@ where
                 })
             });
         }
+        // shape_idx -> shape_idxs
         let mut unconnected_containers: Vec<BTreeSet<usize>> = Vec::new();
         for (idx, shape) in shapes.iter().enumerate() {
             let mut containers: BTreeSet<usize> = BTreeSet::new();
@@ -184,6 +185,7 @@ where
             }
             components_idxs
         };
+        debug!("Making components: {:?}", components_idxs);
         let mut components: Vec<Component<D>> =
             components_idxs
             .into_iter()

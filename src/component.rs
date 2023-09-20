@@ -27,8 +27,10 @@ where R2<D>: To<R2<f64>>,
         sets: &Vec<S<D>>,
         num_sets: usize,
     ) -> Component<D> {
+        debug!("Making component: {:?}", set_idxs);
+        let component_sets = sets.into_iter().filter(|set| set_idxs.contains(&set.borrow().idx)).cloned().collect();
         let mut set_idxs_iter = set_idxs.iter().map(|i| unconnected_containers[*i].clone()).enumerate();
-        let mut component_container_idxs = set_idxs_iter.next().unwrap().1;
+        let component_container_idxs = set_idxs_iter.next().unwrap().1;
         for (jdx, containers) in set_idxs_iter {
             if component_container_idxs != containers {
                 panic!("Expected all sets to share the same container_idxs, but found {}: {:?} vs. {}: {:?}", 0, component_container_idxs, jdx, containers);
@@ -52,10 +54,10 @@ where R2<D>: To<R2<f64>>,
             let edge = Edge {
                 idx: 0,
                 set: set.clone(),
-                n0: n.clone(),
-                n1: n.clone(),
-                t0: zero,
-                t1: tau.clone(),
+                node0: n.clone(),
+                node1: n.clone(),
+                theta0: zero,
+                theta1: tau.clone(),
                 container_idxs: component_container_idxs.clone(),
                 is_component_boundary: true,
                 visits: 0,
@@ -80,7 +82,7 @@ where R2<D>: To<R2<f64>>,
             node.add_edge(e.clone());
             let component = Component {
                 set_idxs: vec![set_idx],
-                sets: sets.clone(),
+                sets: component_sets,
                 nodes: vec![n.clone()],
                 edges: vec![e.clone()],
                 container_idxs: component_container_idxs,
@@ -146,9 +148,10 @@ where R2<D>: To<R2<f64>>,
         let regions = Component::regions(&edges, num_sets, total_expected_visits, &component_container_idxs);
         // let total_visits = edges.iter().map(|e| e.borrow().visits).sum::<usize>();
 
+        // debug!("Made component: {:?}, {:?}", set_idxs, sets);
         Component {
             set_idxs: set_idxs.clone(),
-            sets: sets.clone(),
+            sets: component_sets,
             nodes,
             edges,
             container_idxs: component_container_idxs,
@@ -195,15 +198,15 @@ where R2<D>: To<R2<f64>>,
                 let edge = Rc::new(RefCell::new(edge::Edge {
                     idx: edges.len(),
                     set: set.clone(),
-                    n0: cur_node, n1: nxt_node,
-                    t0: cur_theta, t1: nxt_theta,
+                    node0: cur_node, node1: nxt_node,
+                    theta0: cur_theta, theta1: nxt_theta,
                     container_idxs,
                     is_component_boundary,
                     visits: 0,
                 }));
                 edges.push(edge.clone());
-                edge.borrow_mut().n0.borrow_mut().add_edge(edge.clone());
-                edge.borrow_mut().n1.borrow_mut().add_edge(edge.clone());
+                edge.borrow_mut().node0.borrow_mut().add_edge(edge.clone());
+                edge.borrow_mut().node1.borrow_mut().add_edge(edge.clone());
             }
         }
 

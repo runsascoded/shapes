@@ -18,12 +18,12 @@ where
     }
     pub fn start(&self) -> N<D> {
         let e = self.edge.borrow();
-        let i = if self.fwd { &e.n0 } else { &e.n1 };
+        let i = if self.fwd { &e.node0 } else { &e.node1 };
         i.clone()
     }
     pub fn end(&self) -> N<D> {
         let e = self.edge.borrow();
-        let i = if self.fwd { &e.n1 } else { &e.n0 };
+        let i = if self.fwd { &e.node1 } else { &e.node0 };
         i.clone()
     }
     pub fn successors(&self) -> Vec<Segment<D>> {
@@ -34,7 +34,7 @@ where
         let successors = end.borrow().edges.iter().filter(|e| {
             e.borrow().set_idx() != shape_idx && e.borrow().visits < e.borrow().expected_visits()
         }).map(|e| {
-            let p: R2<f64> = e.borrow().n0.borrow().p.clone().to();
+            let p: R2<f64> = e.borrow().node0.borrow().p.clone().to();
             let fwd = p == end_p;
             Segment { edge: e.clone(), fwd }
         }).collect();

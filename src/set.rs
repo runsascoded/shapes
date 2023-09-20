@@ -1,10 +1,13 @@
 use std::{rc::Rc, cell::RefCell, collections::{BTreeSet, BTreeMap}};
 
-use crate::{shape::Shape, zero::Zero, component::Component};
+use serde::{Serialize, Deserialize};
+use tsify::Tsify;
+
+use crate::{shape::Shape, zero::Zero, component::Component, dual::Dual};
 
 pub type S<D> = Rc<RefCell<Set<D>>>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize, Tsify)]
 pub struct Set<D> {
     pub idx: usize,
     pub children: BTreeSet<usize>,
@@ -17,6 +20,15 @@ impl<D: Zero> Set<D> {
     }
 }
 
+impl Set<Dual> {
+    pub fn v(&self) -> Set<f64> {
+        Set {
+            idx: self.idx,
+            children: self.children.clone(),
+            shape: self.shape.v(),
+        }
+    }
+}
 impl<D> Set<D> {
     pub fn new(idx: usize, shape: Shape<D>) -> Self {
         Self {

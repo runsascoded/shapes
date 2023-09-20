@@ -229,6 +229,7 @@ mod tests {
     ) {
         let targets: BTreeMap<_, _> = targets.iter().map(|(k, v)| (k.to_string(), *v)).collect();
         let mut model = Model::new(inputs.clone(), targets);
+        let max_steps = env::var("STEPS").map(|s| s.parse::<usize>().unwrap()).unwrap_or(max_steps);
         model.train(max_step_error_ratio, max_steps);
 
         let mut coord_getters: Vec<(usize, CoordGetter)> = inputs.iter().enumerate().flat_map(
