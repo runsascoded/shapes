@@ -137,9 +137,9 @@ impl Step {
         }
 
         if !missing_regions.is_empty() {
-            info!("missing_regions: {:?}, {:?}", total_missing_disjoint, missing_regions);
-            info!("   disjoint: total {}, unscaled penalty {}", total_missing_disjoint, total_disjoint_penalty);
-            info!("  contained: total {}, unscaled penalty {}", total_missing_contained, total_contained_penalty);
+            debug!("missing_regions: {:?}, {:?}", total_missing_disjoint, missing_regions);
+            debug!("   disjoint: total {}, unscaled penalty {}", total_missing_disjoint, total_disjoint_penalty);
+            debug!("  contained: total {}, unscaled penalty {}", total_missing_contained, total_contained_penalty);
         }
         let total_disjoint_penalty_v = total_disjoint_penalty.v();
         if total_disjoint_penalty_v > 0. {

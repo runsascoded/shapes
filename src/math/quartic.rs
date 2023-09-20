@@ -118,8 +118,8 @@ where
     + Div<f64, Output = Complex<D>>
     + Neg<Output = Complex<D>>
 {
-    debug!("quartic_scaled({:?}, {:?}, {:?}, {:?})", b, c, d, e);
-    debug!("x^4 + {:?} x^3 + {:?} x^2 + {:?} x + {:?}", b, c, d, e);
+    // debug!("quartic_scaled({:?}, {:?}, {:?}, {:?})", b, c, d, e);
+    // debug!("x^4 + {:?} x^3 + {:?} x^2 + {:?} x + {:?}", b, c, d, e);
     let b4 = b.clone() / 4.;
     let b4sq = b4.clone() * b4.clone();
     let c2 = c.clone() - b4sq.clone() * 6.;
@@ -146,12 +146,12 @@ where
         },
         Cubic(c) => panic!("quartic_depressed returned cubic::Roots: {:?}", c)
     };
-    debug!("quartic_scaled roots:");
-    for x in &rv.all() {
-        let x2 = x.clone() * x.clone();
-        let y = x2.clone() * x2.clone() + x2.clone() * x.clone() * b.clone() + x2 * c.clone() + x.clone() * d.clone() + e.clone();
-        debug!("  x: {:?}, y: {:?}, r: {:?}", x, y, y.norm());
-    }
+    // debug!("quartic_scaled roots:");
+    // for x in &rv.all() {
+    //     let x2 = x.clone() * x.clone();
+    //     let y = x2.clone() * x2.clone() + x2.clone() * x.clone() * b.clone() + x2 * c.clone() + x.clone() * d.clone() + e.clone();
+    //     debug!("  x: {:?}, y: {:?}, r: {:?}", x, y, y.norm());
+    // }
     rv
 }
 
@@ -169,8 +169,8 @@ where
     + Div<f64, Output = Complex<D>>
     + Neg<Output = Complex<D>>
 {
-    debug!("quartic_depressed({:?}, {:?}, {:?})", c, d, e);
-    debug!("x^4 + {:?} x^2 + {:?} x + {:?}", c, d, e);
+    // debug!("quartic_depressed({:?}, {:?}, {:?})", c, d, e);
+    // debug!("x^4 + {:?} x^2 + {:?} x + {:?}", c, d, e);
     let rv = if e.is_zero() {
         match cubic_depressed(c.clone(), d.clone()) {
             cubic::DepressedRoots::Reals([ r0, r1, r2 ]) => {
@@ -234,14 +234,14 @@ where
             let d1 = uc2.clone() + d_usq2r.clone();
             let d0sq2 = Sqrt::sqrt(&d0) / 2.;
             let d1sq2 = Sqrt::sqrt(&d1) / 2.;
-            debug!("u {:?}", u);
-            debug!("usq2 {:?}", usq2);
-            debug!("d_usq2r {:?}", d_usq2r);
-            debug!("uc2 {:?}", uc2);
-            debug!("d0 {:?}", d0);
-            debug!("d1 {:?}", d1);
-            debug!("d0sq2 {:?}", d0sq2);
-            debug!("d1sq2 {:?}", d1sq2);
+            // debug!("u {:?}", u);
+            // debug!("usq2 {:?}", usq2);
+            // debug!("d_usq2r {:?}", d_usq2r);
+            // debug!("uc2 {:?}", uc2);
+            // debug!("d0 {:?}", d0);
+            // debug!("d1 {:?}", d1);
+            // debug!("d0sq2 {:?}", d0sq2);
+            // debug!("d1sq2 {:?}", d1sq2);
             let roots = [
                  usq2.clone() + d0sq2.clone(),
                  usq2.clone() - d0sq2.clone(),
@@ -252,12 +252,12 @@ where
         };
         Roots::new(roots)
     };
-    debug!("quartic_depressed roots:");
-    for x in &rv.all() {
-        let x2 = x.clone() * x.clone();
-        let y = x2.clone() * x2.clone() + x2 * c.clone() + x.clone() * d.clone() + e.clone();
-        debug!("  x: {:?}, y: {:?}, r: {:?}", x, y, y.norm());
-    }
+    // debug!("quartic_depressed roots:");
+    // for x in &rv.all() {
+    //     let x2 = x.clone() * x.clone();
+    //     let y = x2.clone() * x2.clone() + x2 * c.clone() + x.clone() * d.clone() + e.clone();
+    //     debug!("  x: {:?}, y: {:?}, r: {:?}", x, y, y.norm());
+    // }
     rv
 }
 
@@ -278,11 +278,11 @@ where
     + Mul<D, Output = Complex<D>>
 {
     let roots = quadratic::quadratic(c.zero() + 1., c.clone(), e.clone()).two_roots();
-    debug!("quadratic roots:");
-    for x in &roots {
-        let y = x.clone() * x.clone() + x.clone() * c.clone() + e.clone();
-        debug!("  x {:?}, y {:?}, r {:?}", x, y, y.norm());
-    }
+    // debug!("quadratic roots:");
+    // for x in &roots {
+    //     let y = x.clone() * x.clone() + x.clone() * c.clone() + e.clone();
+    //     debug!("  x {:?}, y {:?}, r {:?}", x, y, y.norm());
+    // }
     let [ sq0, sq1 ] = roots.map(|r| r.sqrt());
     let roots = [
          sq0.clone(),
@@ -290,12 +290,12 @@ where
          -sq0.clone(),
          -sq1.clone(),
     ];
-    debug!("quartic_biquadratic roots:");
-    for x in &roots {
-        let x2 = x.clone() * x.clone();
-        let y = x2.clone() * x2.clone() + x2.clone() * c.clone() + e.clone();
-        debug!("  x {:?}, y {:?}, r {:?}", x, y, y.norm());
-    }
+    // debug!("quartic_biquadratic roots:");
+    // for x in &roots {
+    //     let x2 = x.clone() * x.clone();
+    //     let y = x2.clone() * x2.clone() + x2.clone() * c.clone() + e.clone();
+    //     debug!("  x {:?}, y {:?}, r {:?}", x, y, y.norm());
+    // }
     roots
 }
 

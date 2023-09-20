@@ -21,9 +21,9 @@ impl Quartic for f64 {
         // let reals = find_roots_quartic(a_4, a_3, a_2, a_1, a_0).as_ref().to_vec();
 
         // crate::math::quartic
-        debug!("{}x^4 + {}x^3 + {}x^2 + {}x + {}", a_4, a_3, a_2, a_1, a_0);
+        // debug!("{}x^4 + {}x^3 + {}x^2 + {}x + {}", a_4, a_3, a_2, a_1, a_0);
         let roots0 = quartic(a_4, a_3, a_2, a_1, a_0);
-        debug!("roots0: {:?}", roots0);
+        // debug!("roots0: {:?}", roots0);
         let reals = roots0.reals();
 
         // roots::{find_roots_stur, find_roots_eigen}
@@ -55,9 +55,9 @@ impl Quartic for f64 {
             let x2 = x * x;
             (a_4 * x2 * x2) + (a_3 * x2 * x) + (a_2 * x2) + (a_1 * x) + a_0
         };
-        debug!("Roots: {:?}", reals);
+        // debug!("Roots: {:?}", reals);
         for root in reals {
-            debug!("  x: {}, f(x): {}", root, f(root));
+            // debug!("  x: {}, f(x): {}", root, f(root));
             let fd = fp(root);
             let mut double_root = false;
             if fd == 0. {
@@ -127,10 +127,10 @@ impl Quartic for Dual {
             // println!("root: {}", y.clone());
             dual_roots.push(Root(y, double_root));
         }
-        debug!("Dualed roots:");
-        for root in &dual_roots {
-            debug!("  {}, double? {}", root.0.s(2), root.1);
-        }
+        // debug!("Dualed roots:");
+        // for root in &dual_roots {
+        //     debug!("  {}, double? {}", root.0.s(2), root.1);
+        // }
         dual_roots
     }
 }

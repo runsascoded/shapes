@@ -148,7 +148,7 @@ where
     + Mul<Complex<D>, Output = Complex<D>>
     + Mul<Complex<f64>, Output = Complex<D>>
 {
-    debug!("cubic_scaled: x^3 + {:?} x^2 + {:?} x + {:?}", b, c, d);
+    // debug!("cubic_scaled: x^3 + {:?} x^2 + {:?} x + {:?}", b, c, d);
     let b3 = b.clone() / 3.;
     let p = c.clone() - b.clone() * b3.clone();
     let q = b3.clone() * b3.clone() * b3.clone() * 2. - b3.clone() * c.clone() + d.clone();
@@ -165,12 +165,12 @@ where
             DepressedRoots::Mixed(re, ims) => Mixed(re - b3.clone(), ims - b3),
         }
     };
-    debug!("cubic_scaled roots:");
-    for x in &rv.all() {
-        let x2 = x.clone() * x.clone();
-        let y = x2.clone() * x.clone() + x2 * b.clone() + x.clone() * c.clone() + d.clone();
-        debug!("  x {:?}, f(x) {:?} ({:?})", x, y, y.norm());
-    }
+    // debug!("cubic_scaled roots:");
+    // for x in &rv.all() {
+    //     let x2 = x.clone() * x.clone();
+    //     let y = x2.clone() * x.clone() + x2 * b.clone() + x.clone() * c.clone() + d.clone();
+    //     debug!("  x {:?}, f(x) {:?} ({:?})", x, y, y.norm());
+    // }
     rv
 }
 
@@ -190,7 +190,7 @@ where
     let u_1: Complex<f64> = Complex { re: -0.5, im: sin_tau3 };
     // let u_2: Complex<f64> = Complex { re: -1. / 2., im: -sin_tau3 };
 
-    debug!("cubic_depressed: x^3 + {:?}x + {:?}", p, q);
+    // debug!("cubic_depressed: x^3 + {:?}x + {:?}", p, q);
     let rv = if p.is_zero() {
         let re = -q.cbrt();
         let re2 = Complex::re(re.clone());
@@ -205,20 +205,20 @@ where
         if d.le_zero() {
             let r = p3sq.clone() * 2.;
             let θ = u.acos() / 3.;
-            debug!("u {:?}, d {:?}, r {:?}, θ {:?}", u, d, r, θ.deg_str());
+            // debug!("u {:?}, d {:?}, r {:?}, θ {:?}", u, d, r, θ.deg_str());
             let mut roots = [
                 r.clone() *  θ.clone().cos(),
                 r.clone() * (θ.clone() + TAU3).cos(),
                 r * (θ + TAU3 + TAU3).cos(),
             ];
             roots.sort_by_cached_key(|r| OrderedFloat::<f64>(r.clone().into()));
-            debug!("depressed roots: {:?}", roots);
+            // debug!("depressed roots: {:?}", roots);
             DepressedRoots::Reals(roots)
         } else {
             let w = u.clone() + (u.clone() * u.clone() - 1.).sqrt();
             let m = w.cbrt();
             let re = (m.clone() + m.recip()) * p3sq.clone();
-            debug!("u {:?}, w {:?}, m {:?}, re {:?}", u, w, m, re);
+            // debug!("u {:?}, w {:?}, m {:?}, re {:?}", u, w, m, re);
             let mu = Complex::re(m) * u_1;
             let im = (mu.clone() + mu.recip()) * p3sq;
             DepressedRoots::Mixed(re, im)
@@ -234,13 +234,13 @@ where
             // More numerically stable in some cases, using asinh(x) = ln(x + sqrt(x² + 1))
             let a = u.asinh();
             let m = (a.clone() / 3.).exp();
-            debug!("u {:?}, a {:?}, m {:?}", u, a, m.clone());
+            // debug!("u {:?}, a {:?}, m {:?}", u, a, m.clone());
             m
         } else {
             // Naive impl, $w$ can end up as 0. with large negative $u$
             let w = u.clone() + (u.clone() * u.clone() + 1.).sqrt();
             let m = w.cbrt();
-            debug!("u {:?}, w {:?}, m {:?}", u, w, m.clone());
+            // debug!("u {:?}, w {:?}, m {:?}", u, w, m.clone());
             m
         };
         // let w = u.clone() + (u.clone() * u.clone() + 1.).sqrt();
@@ -260,12 +260,12 @@ where
         let im = (mu.clone() - mu.recip()) * p3sq;
         DepressedRoots::Mixed(re, im)
     };
-    debug!("cubic_depressed roots:");
-    let f = |x: &Complex<D>| x.clone() * x.clone() * x.clone() + x.clone() * p.clone() + q.clone();
-    for x in &rv.all() {
-        let y = f(x);
-        debug!("  x {:?}, f(x) {:?} ({:?})", x, y, y.norm());
-    }
+    // debug!("cubic_depressed roots:");
+    // let f = |x: &Complex<D>| x.clone() * x.clone() * x.clone() + x.clone() * p.clone() + q.clone();
+    // for x in &rv.all() {
+    //     let y = f(x);
+    //     debug!("  x {:?}, f(x) {:?} ({:?})", x, y, y.norm());
+    // }
     rv
 }
 

@@ -48,33 +48,33 @@ impl<D: UnitIntersectionsArg> CDEF<D>
             let log_err0 = r0.ln().abs();
             let r1: f64 = p.apply(&xyrr.projection()).norm().into();
             let log_err1 = r1.ln().abs();
-            debug!("  point: {}, r0: {} ({}), r1: {} ({})", p, r0, log_err0, r1, log_err1);
+            // debug!("  point: {}, r0: {} ({}), r1: {} ({})", p, r0, log_err0, r1, log_err1);
             log_err0 + log_err1
         }).sum()
     }
     pub fn unit_intersections(&self, xyrr: &XYRR<D>) -> Vec<R2<D>> {
-        debug!("c: {}", self.c);
-        debug!("d: {}", self.d);
-        debug!("e: {}", self.e);
-        debug!("f: {}", self.f);
+        // debug!("c: {}", self.c);
+        // debug!("d: {}", self.d);
+        // debug!("e: {}", self.e);
+        // debug!("f: {}", self.f);
         let d_zero = self.d.clone().is_zero();
         let e_zero = self.e.clone().is_zero();
         if d_zero {
             let points = self._unit_intersections(xyrr, true);
             let err = self.points_err(points.clone(), xyrr);
-            debug!("points err: {}", err);
+            // debug!("points err: {}", err);
             points
         } else if e_zero {
             let points = self._unit_intersections(xyrr, false);
             let err = self.points_err(points.clone(), xyrr);
-            debug!("points err: {}", err);
+            // debug!("points err: {}", err);
             points
         } else {
             let points0 = self._unit_intersections(xyrr, true);
             let err0 = self.points_err(points0.clone(), xyrr);
             let points1 = self._unit_intersections(xyrr, false);
             let err1 = self.points_err(points1.clone(), xyrr);
-            debug!("points errs: {} vs. {}", err0, err1);
+            // debug!("points errs: {} vs. {}", err0, err1);
             if points0.len() == 0 {
                 points1
             } else if points1.len() == 0 {
@@ -87,7 +87,7 @@ impl<D: UnitIntersectionsArg> CDEF<D>
         }
     }
     pub fn _unit_intersections(&self, xyrr: &XYRR<D>, sub_y_solve_x: bool) -> Vec<R2<D>> {
-        debug!("_unit_intersections, sub_y_solve_x: {}", sub_y_solve_x);
+        // debug!("_unit_intersections, sub_y_solve_x: {}", sub_y_solve_x);
         let [ c_2, c_1, c_0 ] = if sub_y_solve_x {        // debug!("d_zero: {}", d_zero);
             let re = -self.e.clone().recip();
             [
@@ -103,31 +103,31 @@ impl<D: UnitIntersectionsArg> CDEF<D>
                 (self.f.clone() + 1.) * rd,
             ]
         };
-        debug!("c_2: {}", c_2);
-        debug!("c_1: {}", c_1);
-        debug!("c_0: {}", c_0);
+        // debug!("c_2: {}", c_2);
+        // debug!("c_1: {}", c_1);
+        // debug!("c_0: {}", c_0);
 
         let mut a_4 = c_2.clone() * c_2.clone();
         let mut a_3 = c_2.clone() * c_1.clone() * 2.;
         let a_2 = c_1.clone() * c_1.clone() + c_2.clone() * c_0.clone() * 2. + 1.;
         let a_1 = c_1.clone() * c_0.clone() * 2.;
         let a_0 = c_0.clone() * c_0.clone() - 1.;
-        debug!("a_4: {}", a_4);
-        debug!("a_3: {}", a_3);
-        debug!("a_2: {}", a_2);
-        debug!("a_1: {}", a_1);
-        debug!("a_0: {}", a_0);
+        // debug!("a_4: {}", a_4);
+        // debug!("a_3: {}", a_3);
+        // debug!("a_2: {}", a_2);
+        // debug!("a_1: {}", a_1);
+        // debug!("a_0: {}", a_0);
         let f_4: f64 = a_4.clone().into();
         let f_3: f64 = a_3.clone().into();
         let f_2: f64 = a_2.clone().into();
         // Very small a_4/a_3 coefficients can lead to significant numeric errors attempting to solve as quartic/cubic, just treat these as cubic/quadratic.
         if f_2 != 0. && (f_4 / f_2).abs() < 1e-8 && (f_3 / f_2).abs() < 1e-8 {
-            debug!("Setting a_4 and a_3 to 0.");
+            // debug!("Setting a_4 and a_3 to 0.");
             let f: f64 = a_4.clone().into();
             a_4 = a_4 - f;
             let f: f64 = a_3.clone().into();
             a_3 = a_3 - f;
-            debug!("Set a_4 and a_3 to 0: {}, {}", a_4, a_3);
+            // debug!("Set a_4 and a_3 to 0: {}, {}", a_4, a_3);
         }
         // if a_4.clone().into().abs() < 1e-7 {
         //     debug!("Setting a_4 to 0.");
@@ -142,7 +142,7 @@ impl<D: UnitIntersectionsArg> CDEF<D>
         // }
         let roots = Quartic::quartic_roots(a_4, a_3, a_2, a_1, a_0);
         let mut points: Vec<R2<D>> = Vec::new();
-        debug!("Points:");
+        // debug!("Points:");
         for Root(r0, double_root) in &roots {
             let r1_0 = c_2.clone() * r0.clone() * r0.clone() + c_1.clone() * r0.clone() + c_0.clone();
             let p = if sub_y_solve_x {
@@ -175,12 +175,12 @@ impl<D: UnitIntersectionsArg> CDEF<D>
                         R2 { x: c1, y: c0 }
                     }
                 ).collect();
-                debug!("Comparing candidate points:");
-                for p in &candidates {
-                    let r1 = p.clone().apply(&xyrr.projection());
-                    let r1_err = (-1. + r1.clone().norm2().into()).abs();
-                    debug!("  p: {}, r1: {} ({})", p, r1, r1_err);
-                }
+                // debug!("Comparing candidate points:");
+                // for p in &candidates {
+                //     let r1 = p.clone().apply(&xyrr.projection());
+                //     let r1_err = (-1. + r1.clone().norm2().into()).abs();
+                    // debug!("  p: {}, r1: {} ({})", p, r1, r1_err);
+                // }
                 let p =
                     candidates
                     .into_iter()
@@ -193,7 +193,7 @@ impl<D: UnitIntersectionsArg> CDEF<D>
             };
 
             let R2 { x, y } = p.clone();
-            debug!("Using point: x {}, y {}", x, y);
+            // debug!("Using point: x {}, y {}", x, y);
             points.push(p);
             if *double_root {
                 let p2 = if sub_y_solve_x {
@@ -201,7 +201,7 @@ impl<D: UnitIntersectionsArg> CDEF<D>
                 } else {
                     R2 { x:  x.clone(), y: -y.clone() }
                 };
-                debug!("Double-root point: {:?}", p2.clone());
+                // debug!("Double-root point: {:?}", p2.clone());
                 points.push(p2);
             }
         }

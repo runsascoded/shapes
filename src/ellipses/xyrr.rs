@@ -58,7 +58,7 @@ where
     }
     pub fn unit_intersections(&self) -> Vec<R2<D>> {
         let points = self.cdef().unit_intersections(&self);
-        debug!("xyrr unit_intersections: {}, points {:?}", self, points);
+        // debug!("xyrr unit_intersections: {}, points {:?}", self, points);
         for point in &points {
             let r = point.norm();
             let projected = point.apply(&self.projection());
@@ -66,7 +66,7 @@ where
             if (-1. + self_r.clone().into()).abs() > 1e-2 {
                 panic!("Bad unit_intersections: {}\npoint: {}\nunit.r: {}\nself.r: {}", self, point, r, self_r);
             }
-            debug!("  point: {}, unit.r: {}, self.r: {}", point, r, self_r);
+            // debug!("  point: {}, unit.r: {}, self.r: {}", point, r, self_r);
         }
         points
     }
