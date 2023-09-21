@@ -14,12 +14,26 @@ pub enum Roots<D> {
     Imags(ComplexPair<D>, ComplexPair<D>),
 }
 
-use Roots::*;
-use log::debug;
-use ordered_float::OrderedFloat;
+#[derive(Debug, Clone)]
+pub enum NormalizedRoots<D> {
+    Reals([ D; 4 ]),
+    Mixed(D, D, ComplexPair<D>),
+    Imags(ComplexPair<D>, ComplexPair<D>),
+}
 
-impl<D: Clone + Into<f64> + IsZero + PartialEq + Neg<Output = D>> Roots<D> {
-    pub fn new(roots: [ Complex<D>; 4 ]) -> Self {
+use NormalizedRoots::*;
+use ordered_float::OrderedFloat;
+use log::debug;
+
+impl<
+    D
+    : Clone
+    + Into<f64>
+    + IsZero
+    + PartialEq
+    + Neg<Output = D>
+> NormalizedRoots<D> {
+        pub fn new(roots: [ Complex<D>; 4 ]) -> Self {
         let mut reals: Vec<D> = Vec::new();
         let mut imags: Vec<Complex<D>> = Vec::new();
         for root in &roots {
@@ -43,14 +57,6 @@ impl<D: Clone + Into<f64> + IsZero + PartialEq + Neg<Output = D>> Roots<D> {
             Mixed(reals[0].clone(), reals[1].clone(), imags[0].clone())
         }
     }
-    pub fn reals(&self) -> Vec<D> {
-        match self {
-            Cubic(roots) => roots.reals(),
-            Reals(rs) => rs.clone().to_vec(),
-            Mixed(r0, r1, _) => vec![ r0.clone(), r1.clone() ],
-            Imags(_, _) => vec![],
-        }
-    }
 }
 
 impl<D: Clone + IsZero + fmt::Debug + Zero + Neg<Output = D> + Zero> Roots<D> {
@@ -72,8 +78,25 @@ impl<D: Clone + IsZero + fmt::Debug + Zero + Neg<Output = D> + Zero> Roots<D> {
             ],
         }
     }
+    pub fn reals(&self) -> Vec<D> {
+        match self {
+            Roots::Reals(rs) => rs.clone().to_vec(),
+            Roots::Mixed(r0, r1, _) => vec![ r0.clone(), r1.clone() ],
+            Roots::Imags(_, _) => vec![],
+            Roots::Cubic(c) => c.reals(),
+        }
+    }
 }
 
+impl<D> From<NormalizedRoots<D>> for Roots<D> {
+    fn from(nr: NormalizedRoots<D>) -> Self {
+        match nr {
+            Reals(rs) => Roots::Reals(rs),
+            Mixed(r0, r1, c) => Roots::Mixed(r0, r1, c),
+            Imags(c0, c1) => Roots::Imags(c0, c1),
+        }
+    }
+}
 
 pub trait Arg
 : cubic::Arg
@@ -99,13 +122,13 @@ where
     + Neg<Output = Complex<D>>
 {
     if a.is_zero() {
-        Cubic(cubic::cubic(b, c, d, e))
+        Roots::Cubic(cubic::cubic(b, c, d, e))
     } else {
-        quartic_scaled(b / a.clone(), c / a.clone(), d / a.clone(), e / a)
+        quartic_normalized(b / a.clone(), c / a.clone(), d / a.clone(), e / a).into()
     }
 }
 
-pub fn quartic_scaled<D: Arg>(b: D, c: D, d: D, e: D) -> Roots<D>
+pub fn quartic_normalized<D: Arg>(b: D, c: D, d: D, e: D) -> NormalizedRoots<D>
 where
     Complex<D>
     : Add<D, Output = Complex<D>>
@@ -118,7 +141,7 @@ where
     + Div<f64, Output = Complex<D>>
     + Neg<Output = Complex<D>>
 {
-    // debug!("quartic_scaled({:?}, {:?}, {:?}, {:?})", b, c, d, e);
+    // debug!("quartic_normalized({:?}, {:?}, {:?}, {:?})", b, c, d, e);
     // debug!("x^4 + {:?} x^3 + {:?} x^2 + {:?} x + {:?}", b, c, d, e);
     let b4 = b.clone() / 4.;
     let b4sq = b4.clone() * b4.clone();
@@ -144,9 +167,8 @@ where
             let c1 = c1 - b4;
             Imags(c0, c1)
         },
-        Cubic(c) => panic!("quartic_depressed returned cubic::Roots: {:?}", c)
     };
-    // debug!("quartic_scaled roots:");
+    // debug!("quartic_normalized roots:");
     // for x in &rv.all() {
     //     let x2 = x.clone() * x.clone();
     //     let y = x2.clone() * x2.clone() + x2.clone() * x.clone() * b.clone() + x2 * c.clone() + x.clone() * d.clone() + e.clone();
@@ -155,7 +177,7 @@ where
     rv
 }
 
-pub fn quartic_depressed<D: Arg>(c: D, d: D, e: D) -> Roots<D>
+pub fn quartic_depressed<D: Arg>(c: D, d: D, e: D) -> NormalizedRoots<D>
 where
     Complex<D>
     : Add<D, Output = Complex<D>>
@@ -250,7 +272,7 @@ where
             ];
             roots
         };
-        Roots::new(roots)
+        NormalizedRoots::new(roots)
     };
     // debug!("quartic_depressed roots:");
     // for x in &rv.all() {
@@ -300,13 +322,13 @@ where
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
 
     use super::*;
 
     use test_log::test;
 
-    fn coeffs_from_roots(roots: Roots<f64>) -> [ f64; 4 ] {
+    pub fn coeffs_from_roots(roots: NormalizedRoots<f64>) -> [ f64; 4 ] {
         match roots {
             Reals([ r0, r1, r2, r3 ]) => {
                 let a3 = -(r0 + r1 + r2 + r3);
@@ -335,12 +357,11 @@ mod tests {
                 let a0 = n20 * n21;
                 [ a3, a2, a1, a0 ]
             }
-            Cubic(_) => panic!("Unexpected cubic roots: {:?}", roots),
         }
     }
 
     fn check(r0: Complex<f64>, r1: Complex<f64>, r2: Complex<f64>, r3: Complex<f64>, scale: f64) {
-        let roots = Roots::new([ r0, r1, r2, r3 ]);
+        let roots = NormalizedRoots::new([ r0, r1, r2, r3 ]);
         let a4 = scale;
         let [ a3, a2, a1, a0 ] = coeffs_from_roots(roots.clone()).map(|c| c * scale);
         let [ e3, e2, e1, e0 ] = [

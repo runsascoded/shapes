@@ -134,11 +134,11 @@ where
     if a.is_zero() {
         Quadratic(quadratic::quadratic(b, c, d))
     } else {
-        cubic_scaled(b / a.clone(), c / a.clone(), d / a)
+        cubic_normalized(b / a.clone(), c / a.clone(), d / a)
     }
 }
 
-pub fn cubic_scaled<D: Arg>(b: D, c: D, d: D) -> Roots<D>
+pub fn cubic_normalized<D: Arg>(b: D, c: D, d: D) -> Roots<D>
 where
     Complex<D>
     : Add<D, Output = Complex<D>>
@@ -148,7 +148,7 @@ where
     + Mul<Complex<D>, Output = Complex<D>>
     + Mul<Complex<f64>, Output = Complex<D>>
 {
-    // debug!("cubic_scaled: x^3 + {:?} x^2 + {:?} x + {:?}", b, c, d);
+    // debug!("cubic_normalized: x^3 + {:?} x^2 + {:?} x + {:?}", b, c, d);
     let b3 = b.clone() / 3.;
     let p = c.clone() - b.clone() * b3.clone();
     let q = b3.clone() * b3.clone() * b3.clone() * 2. - b3.clone() * c.clone() + d.clone();
@@ -165,7 +165,7 @@ where
             DepressedRoots::Mixed(re, ims) => Mixed(re - b3.clone(), ims - b3),
         }
     };
-    // debug!("cubic_scaled roots:");
+    // debug!("cubic_normalized roots:");
     // for x in &rv.all() {
     //     let x2 = x.clone() * x.clone();
     //     let y = x2.clone() * x.clone() + x2 * b.clone() + x.clone() * c.clone() + d.clone();

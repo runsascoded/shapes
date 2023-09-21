@@ -16,6 +16,11 @@ pub struct Complex<D> {
     pub im: D,
 }
 
+impl<D> Complex<D> {
+    pub fn new(re: D, im: D) -> Complex<D> {
+        Complex { re, im }
+    }
+}
 impl<D: Clone + Zero> Complex<D> {
     pub fn re(re: D) -> Self {
         Self { re: re.clone(), im: re.zero() }
