@@ -12,7 +12,7 @@ export function update_log_level(level: any): void;
 * @param {any} targets
 * @returns {any}
 */
-export function make_diagram(inputs: any, targets: any): any;
+export function make_step(inputs: any, targets: any): any;
 /**
 * @param {any} inputs
 * @param {any} targets
@@ -27,93 +27,34 @@ export function make_model(inputs: any, targets: any): any;
 */
 export function train(model: any, max_step_error_ratio: number, max_steps: number): any;
 /**
-* @param {any} diagram
+* @param {any} step
 * @param {number} max_step_error_ratio
 * @returns {any}
 */
-export function step(diagram: any, max_step_error_ratio: number): any;
+export function step(step: any, max_step_error_ratio: number): any;
 /**
 * @param {any} targets
 * @returns {any}
 */
-export function expand_areas(targets: any): any;
+export function expand_targets(targets: any): any;
 /**
 * @param {any} xyrr
 * @returns {any}
 */
 export function xyrr_unit(xyrr: any): any;
-export interface Dual {
-    v: number;
-    d: number[];
-}
-
-export interface Intersection<D> {
-    x: D;
-    y: D;
-    c0idx: number;
-    c1idx: number;
-    t0: D;
-    t1: D;
-}
-
-export type D = Dual;
-
-export interface R2<D> {
-    x: D;
-    y: D;
-}
-
-export interface XYRR<D> {
-    idx: number;
-    c: R2<D>;
-    r: R2<D>;
-}
-
-export interface Error {
-    key: string;
-    actual_area: Dual | null;
-    actual_frac: Dual;
-    target_area: number;
-    total_target_area: number;
-    target_frac: number;
-    error: Dual;
-}
-
-export interface Diagram {
-    inputs: Input[];
-    regions: Regions;
-    targets: Targets;
-    total_target_area: number;
-    total_area: Dual;
-    errors: Errors;
-    error: Dual;
-}
-
-export type Errors = Record<string, Error>;
-
-export type Targets = Record<string, number>;
-
-export type Shape<D> = { Circle: Circle<D> } | { XYRR: XYRR<D> };
-
-export type Input = [Shape<number>, Duals];
-
-export type Duals = number[][];
-
-export interface Model {
-    steps: Diagram[];
-    repeat_idx: number | null;
-    min_idx: number;
-    min_error: number;
-}
-
 export interface Circle<D> {
-    idx: number;
     c: R2<D>;
     r: D;
 }
 
-export interface Regions {
-    shapes: Shape<number>[];
+export interface Set<D> {
+    idx: number;
+    children: number[];
+    shape: Shape<D>;
+}
+
+export interface Component {
+    sets: Set<number>[];
     points: Point[];
     edges: Edge[];
     regions: Region[];
@@ -124,7 +65,6 @@ export interface Region {
     segments: Segment[];
     area: Dual;
     container_idxs: number[];
-    container_bmp: boolean[];
 }
 
 export interface Segment {
@@ -133,18 +73,85 @@ export interface Segment {
 }
 
 export interface Edge {
-    cidx: number;
-    i0: number;
-    i1: number;
-    t0: number;
-    t1: number;
-    containers: number[];
-    containments: boolean[];
+    set_idx: number;
+    node0_idx: number;
+    node1_idx: number;
+    theta0: number;
+    theta1: number;
+    container_idxs: number[];
 }
 
 export interface Point {
     p: R2<D>;
     edge_idxs: number[];
+}
+
+export interface XYRR<D> {
+    c: R2<D>;
+    r: R2<D>;
+}
+
+export interface Targets<D> {
+    all: TargetsMap<D>;
+    given: string[];
+    n: number;
+    total_area: D;
+}
+
+export type TargetsMap<D> = Record<string, D>;
+
+export interface Intersection<D> {
+    x: D;
+    y: D;
+    c0idx: number;
+    c1idx: number;
+    t0: D;
+    t1: D;
+}
+
+export interface Error {
+    key: string;
+    actual_area: Dual | null;
+    actual_frac: Dual;
+    target_area: number;
+    target_frac: number;
+    error: Dual;
+}
+
+export interface Step {
+    inputs: Input[];
+    components: Component[];
+    targets: Targets<number>;
+    total_area: Dual;
+    errors: Errors;
+    error: Dual;
+}
+
+export type Errors = Record<string, Error>;
+
+export interface R2<D> {
+    x: D;
+    y: D;
+}
+
+export type Shape<D> = { Circle: Circle<D> } | { XYRR: XYRR<D> };
+
+export type Input = [Shape<number>, Duals];
+
+export type Duals = number[][];
+
+export type D = Dual;
+
+export interface Dual {
+    v: number;
+    d: number[];
+}
+
+export interface Model {
+    steps: Step[];
+    repeat_idx: number | null;
+    min_idx: number;
+    min_error: number;
 }
 
 
@@ -154,11 +161,11 @@ export interface InitOutput {
   readonly memory: WebAssembly.Memory;
   readonly init_logs: () => void;
   readonly update_log_level: (a: number) => void;
-  readonly make_diagram: (a: number, b: number) => number;
+  readonly make_step: (a: number, b: number) => number;
   readonly make_model: (a: number, b: number) => number;
   readonly train: (a: number, b: number, c: number) => number;
   readonly step: (a: number, b: number) => number;
-  readonly expand_areas: (a: number) => number;
+  readonly expand_targets: (a: number) => number;
   readonly xyrr_unit: (a: number) => number;
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

@@ -215,8 +215,8 @@ export function update_log_level(level) {
 * @param {any} targets
 * @returns {any}
 */
-export function make_diagram(inputs, targets) {
-    const ret = wasm.make_diagram(addHeapObject(inputs), addHeapObject(targets));
+export function make_step(inputs, targets) {
+    const ret = wasm.make_step(addHeapObject(inputs), addHeapObject(targets));
     return takeObject(ret);
 }
 
@@ -242,12 +242,12 @@ export function train(model, max_step_error_ratio, max_steps) {
 }
 
 /**
-* @param {any} diagram
+* @param {any} step
 * @param {number} max_step_error_ratio
 * @returns {any}
 */
-export function step(diagram, max_step_error_ratio) {
-    const ret = wasm.step(addHeapObject(diagram), max_step_error_ratio);
+export function step(step, max_step_error_ratio) {
+    const ret = wasm.step(addHeapObject(step), max_step_error_ratio);
     return takeObject(ret);
 }
 
@@ -255,8 +255,8 @@ export function step(diagram, max_step_error_ratio) {
 * @param {any} targets
 * @returns {any}
 */
-export function expand_areas(targets) {
-    const ret = wasm.expand_areas(addHeapObject(targets));
+export function expand_targets(targets) {
+    const ret = wasm.expand_targets(addHeapObject(targets));
     return takeObject(ret);
 }
 
@@ -311,6 +311,14 @@ async function __wbg_load(module, imports) {
 function __wbg_get_imports() {
     const imports = {};
     imports.wbg = {};
+    imports.wbg.__wbindgen_object_drop_ref = function(arg0) {
+        takeObject(arg0);
+    };
+    imports.wbg.__wbindgen_boolean_get = function(arg0) {
+        const v = getObject(arg0);
+        const ret = typeof(v) === 'boolean' ? (v ? 1 : 0) : 2;
+        return ret;
+    };
     imports.wbg.__wbindgen_is_undefined = function(arg0) {
         const ret = getObject(arg0) === undefined;
         return ret;
@@ -319,9 +327,6 @@ function __wbg_get_imports() {
         const ret = getObject(arg0) in getObject(arg1);
         return ret;
     };
-    imports.wbg.__wbindgen_object_drop_ref = function(arg0) {
-        takeObject(arg0);
-    };
     imports.wbg.__wbindgen_string_get = function(arg0, arg1) {
         const obj = getObject(arg1);
         const ret = typeof(obj) === 'string' ? obj : undefined;
@@ -329,11 +334,6 @@ function __wbg_get_imports() {
         var len1 = WASM_VECTOR_LEN;
         getInt32Memory0()[arg0 / 4 + 1] = len1;
         getInt32Memory0()[arg0 / 4 + 0] = ptr1;
-    };
-    imports.wbg.__wbindgen_boolean_get = function(arg0) {
-        const v = getObject(arg0);
-        const ret = typeof(v) === 'boolean' ? (v ? 1 : 0) : 2;
-        return ret;
     };
     imports.wbg.__wbindgen_number_get = function(arg0, arg1) {
         const obj = getObject(arg1);
