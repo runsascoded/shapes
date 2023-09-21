@@ -184,6 +184,9 @@ mod tests {
         pub fn err(&self) -> f64 {
             self.log_err.exp()
         }
+        pub fn max_err_frac(&self) -> f64 {
+            self.vals.iter().map(|(_, _, err)| err.exp()).max_by_key(|err| OrderedFloat(*err)).unwrap()
+        }
         pub fn is_exact(&self) -> bool {
             self.log_err == 0. && self.missing.is_empty() && self.extra.is_empty()
         }
@@ -193,7 +196,7 @@ mod tests {
             vals.sort_by_cached_key(|(_, _, err)| OrderedFloat(*err));
             lines.push(format!("Expected: {:?}", self.expected));
             lines.push(format!("Actual: {:?}", self.actual));
-            lines.push(format!("Total error frac: {}", self.err()));
+            lines.push(format!("Total error frac: {} (max {})", self.err(), self.max_err_frac()));
             // lines.push(
             //     format!(
             //         "Aligned values: {}",
@@ -225,38 +228,36 @@ mod tests {
         } else {
             let expected = expecteds[0];
             let rest = expecteds[1..].to_vec();
-            actuals.iter().filter_map(|actual| {
+            actuals.iter().map(|actual| {
                 let mut alignment = alignment.clone();
                 if expected == 0. {
-                    Some(
-                        if *actual == 0. {
-                            alignment.vals.push((*actual, expected, 0.));
-                            alignment.extra = alignment.extra.iter().filter(|v| v != &actual).cloned().collect();
-                            align(&rest, alignment, ε)
-                        } else {
-                            alignment.missing.push(expected);
-                            align(&rest, alignment, ε)
-                        }
-                    )
+                    if *actual == 0. {
+                        alignment.vals.push((*actual, expected, 0.));
+                        alignment.extra = alignment.extra.iter().filter(|v| v != &actual).cloned().collect();
+                        align(&rest, alignment, ε)
+                    } else {
+                        alignment.missing.push(expected);
+                        align(&rest, alignment, ε)
+                    }
                 } else if *actual == 0. {
-                    None
+                    alignment.missing.push(expected);
+                    align(&rest, alignment, ε)
+                } else if actual.signum() != expected.signum() {
+                    alignment.missing.push(expected);
+                    align(&rest, alignment, ε)
                 } else {
-                    Some({
-                        let a_abs = actual.abs();
-                        let e_abs = expected.abs();
-                        let log_err = f64::max(a_abs.ln(), e_abs.ln());
-                        // let err = log_err.exp();
-                        // let err = max(a_abs, expected) / (actual.asinh() - expected.asinh()).abs();
-                        if log_err <= ε {
-                            alignment.vals.push((*actual, expected, log_err));
-                            alignment.log_err += log_err;
-                            alignment.extra = alignment.extra.iter().filter(|v| v != &actual).cloned().collect();
-                            align(&rest, alignment, ε)
-                        } else {
-                            alignment.missing.push(expected);
-                            align(&rest, alignment, ε)
-                        }
-                    })
+                    let a_abs = actual.abs();
+                    let e_abs = expected.abs();
+                    let log_err = (a_abs.ln() - e_abs.ln()).abs();
+                    if log_err <= ε {
+                        alignment.vals.push((*actual, expected, log_err));
+                        alignment.log_err += log_err;
+                        alignment.extra = alignment.extra.iter().filter(|v| v != &actual).cloned().collect();
+                        align(&rest, alignment, ε)
+                    } else {
+                        alignment.missing.push(expected);
+                        align(&rest, alignment, ε)
+                    }
                 }
             }).min_by_key(|alignment| (
                 // 1st priority: maximize number of "aligned" roots (expected roots that are within ε of an actual root)
