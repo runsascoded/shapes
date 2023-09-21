@@ -336,9 +336,9 @@ mod tests {
         let e1 = XYRR { c: R2 { x: 1.447213595499943 , y: 1.7888543819998468 }, r: R2 { x: 1.000000000000004, y: 1.9999999999999956 } };
         let points = Shape::XYRR(e0).intersect(&Shape::XYRR(e1));
         debug!("points: {:?}", points);
-        assert_intersections(points, vec![
-            "I( 0.947,  3.521, C0(  60)/C1( 120))",
-            "I( 0.947,  0.057, C0( -60)/C1(-120))",
+        assert_eq!(points, vec![
+            R2 { x: 0.9472135954999445, y: 3.5209051895687242   },
+            R2 { x: 0.9472135954999577, y: 0.056803574430954074 },
         ]);
     }
 
@@ -350,13 +350,9 @@ mod tests {
         ];
         let shapes = [ e0, e1 ].map(|e| Shape::XYRR(e));
         let points = shapes[0].intersect(&shapes[1]);
-        assert_intersections(points, vec![
-            "I( 1.113,  1.189, C0(  82)/C1(  14))",
-            "I(-0.056,  0.078, C0(-176)/C1(-102))",
+        assert_eq!(points, vec![
+            R2 { x:  1.1130898341623665 , y: 1.1886298166805425  },
+            R2 { x: -0.05613854711079608, y: 0.07769290045110777 },
         ]);
-        // assert_eq!(points.len(), 2);
-        // for p in points {
-        //     println!("p: {}", p);
-        // }
     }
 }
