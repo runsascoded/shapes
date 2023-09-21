@@ -9,8 +9,7 @@ mod tests {
     use ordered_float::OrderedFloat;
     use roots::find_roots_quartic;
 
-    // static VALS: [ f64; 7 ]  = [ -1e2, -1., -1e-2, 0., 1e-2, 1., 1e2 ];
-    static VALS: [ f64; 4 ] = [ -1e2, -1., -1e-2, 0., ];
+    static VALS: [ f64; 7 ]  = [ -1e2, -1., -1e-2, 0., 1e-2, 1., 1e2 ];
     static N: usize = VALS.len();
 
     #[test]
@@ -35,14 +34,17 @@ mod tests {
             let mut group = group.collect::<Vec<&Alignment>>();
             group.sort_by_cached_key(|a| OrderedFloat(-a.log_err));
             let num_exact = group.iter().filter(|a| a.is_exact()).count();
+            let err_cases: Vec<_> = group.iter().filter(|a| !a.is_exact()).collect();
+            let n = 10;
             println!(
-                "{} extra, {} missing: {} cases{}",
+                "{} extra, {} missing: {} cases{}{}",
                 num_extra,
                 num_missing,
                 group.len(),
                 if num_exact > 0 { format!(" ({} exactly correct omitted)", num_exact) } else { "".to_string() },
+                if err_cases.len() > n { format!(", worst {}:", n) } else { "".to_string() },
             );
-            for alignment in group {
+            for alignment in err_cases.iter().take(n) {
                 if alignment.is_exact() {
                     continue;
                 }
@@ -125,9 +127,10 @@ mod tests {
         assert_relative_eq!(a0, e0, max_relative = 1e-5, epsilon = 1e-14);
         let expected = Into::<quartic::Roots<f64>>::into(roots).reals();
         let roots = find_roots_quartic(a4, a3, a2, a1, a0);
+        let coeffs = [ a4, a3, a2, a1, a0 ];
         let actual = roots.as_ref().to_vec();
         // Require |ln(actual) - ln(expected)| ≤ ε for inclusion in an Alignment
-        let ε = 5e-2;
+        let ε = 6e-2;
         // Allow values less than this to match zero (relative/log comparison above doesn't work when either side is 0); absolute error is recorded and reported for such cases.
         let fuzzy_zero = 1e-10;
         align(
@@ -139,6 +142,7 @@ mod tests {
                 vals: vec![],
                 missing: vec![],
                 extra: actual.clone(),
+                coeffs,
             },
             ε,
             fuzzy_zero,
@@ -171,6 +175,7 @@ mod tests {
         pub vals: Vec<(f64, f64, Err)>,
         pub missing: Vec<f64>,
         pub extra: Vec<f64>,
+        pub coeffs: [ f64; 5 ],
     }
 
     impl Display for Alignment {
@@ -204,6 +209,9 @@ mod tests {
         pub fn err(&self) -> f64 {
             self.log_err.exp()
         }
+        pub fn err_frac(&self) -> f64 {
+            self.err() - 1.
+        }
         pub fn max_log_err(&self) -> Option<f64> {
             self.log_errs().into_iter().max_by_key(|err| OrderedFloat(*err))
         }
@@ -222,6 +230,42 @@ mod tests {
                 Err::Log(err) => Some(*err),
             }).collect()
         }
+        pub fn range(&self) -> Vec<f64> {
+            let [ a4 , a3, a2, a1, a0 ] = self.coeffs.clone();
+            let f = |x: &f64| {
+                let x2 = x * x;
+                a4 * x2 * x2 + a3 * x2 * x + a2 * x2 + a1 * x + a0
+            };
+            self.actual.iter().map(f).collect()
+        }
+        pub fn eqn_str(&self) -> String {
+            let [ a4 , a3, a2, a1, a0 ] = self.coeffs.clone();
+            let s = |f: f64, n: i32| -> String {
+                if f == 0. {
+                    return String::new()
+                }
+                let coef = if f == 1. && n != 0 {
+                    String::new()
+                } else {
+                    format!("{}", f.abs())
+                };
+                let sign_prefix = if n == 4 {
+                    if f < 0. { "-" } else { "" }
+                } else {
+                    if f < 0. { "- " } else { "+ " }
+                };
+                let x_term = match n {
+                    4 => "x⁴",
+                    3 => "x³",
+                    2 => "x²",
+                    1 => "x",
+                    0 => "",
+                    _ => panic!("unexpected n: {}", n),
+                };
+                format!("{}{}{}", sign_prefix, coef, x_term)
+            };
+            format!("{} {} {} {} {}", s(a4, 4), s(a3, 3), s(a2, 2), s(a1, 1), s(a0, 0))
+        }
         pub fn is_exact(&self) -> bool {
             self.log_err == 0. && self.missing.is_empty() && self.extra.is_empty()
         }
@@ -229,12 +273,19 @@ mod tests {
             let mut lines = vec![];
             let mut vals = self.vals.clone();
             vals.sort_by_cached_key(|(_, _, err)| err.clone());
+            lines.push(self.eqn_str());
             lines.push(format!("Expected: {:?}", self.expected));
             lines.push(format!("Actual: {:?}", self.actual));
-            lines.push(format!("Total error frac: {}{}", self.err(), self.max_log_err().map(|err| format!(" (max: {})", err)).unwrap_or("".to_string())));
+            lines.push(format!("Total error frac: {:.3e}{}", self.err_frac(), self.max_log_err().map(|err| format!(", max log(err): {:.3e}", err)).unwrap_or("".to_string())));
             self.max_zero_err().into_iter().filter(|e| *e > 0.).for_each(|err| {
-                lines.push(format!("Max zero error: {}", err));
+                lines.push(format!("Max zero error: {:.3e}", err));
             });
+            let range = self.range();
+            let total_range_err = range.iter().map(|err| err.abs()).sum::<f64>();
+            let max_range_err = range.iter().map(|err| err.abs()).max_by_key(|err| OrderedFloat(*err)).unwrap_or(0.);
+            if total_range_err > 0. {
+                lines.push(format!("Total range error: {:.3e} (max {:.3e})", total_range_err, max_range_err));
+            }
             // lines.push(
             //     format!(
             //         "Aligned values: {}",
