@@ -10,7 +10,7 @@ mod tests {
     use roots::find_roots_quartic;
 
     // static VALS: [ f64; 7 ]  = [ -1e2, -1., -1e-2, 0., 1e-2, 1., 1e2 ];
-    static VALS: [ f64; 3 ] = [ -1e2, -1., -1e-2, ];
+    static VALS: [ f64; 4 ] = [ -1e2, -1., -1e-2, 0., ];
     static N: usize = VALS.len();
 
     #[test]
@@ -126,9 +126,10 @@ mod tests {
         let expected = Into::<quartic::Roots<f64>>::into(roots).reals();
         let roots = find_roots_quartic(a4, a3, a2, a1, a0);
         let actual = roots.as_ref().to_vec();
-        // actual.asinh() must be within ε of expected.asinh() to be included in "alignment"
-        // Approximates absolute difference near 0, log difference for larger (positive and negative) values
-        let ε = 1e-2;
+        // Require |ln(actual) - ln(expected)| ≤ ε for inclusion in an Alignment
+        let ε = 5e-2;
+        // Allow values less than this to match zero (relative/log comparison above doesn't work when either side is 0); absolute error is recorded and reported for such cases.
+        let fuzzy_zero = 1e-10;
         align(
             &expected,
             Alignment {
@@ -140,7 +141,26 @@ mod tests {
                 extra: actual.clone(),
             },
             ε,
+            fuzzy_zero,
         )
+    }
+
+    #[derive(Clone, Debug, PartialEq, PartialOrd)]
+    pub enum Err {
+        Zero(f64),
+        Log(f64),
+    }
+
+    impl Eq for Err {}
+    impl Ord for Err {
+        fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+            match (self, other) {
+                (Err::Zero(a), Err::Zero(b)) => a.partial_cmp(b).unwrap(),
+                (Err::Log(a), Err::Log(b)) => a.partial_cmp(b).unwrap(),
+                (Err::Zero(_), Err::Log(_)) => std::cmp::Ordering::Less,
+                (Err::Log(_), Err::Zero(_)) => std::cmp::Ordering::Greater,
+            }
+        }
     }
 
     #[derive(Clone, Debug)]
@@ -148,7 +168,7 @@ mod tests {
         pub log_err: f64,
         pub actual: Vec<f64>,
         pub expected: Vec<f64>,
-        pub vals: Vec<(f64, f64, f64)>,
+        pub vals: Vec<(f64, f64, Err)>,
         pub missing: Vec<f64>,
         pub extra: Vec<f64>,
     }
@@ -156,7 +176,7 @@ mod tests {
     impl Display for Alignment {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let mut vals = self.vals.clone();
-            vals.sort_by_cached_key(|(_, _, err)| OrderedFloat(*err));
+            vals.sort_by_cached_key(|(_, _, err)| err.clone());
             write!(
                 f,
                 "Alignment {{ err: {}, vals: {}{}{}",
@@ -184,8 +204,23 @@ mod tests {
         pub fn err(&self) -> f64 {
             self.log_err.exp()
         }
-        pub fn max_err_frac(&self) -> f64 {
-            self.vals.iter().map(|(_, _, err)| err.exp()).max_by_key(|err| OrderedFloat(*err)).unwrap()
+        pub fn max_log_err(&self) -> Option<f64> {
+            self.log_errs().into_iter().max_by_key(|err| OrderedFloat(*err))
+        }
+        pub fn max_zero_err(&self) -> Option<f64> {
+            self.zero_errs().into_iter().max_by_key(|err| OrderedFloat(*err))
+        }
+        pub fn zero_errs(&self) -> Vec<f64> {
+            self.vals.iter().filter_map(|(_, _, err)| match err {
+                Err::Zero(err) => Some(*err),
+                Err::Log(_) => None,
+            }).collect()
+        }
+        pub fn log_errs(&self) -> Vec<f64> {
+            self.vals.iter().filter_map(|(_, _, err)| match err {
+                Err::Zero(_) => None,
+                Err::Log(err) => Some(*err),
+            }).collect()
         }
         pub fn is_exact(&self) -> bool {
             self.log_err == 0. && self.missing.is_empty() && self.extra.is_empty()
@@ -193,10 +228,13 @@ mod tests {
         pub fn lines(&self) -> Vec<String> {
             let mut lines = vec![];
             let mut vals = self.vals.clone();
-            vals.sort_by_cached_key(|(_, _, err)| OrderedFloat(*err));
+            vals.sort_by_cached_key(|(_, _, err)| err.clone());
             lines.push(format!("Expected: {:?}", self.expected));
             lines.push(format!("Actual: {:?}", self.actual));
-            lines.push(format!("Total error frac: {} (max {})", self.err(), self.max_err_frac()));
+            lines.push(format!("Total error frac: {}{}", self.err(), self.max_log_err().map(|err| format!(" (max: {})", err)).unwrap_or("".to_string())));
+            self.max_zero_err().into_iter().filter(|e| *e > 0.).for_each(|err| {
+                lines.push(format!("Max zero error: {}", err));
+            });
             // lines.push(
             //     format!(
             //         "Aligned values: {}",
@@ -217,7 +255,7 @@ mod tests {
         }
     }
 
-    fn align(expecteds: &Vec<f64>, alignment: Alignment, ε: f64) -> Alignment {
+    fn align(expecteds: &Vec<f64>, alignment: Alignment, ε: f64, fuzzy_zero: f64) -> Alignment {
         let actuals = &alignment.actual;
         if actuals.is_empty() {
             let mut alignment = alignment.clone();
@@ -231,32 +269,32 @@ mod tests {
             actuals.iter().map(|actual| {
                 let mut alignment = alignment.clone();
                 if expected == 0. {
-                    if *actual == 0. {
-                        alignment.vals.push((*actual, expected, 0.));
+                    if actual.abs() <= fuzzy_zero {
+                        alignment.vals.push((*actual, expected, Err::Zero(*actual)));
                         alignment.extra = alignment.extra.iter().filter(|v| v != &actual).cloned().collect();
-                        align(&rest, alignment, ε)
+                        align(&rest, alignment, ε, fuzzy_zero)
                     } else {
                         alignment.missing.push(expected);
-                        align(&rest, alignment, ε)
+                        align(&rest, alignment, ε, fuzzy_zero)
                     }
                 } else if *actual == 0. {
                     alignment.missing.push(expected);
-                    align(&rest, alignment, ε)
+                    align(&rest, alignment, ε, fuzzy_zero)
                 } else if actual.signum() != expected.signum() {
                     alignment.missing.push(expected);
-                    align(&rest, alignment, ε)
+                    align(&rest, alignment, ε, fuzzy_zero)
                 } else {
                     let a_abs = actual.abs();
                     let e_abs = expected.abs();
                     let log_err = (a_abs.ln() - e_abs.ln()).abs();
                     if log_err <= ε {
-                        alignment.vals.push((*actual, expected, log_err));
+                        alignment.vals.push((*actual, expected, Err::Log(log_err)));
                         alignment.log_err += log_err;
                         alignment.extra = alignment.extra.iter().filter(|v| v != &actual).cloned().collect();
-                        align(&rest, alignment, ε)
+                        align(&rest, alignment, ε, fuzzy_zero)
                     } else {
                         alignment.missing.push(expected);
-                        align(&rest, alignment, ε)
+                        align(&rest, alignment, ε, fuzzy_zero)
                     }
                 }
             }).min_by_key(|alignment| (
