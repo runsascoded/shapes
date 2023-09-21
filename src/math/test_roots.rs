@@ -30,16 +30,11 @@ mod tests {
                     })
                 })
             }).collect();
-        alignments.sort_by_cached_key(|a| (a.extra.len(), a.missing.len(), OrderedFloat(a.err)));
+        alignments.sort_by_cached_key(|a| (a.extra.len(), a.missing.len(), OrderedFloat(a.log_err)));
         alignments.iter().group_by(|a| (a.extra.len(), a.missing.len())).into_iter().for_each(|((num_extra, num_missing), group)| {
             let mut group = group.collect::<Vec<&Alignment>>();
-            group.sort_by_cached_key(|a| OrderedFloat(-a.err));
-            let num_exact =
-                if num_extra == 0 && num_missing == 0 {
-                    group.iter().filter(|a| a.err == 0.).count()
-                } else {
-                    0
-                };
+            group.sort_by_cached_key(|a| OrderedFloat(-a.log_err));
+            let num_exact = group.iter().filter(|a| a.is_exact()).count();
             println!(
                 "{} extra, {} missing: {} cases{}",
                 num_extra,
@@ -48,7 +43,7 @@ mod tests {
                 if num_exact > 0 { format!(" ({} exactly correct omitted)", num_exact) } else { "".to_string() },
             );
             for alignment in group {
-                if num_extra == 0 && num_missing == 0 && alignment.err == 0. {
+                if alignment.is_exact() {
                     continue;
                 }
                 let lines = alignment.lines();
@@ -137,7 +132,7 @@ mod tests {
         align(
             &expected,
             Alignment {
-                err: 0.,
+                log_err: 0.,
                 actual: actual.clone(),
                 expected: expected.clone(),
                 vals: vec![],
@@ -150,7 +145,7 @@ mod tests {
 
     #[derive(Clone, Debug)]
     pub struct Alignment {
-        pub err: f64,
+        pub log_err: f64,
         pub actual: Vec<f64>,
         pub expected: Vec<f64>,
         pub vals: Vec<(f64, f64, f64)>,
@@ -165,7 +160,7 @@ mod tests {
             write!(
                 f,
                 "Alignment {{ err: {}, vals: {}{}{}",
-                self.err,
+                self.err(),
                 vals.iter().map(|(actual, expected, _err)| if actual == expected {
                     format!("{}", actual)
                 } else {
@@ -186,13 +181,19 @@ mod tests {
     }
 
     impl Alignment {
-        fn lines(&self) -> Vec<String> {
+        pub fn err(&self) -> f64 {
+            self.log_err.exp()
+        }
+        pub fn is_exact(&self) -> bool {
+            self.log_err == 0. && self.missing.is_empty() && self.extra.is_empty()
+        }
+        pub fn lines(&self) -> Vec<String> {
             let mut lines = vec![];
             let mut vals = self.vals.clone();
             vals.sort_by_cached_key(|(_, _, err)| OrderedFloat(*err));
             lines.push(format!("Expected: {:?}", self.expected));
             lines.push(format!("Actual: {:?}", self.actual));
-            lines.push(format!("Sum asinh errors: {}", self.err));
+            lines.push(format!("Total error frac: {}", self.err()));
             // lines.push(
             //     format!(
             //         "Aligned values: {}",
@@ -224,23 +225,44 @@ mod tests {
         } else {
             let expected = expecteds[0];
             let rest = expecteds[1..].to_vec();
-            actuals.iter().map(|actual| {
-                let err = (actual.asinh() - expected.asinh()).abs();
+            actuals.iter().filter_map(|actual| {
                 let mut alignment = alignment.clone();
-                if err <= ε {
-                    alignment.vals.push((*actual, expected, err));
-                    alignment.err += err;
-                    alignment.extra = alignment.extra.iter().filter(|v| v != &actual).cloned().collect();
-                    align(&rest, alignment, ε)
+                if expected == 0. {
+                    Some(
+                        if *actual == 0. {
+                            alignment.vals.push((*actual, expected, 0.));
+                            alignment.extra = alignment.extra.iter().filter(|v| v != &actual).cloned().collect();
+                            align(&rest, alignment, ε)
+                        } else {
+                            alignment.missing.push(expected);
+                            align(&rest, alignment, ε)
+                        }
+                    )
+                } else if *actual == 0. {
+                    None
                 } else {
-                    alignment.missing.push(expected);
-                    align(&rest, alignment, ε)
+                    Some({
+                        let a_abs = actual.abs();
+                        let e_abs = expected.abs();
+                        let log_err = f64::max(a_abs.ln(), e_abs.ln());
+                        // let err = log_err.exp();
+                        // let err = max(a_abs, expected) / (actual.asinh() - expected.asinh()).abs();
+                        if log_err <= ε {
+                            alignment.vals.push((*actual, expected, log_err));
+                            alignment.log_err += log_err;
+                            alignment.extra = alignment.extra.iter().filter(|v| v != &actual).cloned().collect();
+                            align(&rest, alignment, ε)
+                        } else {
+                            alignment.missing.push(expected);
+                            align(&rest, alignment, ε)
+                        }
+                    })
                 }
             }).min_by_key(|alignment| (
                 // 1st priority: maximize number of "aligned" roots (expected roots that are within ε of an actual root)
                 alignment.missing.len() + alignment.extra.len(),
                 // 2nd priority: minimize total error among aligned roots
-                OrderedFloat(alignment.err),
+                OrderedFloat(alignment.log_err),
             )).unwrap()
         }
     }
