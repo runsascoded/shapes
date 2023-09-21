@@ -10,3 +10,4 @@ pub mod quartic;
 pub mod recip;
 pub mod round;
 pub mod roots;
+pub mod test_roots;
