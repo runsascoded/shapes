@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use serde::{Serialize, Deserialize};
 use tsify::Tsify;
 
-use crate::{dual::{Dual, D}, shape::Shape, r2::R2, component, set::Set};
+use crate::{dual::{Dual, D}, r2::R2, component, set::Set};
 
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
