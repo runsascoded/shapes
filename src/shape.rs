@@ -17,6 +17,13 @@ pub enum Shape<D> {
     XYRR(xyrr::XYRR<D>),
 }
 
+pub struct Shapes {}
+impl Shapes {
+    pub fn from(inputs: &Vec<Input>) -> Vec<Shape<D>> {
+        inputs.iter().map(|(c, duals)| c.dual(duals)).collect()
+    }
+}
+
 impl Shape<f64> {
     pub fn dual(&self, duals: &Duals) -> Shape<D> {
         match self {

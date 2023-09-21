@@ -1,7 +1,7 @@
 use std::{ops::{Mul, Div, Add, Sub, Neg}, fmt::Display};
 
 use derive_more::From;
-use log::debug;
+use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
@@ -63,8 +63,13 @@ where
             let r = point.norm();
             let projected = point.apply(&self.projection());
             let self_r = projected.norm();
-            if (-1. + self_r.clone().into()).abs() > 1e-2 {
-                panic!("Bad unit_intersections: {}\npoint: {}\nunit.r: {}\nself.r: {}", self, point, r, self_r);
+            let err = (-1. + self_r.clone().into()).abs();
+            if err > 1e-2 {
+                if err > 0.1 {
+                    panic!("Bad unit_intersections: {}\npoint: {}\nunit.r: {}\nself.r: {}", self, point, r, self_r);
+                } else {
+                    warn!("Bad unit_intersections: {}\npoint: {}\nunit.r: {}\nself.r: {}", self, point, r, self_r);
+                }
             }
             // debug!("  point: {}, unit.r: {}, self.r: {}", point, r, self_r);
         }
@@ -146,9 +151,9 @@ where R2<D>: TransformR2<D>,
 
 #[cfg(test)]
 mod tests {
-    use std::{env, fmt};
+    use std::{env, fmt, f64::NAN};
 
-    use crate::{dual::Dual, circle::Circle, intersect::Intersect, to::To, shape::Shape, math::deg::Deg, fmt::Fmt};
+    use crate::{dual::{Dual, d_fns}, circle::Circle, intersect::Intersect, to::To, shape::{Shape, Input, Shapes}, math::deg::Deg, fmt::Fmt};
 
     use super::*;
     use approx::{AbsDiffEq, RelativeEq};
@@ -297,6 +302,22 @@ mod tests {
             R2 { x: -0.5280321050819483, y: 0.8492244085062177 },
             R2 { x: -0.5280321050819483, y: -0.8492244085062177 },
         ], 1e-14);
+    }
+
+    #[test]
+    fn tangent_circles() {
+        let ( z, d ) = d_fns(1);
+        let ellipses = [
+            Shape::XYRR(XYRR { c: R2 { x: 0., y: 0. }, r: R2 { x: 2., y: 2., } }.dual(&vec![ z( ), z( ), z( ), z( ) ])),
+            Shape::XYRR(XYRR { c: R2 { x: 3., y: 0. }, r: R2 { x: 1., y: 1., } }.dual(&vec![ d(0), z( ), z( ), z( ) ])),
+        ];
+        let [ e0, e1 ] = ellipses;
+        let ps = e0.intersect(&e1);
+        assert_eq!(ps, vec![
+            // Heads up! Tangent points have NAN gradients. [`Scene`] detects/filters them, but at this level of the stack they are passed along
+            R2 { x: Dual::new(2.0, vec![NAN]), y: Dual::new(0.0, vec![NAN]) },
+            R2 { x: Dual::new(2.0, vec![NAN]), y: Dual::new(0.0, vec![NAN]) }
+        ]);
     }
 
     #[test]

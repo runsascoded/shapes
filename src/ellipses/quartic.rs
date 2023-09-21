@@ -6,7 +6,7 @@ use roots::{find_roots_quartic, find_roots_sturm, find_roots_eigen};
 use crate::{dual::{D, Dual}, fmt::Fmt, zero::Zero, math::quartic::quartic};
 
 #[derive(Debug, Clone)]
-pub struct Root<D>(pub D, pub bool);  // (root, double_root
+pub struct Root<D>(pub D, pub bool);  // (root, is_double_root?)
 
 pub trait Quartic
 where

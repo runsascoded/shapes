@@ -8,7 +8,7 @@ use tsify::{declare, Tsify};
 use crate::distance;
 use crate::ellipses::xyrr::XYRR;
 use crate::math::recip::Recip;
-use crate::shape::{Input, Shape, Duals};
+use crate::shape::{Input, Shape, Duals, Shapes};
 use crate::{circle::Circle, distance::Distance, scene::Scene, math::is_zero::IsZero, r2::R2, targets::{Targets, TargetsMap}, regions};
 use crate::dual::{Dual, D};
 
@@ -49,7 +49,7 @@ impl Display for Error {
 
 impl Step {
     pub fn new(inputs: Vec<Input>, targets: Targets<f64>) -> Step {
-        let shapes: Vec<Shape<D>> = inputs.iter().map(|(c, duals)| c.dual(duals)).collect();
+        let shapes = Shapes::from(&inputs);
         let scene = Scene::new(shapes);
         let sets = &scene.sets;
         let all_key = String::from_utf8(vec![b'*'; scene.len()]).unwrap();

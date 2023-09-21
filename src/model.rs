@@ -335,6 +335,21 @@ mod tests {
     }
 
     #[test]
+    fn two_circles_tangent() {
+        let ( z, d ) = d_fns(1);
+        let inputs: Vec<Input> = vec![
+            (Shape::Circle(Circle { c: R2 { x: 0., y: 0. }, r: 2. }), vec![ z( ), z( ), z( ), ]),
+            (Shape::Circle(Circle { c: R2 { x: 3., y: 0. }, r: 1. }), vec![ d(0), z( ), z( ), ]),
+        ];
+        let targets = [
+            ("0*", 4.),
+            ("*1", 1.),
+            ("01", 0.5),
+        ];
+        check(inputs, targets.into(), "two_circles_tangent", 0.5, 100);
+    }
+
+    #[test]
     fn two_circle_containment() {
         // 2 Circles, initially disjoint, each already ideally sized, only 2nd circle's x can move, needs to "find" the 1st circle to get the intersection area right.
         let ( z, d ) = d_fns(1);
@@ -348,6 +363,42 @@ mod tests {
             ("01", 0.5),
         ];
         check(inputs, targets.into(), "two_circle_containment", 0.5, 100);
+    }
+
+    #[test]
+    fn centroid_repel() {
+        let ( z, d ) = d_fns(12);
+        // let ellipses = [
+        //     XYRR { c: R2 { x: 1.3605778520807927, y: 0.5701420094881371 }, r: R2 { x: 1.0560210839367, y: 2.691849854375982 } },
+        //     XYRR { c: R2 { x: 2.132156619638168, y: 1.1496024859531844 }, r: R2 { x: 1.4530748662148938, y: 1.204948722533883 } },
+        //     XYRR { c: R2 { x: 0.6232591557722769, y: 1.9095844395344408 }, r: R2 { x: 0.6611602161575406, y: 1.3225016991388716 } },
+        //     // XYRR { c: R2 { x: 1.8840063725087635, y: 2.370671065024236 }, r: R2 { x: 0.9866255435912499, y: 0.8470071040870467 } },
+        // ];
+        let ellipses = [
+            XYRR { c: R2 { x:  0. , y: 0. }, r: R2 { x: 1., y: 3. } },
+            XYRR { c: R2 { x:  0.5, y: 1. }, r: R2 { x: 1., y: 1. } },
+            XYRR { c: R2 { x: -0.5, y: 1. }, r: R2 { x: 1., y: 1. } },
+        ];
+        let [ e0, e1, e2 ] = ellipses;
+        let inputs: Vec<Input> = vec![
+            ( Shape::XYRR(e0), vec![ d(0), d(1), d(2), d(3), ] ),
+            ( Shape::XYRR(e1), vec![ d(4), d(5), d(6), d(7), ] ),
+            ( Shape::XYRR(e2), vec![ d(8), d(9), d(10), d(11), ] ),
+        ];
+        // let shapes = ellipses.iter().map(|e| Shape::XYRR(e.clone())).collect::<Vec<_>>();
+        let targets = [
+            ("0**", 3. ),
+            ("*1*", 1. ),
+            ("**2", 1. ),
+            ("01*", 0.3),
+            ("0*2", 0.3),
+            ("*12", 0.3),
+            ("012", 0.1),
+        ];
+        check(inputs, targets.into(), "centroid_repel", 0.8, 100);
+        // let model = Model::new(inputs, targets.iter().map(|(k, v)| (k.to_string(), *v)).collect());
+        // let step = model.steps[0].clone();
+        // debug!("error: {}", step.error);
     }
 
     #[test]

@@ -5,8 +5,8 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 use crate::{
-    dual::{D, Dual},
-    r2::R2, shape::{Duals, Shape}, transform::{Projection, CanTransform}, transform::Transform::{Scale, ScaleXY, Translate, self}, ellipses::xyrr::XYRR, sqrt::Sqrt, math::{is_normal::IsNormal, recip::Recip}, to::To
+    dual::{D, Dual, d_fns},
+    r2::R2, shape::{Duals, Shape}, transform::{Projection, CanTransform}, transform::Transform::{Scale, ScaleXY, Translate, self}, ellipses::xyrr::XYRR, sqrt::Sqrt, math::{is_normal::IsNormal, recip::Recip}, to::To, intersect::Intersect
 };
 
 #[derive(Debug, Clone, Copy, From, PartialEq, Tsify, Serialize, Deserialize)]
@@ -101,7 +101,7 @@ where
         if x1.is_normal() && y1.is_normal() {
             intersections.push(R2 { x: x1.clone(), y: y1.clone() });
         }
-        debug!("Circle::unit_intserctions: {}, {} intersections", self, intersections.len());
+        debug!("Circle::unit_intserctions: {}, {} intersections: {:?}", self, intersections.len(), intersections);
         intersections
     }
 }
@@ -238,11 +238,24 @@ impl Add<R2<i64>> for Circle<f64> {
     }
 }
 
+impl Intersect<Circle<f64>, D> for Circle<f64> {
+    fn intersect(&self, o: &Circle<f64>) -> Vec<R2<D>> {
+        let ( _z, d ) = d_fns(6);
+        let c0 = self.dual(&vec![ d(0), d(1), d(2), ]);
+        let c1 =    o.dual(&vec![ d(3), d(4), d(5), ]);
+        let s0 = Shape::Circle(c0);
+        let s1 = Shape::Circle(c1);
+        s0.intersect(&s1)
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::f64::NAN;
+
     use super::*;
 
-    use crate::intersect::Intersect;
+    use crate::{intersect::Intersect, dual::d_fns};
 
     pub fn r2(x: f64, dx: Vec<f64>, y: f64, dy: Vec<f64>) -> R2<D> {
         R2 { x: Dual::new(x, dx), y: Dual::new(y, dy) }
@@ -290,6 +303,22 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn tangent_circles() {
+        let ( z, d ) = d_fns(1);
+        let circles = [
+            Shape::Circle(Circle { c: R2 { x: 0., y: 0. }, r: 2. }.dual(&vec![ z( ), z( ), z( ) ])),
+            Shape::Circle(Circle { c: R2 { x: 3., y: 0. }, r: 1. }.dual(&vec![ d(0), z( ), z( ) ])),
+        ];
+        let [ e0, e1 ] = circles;
+        let ps = e0.intersect(&e1);
+        assert_eq!(ps, vec![
+            // Heads up! Tangent points have NAN gradients. [`Scene`] detects/filters them, but at this level of the stack they are passed along
+            R2 { x: Dual::new(2.0, vec![NAN]), y: Dual::new(0.0, vec![NAN]) },
+            R2 { x: Dual::new(2.0, vec![NAN]), y: Dual::new(0.0, vec![NAN]) }
+        ]);
     }
 
     #[test]

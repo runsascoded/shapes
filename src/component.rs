@@ -38,6 +38,7 @@ where R2<D>: To<R2<f64>>,
         }
 
         if set_idxs.len() == 1 {
+            // Singleton component, set is on its own, doesn't intersect any others
             let set_idx = set_idxs[0];
             let set = &sets[set_idx];
             let zero = set.borrow().zero();
@@ -117,7 +118,15 @@ where R2<D>: To<R2<f64>>,
         debug!("Connected component: {}", set_idxs.iter().map(|i| i.to_string()).collect::<Vec<String>>().join(", "));
         let edges = Component::edges(&set_idxs, &nodes_by_set, &sets, &component_container_idxs);
 
-        let first_hull_edge = edges.iter().find(|e| e.borrow().is_component_boundary).unwrap();
+        let first_hull_edge = edges.iter().find(|e| e.borrow().is_component_boundary).expect(
+            format!(
+                "Component {} has no boundary edges:\n\t{}\nshapes:\n\t{}\nnodes:\n\t{}",
+                set_idxs.iter().map(|i| i.to_string()).collect::<Vec<String>>().join(", "),
+                edges.iter().map(|e| format!("{}", e.borrow())).collect::<Vec<String>>().join(",\n\t"),
+                sets.iter().map(|s| format!("{}", s.borrow().shape)).collect::<Vec<String>>().join(",\n\t"),
+                nodes.iter().map(|n| format!("{}", n.borrow())).collect::<Vec<String>>().join(",\n\t"),
+            ).as_str()
+        );
         let first_hull_segment = Segment { edge: first_hull_edge.clone(), fwd: true };
         let mut hull_segments: Vec<Segment<D>> = vec![ first_hull_segment.clone() ];
         let start_idx = first_hull_segment.start().borrow().idx;
@@ -178,7 +187,7 @@ where R2<D>: To<R2<f64>>,
                 let nxt_node = nodes[(node_idx + 1) % num_set_nodes].clone();
                 let cur_theta = cur_node.borrow().theta(set_idx);
                 let nxt_theta = nxt_node.borrow().theta(set_idx);
-                let nxt_theta = if &nxt_theta < &cur_theta { nxt_theta + TAU } else { nxt_theta };
+                let nxt_theta = if &nxt_theta <= &cur_theta { nxt_theta + TAU } else { nxt_theta };
                 let arc_midpoint = sets[set_idx].borrow().shape.arc_midpoint(cur_theta.clone(), nxt_theta.clone());
                 let mut is_component_boundary = true;
                 let mut container_idxs: BTreeSet<usize> = component_container_idxs.clone();

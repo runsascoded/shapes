@@ -1,7 +1,7 @@
 use core::f64;
 use std::{cell::RefCell, rc::Rc, collections::BTreeSet, ops::{Neg, Add, Sub, Mul, Div}, fmt::Display};
 
-use log::debug;
+use log::{debug, info};
 use ordered_float::OrderedFloat;
 
 use crate::{node::{N, Node}, contains::Contains, distance::Distance, region::{RegionArg, RegionContainsArg}, set::S, shape::Shape, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::{CanTransform, HasProjection, CanProject}, intersection::Intersection, dual::Dual, to::To, math::deg::Deg, fmt::Fmt, component::{Component, self}, set::Set};
@@ -49,7 +49,6 @@ impl<D: SceneD> Scene<D>
 where
     R2<D>: SceneR2<D>,
     Shape<D>: CanTransform<D, Output = Shape<D>> + HasProjection<D>,
-    Intersection<D>: Display,
     f64: SceneFloat<D>,
 {
     pub fn new(shapes: Vec<Shape<D>>) -> Scene<D> {
@@ -73,7 +72,19 @@ where
             directly_connected.push(true);
             for jdx in (idx + 1)..num_shapes {
                 let shape1 = set_ptrs[jdx].borrow().shape.clone();
-                let intersections = shape0.intersect(&shape1);
+                let mut intersections = shape0.intersect(&shape1);
+                let mut i = 0;
+                loop {
+                    if i >= intersections.len() { break }
+                    let cur = &intersections[i];
+                    if i + 1 < intersections.len() && cur.distance(&intersections[i + 1]).into() < merge_threshold {
+                        info!("Skipping apparent tangent point: {} == {}", cur, intersections[i + 1]);
+                        intersections.remove(i);
+                        intersections.remove(i);
+                    } else {
+                        i += 1;
+                    }
+                }
                 if intersections.is_empty() {
                     directly_connected.push(false);
                 } else {
@@ -158,7 +169,11 @@ where
         for (idx, shape) in shapes.iter().enumerate() {
             let mut containers: BTreeSet<usize> = BTreeSet::new();
             for (jdx, container) in set_ptrs.iter().enumerate() {
-                if container.borrow().shape.contains(&shape.point(zero.clone())) && !is_connected[idx][jdx] {
+                if !is_connected[idx][jdx] &&
+                    // This check can false-positive if the shapes are tangent at theta == 0, so we check center-containment below as well
+                    container.borrow().shape.contains(&shape.point(zero.clone())) &&
+                    // Concentric shapes contain each others' centers, so this check alone is insufficient (needs the above check as well)
+                    container.borrow().shape.contains(&shape.center()) {
                     containers.insert(jdx);
                 }
             }
@@ -283,7 +298,7 @@ pub mod tests {
 
     use crate::circle::Circle;
     use crate::math::{deg::Deg, round::round};
-    use crate::dual::Dual;
+    use crate::dual::{Dual, D};
     use crate::ellipses::xyrr::XYRR;
     use crate::fmt::Fmt;
     use crate::r2::R2;
@@ -309,7 +324,7 @@ pub mod tests {
             (c1, duals(1, 3)),
             (c2, duals(2, 3)),
         ];
-        let shapes: Vec<_> = inputs.iter().map(|(c, duals)| c.dual(duals)).collect();
+        let shapes: Vec<Shape<D>> = inputs.iter().map(|(c, duals)| c.dual(duals)).collect();
         let scene = Scene::new(shapes);
         assert_eq!(scene.components.len(), 1);
         let component = scene.components[0].clone();

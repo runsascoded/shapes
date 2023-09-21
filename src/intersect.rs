@@ -6,16 +6,6 @@ pub trait Intersect<In, Out> {
     fn intersect(&self, other: &In) -> Vec<R2<Out>>;
 }
 
-impl Intersect<Circle<f64>, D> for Circle<f64> {
-    fn intersect(&self, o: &Circle<f64>) -> Vec<R2<D>> {
-        let c0 = self.dual(&vec![ vec![ 1., 0., 0., 0., 0., 0., ], vec![ 0., 1., 0., 0., 0., 0., ], vec![ 0., 0., 1., 0., 0., 0., ] ]);
-        let c1 =    o.dual(&vec![ vec![ 0., 0., 0., 1., 0., 0., ], vec![ 0., 0., 0., 0., 1., 0., ], vec![ 0., 0., 0., 0., 0., 1., ] ]);
-        let s0 = Shape::Circle(c0);
-        let s1 = Shape::Circle(c1);
-        s0.intersect(&s1)
-    }
-}
-
 pub trait IntersectShapesArg
 : Clone
 + Display
