@@ -20,6 +20,7 @@ pub struct Edge {
     pub theta0: f64,
     pub theta1: f64,
     pub container_idxs: BTreeSet<usize>,
+    pub is_component_boundary: bool,
 }
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
@@ -58,6 +59,7 @@ impl Component {
             theta0: e.borrow().theta0.v(),
             theta1: e.borrow().theta1.v(),
             container_idxs: e.borrow().container_idxs.clone(),
+            is_component_boundary: e.borrow().is_component_boundary,
         }).collect();
         let regions = component.regions.iter().map(|r| Region {
             key: r.key.clone(),
