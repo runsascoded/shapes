@@ -79,6 +79,7 @@ export interface Edge {
     theta0: number;
     theta1: number;
     container_idxs: number[];
+    is_component_boundary: boolean;
 }
 
 export interface Point {
