@@ -454,4 +454,27 @@ mod tests {
         // XYRR { c: { x: 2.65823706629625, y: 1.062726304716347 }, r: { x: 2.36947609319204, y: 0.37496988567008666 } }
         check(inputs, VARIANT_CALLERS.into(), "variant_callers", 0.7, 100)
     }
+
+    #[test]
+    fn disjoint_variant_callers_bug() {
+        let ( _z, d ) = d_fns(16);
+        let ellipses = [
+            XYRR { c: R2 { x: 0., y: 0., }, r: R2 { x: 1., y: 1. }, },
+            XYRR { c: R2 { x: 3., y: 0., }, r: R2 { x: 1., y: 1. }, },
+            XYRR { c: R2 { x: 0., y: 3., }, r: R2 { x: 1., y: 1. }, },
+            XYRR { c: R2 { x: 3., y: 3., }, r: R2 { x: 1., y: 1. }, },
+            // XYRR { c: R2 { x: 0.6783042134980906, y: 0.4060375756236656 }, r: R2 { x: 1.1386389763957379, y: 1.1813967858073406 } },
+            // XYRR { c: R2 { x: 2.364553744272618, y: 0.7877127658995076 }, r: R2 { x: 1.209114832709512, y: 1.1946980556173679 } },
+            // XYRR { c: R2 { x: 0.7520063240515944, y: 2.536361530765468 }, r: R2 { x: 0.5841020254687528, y: 0.5841020254687528 } },
+            // XYRR { c: R2 { x: 2.2051357181776945, y: 2.2698881277113614 }, r: R2 { x: 0.86182368577464, y: 0.8376473805867598 } },
+        ];
+        let [ e0, e1, e2, e3 ] = ellipses;
+        let inputs: Vec<Input> = vec![
+            ( Shape::XYRR(e0), vec![ d( 0), d( 1), d( 2), d( 3), ] ),
+            ( Shape::XYRR(e1), vec![ d( 4), d( 5), d( 6), d( 7), ] ),
+            ( Shape::XYRR(e2), vec![ d( 8), d( 9), d(10), d(11), ] ),
+            ( Shape::XYRR(e3), vec![ d(12), d(13), d(14), d(15), ] ),
+        ];
+        check(inputs, VARIANT_CALLERS.into(), "disjoint_variant_callers_bug", 0.5, 100);
+    }
 }

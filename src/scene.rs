@@ -100,7 +100,7 @@ where
                             // This intersection is close enough to an existing node; merge them
                             let mut node = node.borrow_mut();
                             node.merge(i.clone(), idx, &theta0, jdx, &theta1);
-                            debug!("Merged: {} into {}", i, node);
+                            info!("Merged: {} into {}", i, node);
                             merged = true;
                             break;
                         }
@@ -133,37 +133,32 @@ where
             nodes_by_shape.push(Vec::new());
         }
         // Compute connected components (shape -> shape -> bool)
-        let mut is_connected: Vec<Vec<bool>> = Vec::new();
-        for idx in 0..num_shapes {
-            let mut connected: Vec<bool> = Vec::new();
-            for jdx in 0..num_shapes {
-                connected.push(idx == jdx);
+        let mut is_connected: Vec<Vec<bool>> = is_directly_connected.clone();
+        for i0 in 0..num_shapes {
+            for i1 in 0..num_shapes {
+                if is_connected[i0][i1] {
+                    for i2 in 0..num_shapes {
+                        if is_connected[i0][i2] && !is_connected[i1][i2] {
+                            for i3 in 0..num_shapes {
+                                if is_connected[i1][i3] && !is_connected[i2][i3] {
+                                    is_connected[i2][i3] = true;
+                                    is_connected[i3][i2] = true;
+                                }
+                            };
+                        }
+                    };
+                }
             }
-            is_connected.push(connected);
         }
+        debug!("is_directly_connected: {:?}", is_directly_connected);
+        debug!("is_connected: {:?}", is_connected);
+
         for node in &nodes {
             node.borrow().shape_thetas.keys().for_each(|i0| {
                 nodes_by_shape[*i0].push(node.clone());
-                node.borrow().shape_thetas.keys().for_each(|i1| {
-                    let was_connected = is_connected[*i0][*i1];
-                    is_connected[*i0][*i1] = true;
-                    is_connected[*i1][*i0] = true;
-                    if !was_connected {
-                        // Everything connected to i0 is now also connected to i1, and vice versa
-                        for i2 in 0..num_shapes {
-                            if is_connected[*i0][i2] && !is_connected[*i1][i2] {
-                                for i3 in 0..num_shapes {
-                                    if is_connected[*i1][i3] && !is_connected[i2][i3] {
-                                        is_connected[i2][i3] = true;
-                                        is_connected[i3][i2] = true;
-                                    }
-                                };
-                            }
-                        };
-                    }
-                })
             });
         }
+
         // shape_idx -> shape_idxs
         let mut unconnected_containers: Vec<BTreeSet<usize>> = Vec::new();
         for (idx, shape) in shapes.iter().enumerate() {
