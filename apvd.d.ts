@@ -42,11 +42,6 @@ export function expand_targets(targets: any): any;
 * @returns {any}
 */
 export function xyrr_unit(xyrr: any): any;
-export interface Circle<D> {
-    c: R2<D>;
-    r: D;
-}
-
 export interface Set<D> {
     idx: number;
     children: number[];
@@ -92,6 +87,11 @@ export interface XYRR<D> {
     r: R2<D>;
 }
 
+export interface Circle<D> {
+    c: R2<D>;
+    r: D;
+}
+
 export interface Targets<D> {
     all: TargetsMap<D>;
     given: string[];
@@ -100,15 +100,6 @@ export interface Targets<D> {
 }
 
 export type TargetsMap<D> = Record<string, D>;
-
-export interface Intersection<D> {
-    x: D;
-    y: D;
-    c0idx: number;
-    c1idx: number;
-    t0: D;
-    t1: D;
-}
 
 export interface Error {
     key: string;
@@ -133,6 +124,15 @@ export type Errors = Record<string, Error>;
 export interface R2<D> {
     x: D;
     y: D;
+}
+
+export interface Intersection<D> {
+    x: D;
+    y: D;
+    c0idx: number;
+    c1idx: number;
+    t0: D;
+    t1: D;
 }
 
 export type Shape<D> = { Circle: Circle<D> } | { XYRR: XYRR<D> };
