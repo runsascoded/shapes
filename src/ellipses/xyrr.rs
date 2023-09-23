@@ -1,4 +1,4 @@
-use std::{ops::{Mul, Div, Add, Sub, Neg}, fmt::Display};
+use std::{ops::{Mul, Div, Add, Sub, Neg}, fmt::{Display, Debug}};
 
 use approx::{AbsDiffEq, RelativeEq};
 use derive_more::From;
@@ -6,7 +6,7 @@ use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::{r2::R2, rotate::{Rotate as _Rotate, RotateArg}, dual::{D, Dual}, shape::{Duals, Shape}, transform::{Transform::{Rotate, Scale, ScaleXY, Translate, self}, CanProject, CanTransform, Projection}, math::{recip::Recip, deg::Deg}, sqrt::Sqrt, ellipses::xyrr};
+use crate::{r2::R2, rotate::{Rotate as _Rotate, RotateArg}, dual::{D, Dual}, shape::{Duals, Shape}, transform::{Transform::{Rotate, Scale, ScaleXY, Translate, self}, CanProject, CanTransform, Projection}, math::{recip::Recip, deg::Deg, is_zero::IsZero}, sqrt::Sqrt, ellipses::xyrr, zero::Zero};
 
 use super::{xyrrt::XYRRT, cdef::{CDEF, self}, bcdef};
 
@@ -134,8 +134,32 @@ pub trait TransformR2<D>
 impl TransformR2<f64> for R2<f64> {}
 impl TransformR2<Dual> for R2<Dual> {}
 
-pub trait TransformD: Clone + Deg + Display + Add<f64, Output = Self> + Div<Output = Self> + RotateArg + xyrr::CdefArg + bcdef::XyrrtArg {}
-impl<D: Clone + Deg + Display + Add<f64, Output = D> + Div<Output = D> + RotateArg + xyrr::CdefArg + bcdef::XyrrtArg> TransformD for D {}
+pub trait TransformD
+: Clone
++ Debug
++ Deg
++ Display
++ IsZero
++ Zero
++ Add<f64, Output = Self>
++ Div<Output = Self>
++ RotateArg
++ xyrr::CdefArg
++ bcdef::XyrrtArg
+{}
+impl<
+    D
+    : Clone
+    + Debug
+    + Deg
+    + Display
+    + IsZero
+    + Zero
+    + Add<f64, Output = D>
+    + Div<Output = D>
+    + RotateArg
+    + xyrr::CdefArg
+    + bcdef::XyrrtArg> TransformD for D {}
 
 impl<D: TransformD> CanTransform<D> for XYRR<D>
 where R2<D>: TransformR2<D>,

@@ -50,25 +50,6 @@ impl<
     }
 }
 
-// impl<
-//     'a,
-//     D
-//     : 'a
-//     + RotateArg
-// > R2<D>
-// where
-//     R2<D>
-//     : Mul<&'a R2<D>, Output = R2<D>>,
-// {
-//     pub fn transform(&'a self, t: Transform<D>) -> Self {
-//         match t {
-//             Transform::Translate(v) => v + self,
-//             Transform::ScaleXY(v) => v * self,
-//             // Transform::Rotate(a) => self.rotate(&a),
-//         }
-//     }
-// }
-
 impl<
     D
     : Clone

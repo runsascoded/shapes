@@ -1,10 +1,10 @@
 use core::f64;
-use std::{ops::{Div, Sub, Mul, Add, Neg}, fmt::Display};
+use std::{ops::{Div, Sub, Mul, Add, Neg}, fmt::{Display, Debug}};
 
 use approx::{RelativeEq, AbsDiffEq};
 use log::debug;
 
-use crate::{r2::R2, rotate::RotateArg, trig::Trig, math::{recip::Recip, deg::Deg}};
+use crate::{r2::R2, rotate::RotateArg, trig::Trig, math::{recip::Recip, deg::Deg, is_zero::IsZero}, zero::Zero};
 
 use super::{xyrrt::XYRRT, cdef::{CDEF, self}};
 
@@ -25,16 +25,20 @@ impl<D: Display + LevelArg + cdef::XyrrArg + RotateArg> XyrrtArg for D {}
 impl<D: XyrrtArg> BCDEF<D> {
     pub fn xyrrt(&self) -> XYRRT<D> {
         let cdef = self.level();
-        debug!("BCDEF leveled: {}", cdef);
+        // debug!("BCDEF leveled: {}", cdef);
         let xyrr = cdef.xyrr();
-        debug!("BCDEF leveled xyrr: {}", xyrr);
+        // debug!("BCDEF leveled xyrr: {}", xyrr);
         xyrr.rotate(&self.t)
     }
 }
 impl<
     D
     : Clone
+    + Debug
+    + Display
     + Trig
+    + IsZero
+    + Zero
     + Add<f64, Output = D>
     + Sub<f64, Output = D>
     + Div<Output = D>
@@ -43,13 +47,24 @@ impl<
 > BCDEF<D> {
     pub fn new(b: D, c: D, d: D, e: D, f: D) -> BCDEF<D> {
         // let t = (b.clone() / (c.clone() - 1.)).atan() / 2.;
-        let t = b.clone().atan2(&(-c.clone() + 1.)) / 2.;
+        let c1 = -c.clone() + 1.;
+        let t = if b.is_zero() { b.clone().zero() } else { b.clone().atan2(&c1) / 2. };
+        // debug!("BCDEF::new: b {:?}", b);
+        // debug!("BCDEF::new: c {:?}", c);
+        // debug!("BCDEF::new: d {:?}", d);
+        // debug!("BCDEF::new: e {:?}", e);
+        // debug!("BCDEF::new: f {:?}", f);
+        // debug!("BCDEF::new: t {:?}", t);
         BCDEF { b, c, d, e, f, t }
     }
 }
 impl<
     D
     : Clone
+    + Debug
+    + Display
+    + IsZero
+    + Zero
     + Add<f64, Output = D>
     + Sub<f64, Output = D>
     + Mul<Output = D>
@@ -73,6 +88,9 @@ impl<
 
 pub trait LevelArg
 : Clone
++ Deg
++ Display
++ IsZero
 + Recip
 + Trig
 + Add<Output = Self>
@@ -86,6 +104,9 @@ pub trait LevelArg
 impl<
     D
     : Clone
+    + Deg
+    + Display
+    + IsZero
     + Recip
     + Trig
     + Add<Output = D>
@@ -98,19 +119,23 @@ impl<
 > LevelArg for D {}
 
 impl<D: LevelArg> BCDEF<D> {
-    // pub fn t(&self) -> D {
-    //     let BCDEF { b, c, .. } = self;
-    //     b.atan2(&(c.clone() - 1.)) / 2.
-    // }
     pub fn level(&self) -> CDEF<D> {
         let BCDEF { b, c, d, e, f, t } = self;
+        // debug!("leveling {}", self);
+        // debug!("leveling: t {}", t);
         let cos = t.cos();
+        // debug!("leveling: cos {}", cos);
         let cos2 = cos.clone() * cos.clone();
         let sin = -t.sin();
+        // debug!("leveling: sin {}", sin);
         let sin2 = sin.clone() * sin.clone();
         let bcs = b.clone() * cos.clone() * sin.clone();
+        // debug!("leveling: cos2 {}", cos2);
+        // debug!("leveling: bcs {}", bcs);
+        // debug!("leveling: sin2 {}", sin2);
         let a = cos2.clone() - bcs.clone() + self.c.clone() * sin2.clone();
         let ra = a.recip();
+        // debug!("leveling, a {} ra {}", a, ra);
         CDEF {
             c: ra.clone() * (sin2.clone() + bcs.clone() + c.clone() * cos2.clone()),
             d: ra.clone() * (d.clone() * cos.clone() - e.clone() * sin.clone()),
@@ -122,7 +147,7 @@ impl<D: LevelArg> BCDEF<D> {
 
 impl<D: Clone + Deg + Display + Neg<Output = D>> Display for BCDEF<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "x² + {}xy + {}y² + {}x + {}y = {} ({}°)", self.b, self.c, self.d, self.e, -self.f.clone(), self.t.deg_str())
+        write!(f, "x² + {}xy + {}y² + {}x + {}y = {} ({} radians, {}°)", self.b, self.c, self.d, self.e, -self.f.clone(), self.t, self.t.deg_str())
     }
 }
 

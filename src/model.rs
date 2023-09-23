@@ -75,10 +75,10 @@ impl Model {
 
 #[cfg(test)]
 mod tests {
-    use std::{env, collections::BTreeMap, path::Path};
+    use std::{env, collections::BTreeMap, path::Path, f64::consts::PI};
     use polars::prelude::*;
 
-    use crate::{dual::{Dual, is_one_hot, d_fns}, circle::Circle, r2::R2, shape::Shape, to::To, ellipses::{xyrr::XYRR, xyrrt::XYRRT}};
+    use crate::{dual::{Dual, is_one_hot, d_fns}, circle::Circle, r2::R2, shape::Shape, to::To, transform::{CanTransform, Transform::Rotate}, ellipses::{xyrr::XYRR, xyrrt::XYRRT}};
 
     use super::*;
     use test_log::test;
@@ -484,10 +484,6 @@ mod tests {
             XYRR { c: R2 { x: 3., y: 0., }, r: R2 { x: 1., y: 1. }, },
             XYRR { c: R2 { x: 0., y: 3., }, r: R2 { x: 1., y: 1. }, },
             XYRR { c: R2 { x: 3., y: 3., }, r: R2 { x: 1., y: 1. }, },
-            // XYRR { c: R2 { x: 0.6783042134980906, y: 0.4060375756236656 }, r: R2 { x: 1.1386389763957379, y: 1.1813967858073406 } },
-            // XYRR { c: R2 { x: 2.364553744272618, y: 0.7877127658995076 }, r: R2 { x: 1.209114832709512, y: 1.1946980556173679 } },
-            // XYRR { c: R2 { x: 0.7520063240515944, y: 2.536361530765468 }, r: R2 { x: 0.5841020254687528, y: 0.5841020254687528 } },
-            // XYRR { c: R2 { x: 2.2051357181776945, y: 2.2698881277113614 }, r: R2 { x: 0.86182368577464, y: 0.8376473805867598 } },
         ];
         let [ e0, e1, e2, e3 ] = ellipses;
         let inputs: Vec<Input> = vec![
@@ -497,5 +493,19 @@ mod tests {
             ( Shape::XYRR(e3), vec![ d(12), d(13), d(14), d(15), ] ),
         ];
         check(inputs, VARIANT_CALLERS.into(), "disjoint_variant_callers_bug", 0.5, 100);
+    }
+
+    #[test]
+    fn variant_callers_diag() {
+        let ellipses = ellipses4(2.).map(|e| e.transform(&Rotate(PI / 4.)));
+        let [ e0, e1, e2, e3 ] = ellipses;
+        let ( _z, d ) = d_fns(20);
+        let inputs: Vec<Input> = vec![
+            ( e0, vec![ d( 0), d( 1), d( 2), d( 3), d( 4), ] ),
+            ( e1, vec![ d( 5), d( 6), d( 7), d( 8), d( 9), ] ),
+            ( e2, vec![ d(10), d(11), d(12), d(13), d(14), ] ),
+            ( e3, vec![ d(15), d(16), d(17), d(18), d(19), ] ),
+        ];
+        check(inputs, VARIANT_CALLERS.into(), "variant_callers_diag", 0.5, 100)
     }
 }

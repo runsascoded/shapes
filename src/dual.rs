@@ -423,3 +423,17 @@ pub fn d_fns(n: usize) -> (Box<dyn Fn() -> Vec<f64>>, Box<dyn Fn(usize) -> Vec<f
         Box::new(move |i: usize| one_hot(i, n)),
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_log::test;
+
+    #[test]
+    fn cos0() {
+        let x = Dual::new(0., vec![0.]);
+        let cos = x.cos();
+        assert_eq!(cos.v(), 1.);
+        assert_eq!(cos.d(), vec![0.]);
+    }
+}
