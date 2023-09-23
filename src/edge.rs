@@ -1,6 +1,6 @@
 use std::{fmt::Display, rc::Rc, cell::RefCell, collections::BTreeSet, ops::{Mul, Div, Sub}};
 
-use crate::{math::deg::Deg, node::N, set::S, shape::Shape::{Circle, XYRR}, trig::Trig, dual::Dual};
+use crate::{math::deg::Deg, node::N, set::S, shape::Shape::{Circle, XYRR, XYRRT}, trig::Trig, dual::Dual};
 
 pub type E<D> = Rc<RefCell<Edge<D>>>;
 
@@ -35,6 +35,7 @@ impl<D: EdgeArg> Edge<D> {
         let r2 = match &self.set.borrow().shape {
             Circle(c) => c.clone().r * c.clone().r,
             XYRR(e) => e.r.clone().x * e.clone().r.y,
+            XYRRT(e) => e.r.clone().x * e.clone().r.y,
         };
         let theta = self.theta();
         r2 / 2. * (theta.clone() - theta.sin())

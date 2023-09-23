@@ -78,7 +78,7 @@ mod tests {
     use std::{env, collections::BTreeMap, path::Path};
     use polars::prelude::*;
 
-    use crate::{dual::{Dual, is_one_hot, d_fns}, circle::Circle, r2::R2, shape::Shape, to::To, ellipses::xyrr::XYRR};
+    use crate::{dual::{Dual, is_one_hot, d_fns}, circle::Circle, r2::R2, shape::Shape, to::To, ellipses::{xyrr::XYRR, xyrrt::XYRRT}};
 
     use super::*;
     use test_log::test;
@@ -267,6 +267,27 @@ mod tests {
                                 Box::new(move |step: Step| match step.shapes()[shape_idx].clone() {
                                     Shape::XYRR(e) => getter(e),
                                     _ => panic!("Expected XYRR at idx {}", shape_idx),
+                                })
+                            )
+                        )
+                    )
+                    }).collect::<Vec<_>>()
+                },
+                Shape::XYRRT(_) => {
+                    let getters = [
+                        |e: XYRRT<f64>| e.c.x,
+                        |e: XYRRT<f64>| e.c.y,
+                        |e: XYRRT<f64>| e.r.x,
+                        |e: XYRRT<f64>| e.r.y,
+                        |e: XYRRT<f64>| e.t,
+                    ];
+                    getters.into_iter().zip(duals).filter_map(|(getter, dual)| {
+                        is_one_hot(dual).map(|grad_idx| (
+                            grad_idx,
+                            CoordGetter(
+                                Box::new(move |step: Step| match step.shapes()[shape_idx].clone() {
+                                    Shape::XYRRT(e) => getter(e),
+                                    _ => panic!("Expected XYRRT at idx {}", shape_idx),
                                 })
                             )
                         )

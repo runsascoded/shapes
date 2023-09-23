@@ -9,7 +9,7 @@ pub enum Transform<D> {
     Translate(R2<D>),
     Scale(D),
     ScaleXY(R2<D>),
-    // Rotate(D),
+    Rotate(D),
 }
 
 impl<
@@ -27,9 +27,8 @@ where
         match self {
             Transform::Translate(v) => Transform::Translate(-v),
             Transform::Scale(v) => Transform::Scale(v.recip()),
-            Transform::ScaleXY(v) => {
-                Transform::ScaleXY(R2 { x: v.clone().x.recip(), y: v.clone().y.recip() })
-            },
+            Transform::ScaleXY(v) => Transform::ScaleXY(R2 { x: v.clone().x.recip(), y: v.clone().y.recip() }),
+            Transform::Rotate(v) => Transform::Rotate(-v),
         }
     }
 }

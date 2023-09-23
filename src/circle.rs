@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 use crate::{
     dual::{D, Dual, d_fns},
-    r2::R2, shape::{Duals, Shape}, transform::{Projection, CanTransform}, transform::Transform::{Scale, ScaleXY, Translate, self}, ellipses::xyrr::XYRR, sqrt::Sqrt, math::{is_normal::IsNormal, recip::Recip}, to::To, intersect::Intersect
+    r2::R2, rotate::{Rotate as _Rotate, RotateArg}, shape::{Duals, Shape}, transform::{Projection, CanTransform}, transform::Transform::{Rotate, Scale, ScaleXY, Translate, self}, ellipses::xyrr::{XYRR, UnitCircleGap}, sqrt::Sqrt, math::{is_normal::IsNormal, recip::Recip}, to::To, intersect::Intersect
 };
 
 #[derive(Debug, Clone, Copy, From, PartialEq, Tsify, Serialize, Deserialize)]
@@ -134,6 +134,7 @@ pub trait TransformD
 : Clone
 + Mul<Output = Self>
 + Mul<f64, Output = Self>
++ RotateArg
 {}
 impl TransformD for f64 {}
 impl TransformD for Dual {}
@@ -171,12 +172,12 @@ where R2<D>: TransformR2<D>,
                     r: s * r.clone(),
                 }.into()
             },
-            // Rotate(a) => {
-            //     let c = rotate::Rotate::rotate(&self.c.clone(), a);
-            //     // let c = self.c.clone().rotate(a);
-            //     let r = self.r.clone();
-            //     Circle { idx: self.idx, c, r, }.into()
-            // },
+            Rotate(a) => {
+                // let c = rotate::Rotate::rotate(&self.c.clone(), a);
+                let c = self.c.clone().rotate(a);
+                let r = self.r.clone();
+                Circle { c, r, }.into()
+            },
         }
     }
 }
@@ -246,6 +247,17 @@ impl Intersect<Circle<f64>, D> for Circle<f64> {
         let s0 = Shape::Circle(c0);
         let s1 = Shape::Circle(c1);
         s0.intersect(&s1)
+    }
+}
+
+impl<D: UnitCircleGap> Circle<D> {
+    pub fn unit_circle_gap(&self) -> Option<D> {
+        let distance = self.c.norm() - 1. - self.r.clone();
+        if distance.clone().into() > 0. {
+            Some(distance)
+        } else {
+            None
+        }
     }
 }
 

@@ -5,7 +5,7 @@ use derive_more::{Neg, From};
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::{dual::Dual, rotate::{Rotate, RotateArg}, transform::{Transform::{self, Translate, Scale, ScaleXY}, CanTransform}, sqrt::Sqrt, trig::Trig, to::To, math::recip::Recip};
+use crate::{dual::Dual, rotate::{self, Rotate as _Rotate, RotateArg}, transform::{Transform::{self, Rotate, Translate, Scale, ScaleXY}, CanTransform}, sqrt::Sqrt, trig::Trig, to::To, math::recip::Recip};
 
 #[derive(Debug, Copy, Clone, From, Neg, PartialEq, Tsify, Serialize, Deserialize)]
 pub struct R2<D> {
@@ -19,7 +19,7 @@ impl<D: Display> Display for R2<D> {
     }
 }
 
-impl<D: RotateArg> Rotate<D> for R2<D> {
+impl<D: RotateArg> rotate::Rotate<D> for R2<D> {
     fn rotate(&self, theta: &D) -> Self {
         let c = (*theta).cos();
         let s = (*theta).sin();
@@ -37,6 +37,7 @@ impl<
     : Clone
     + Add<Output = D>
     + Mul<Output = D>
+    + RotateArg
 > CanTransform<D> for R2<D> {
     type Output = R2<D>;
     fn transform(&self, transform: &Transform<D>) -> Self::Output {
@@ -44,7 +45,7 @@ impl<
             Translate(v) => self.clone() + v,
             Scale(v) => self.clone() * v,
             ScaleXY(v) => self.clone() * v,
-            // Transform::Rotate(a) => self.rotate(&a),
+            Rotate(a) => self.rotate(&a),
         }
     }
 }

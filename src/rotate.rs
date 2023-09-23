@@ -1,4 +1,4 @@
-use std::ops::{Sub, Mul, Add};
+use std::ops::{Sub, Mul, Add, Neg};
 
 use crate::trig::Trig;
 
@@ -8,6 +8,7 @@ pub trait RotateArg
 + Add<Output = Self>
 + Sub<Output = Self>
 + Mul<Output = Self>
++ Neg<Output = Self>
 {}
 
 impl<
@@ -17,6 +18,7 @@ impl<
     + Add<Output = D>
     + Sub<Output = D>
     + Mul<Output = D>
+    + Neg<Output = Self>
 > RotateArg for D
 {}
 

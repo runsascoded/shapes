@@ -41,6 +41,7 @@ impl UnitIntersectionsArg for f64 {}
 impl UnitIntersectionsArg for Dual {}
 
 impl<D: UnitIntersectionsArg> CDEF<D>
+where R2<D>: CanProject<D, Output = R2<D>>
 {
     pub fn points_err(&self, points: Vec<R2<D>>, xyrr: &XYRR<D>) -> f64 {
         points.iter().map(|p| {

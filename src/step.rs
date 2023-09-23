@@ -7,6 +7,7 @@ use tsify::{declare, Tsify};
 
 use crate::distance;
 use crate::ellipses::xyrr::XYRR;
+use crate::ellipses::xyrrt::XYRRT;
 use crate::math::recip::Recip;
 use crate::shape::{Input, Shape, Duals, Shapes};
 use crate::{circle::Circle, distance::Distance, scene::Scene, math::is_zero::IsZero, r2::R2, targets::{Targets, TargetsMap}, regions};
@@ -218,40 +219,7 @@ impl Step {
         debug!("  step_size {}, magnitude {}, grad_scale {}", step_size, magnitude, grad_scale);
         debug!("  step_vec {:?}", step_vec);
         let shapes = &self.shapes();
-        let new_inputs = shapes.iter().zip(self.duals()).map(|(s, duals)| {
-            (
-                match s {
-                    Shape::Circle(s) => {
-                        if duals.len() != 3 {
-                            panic!("expected 3 duals for Circle, got {}: {:?}", duals.len(), duals);
-                        }
-                        let duals = [ duals[0].clone(), duals[1].clone(), duals[2].clone() ];
-                        let [ dx, dy, dr ]: [f64; 3] = duals.map(|d| d.iter().zip(&step_vec).map(|(mask, step)| mask * step).sum());
-                        let c = R2 {
-                            x: s.c.x + dx,
-                            y: s.c.y + dy,
-                        };
-                        Shape::Circle(Circle { c, r: s.r + dr })
-                    },
-                    Shape::XYRR(e) => {
-                        if duals.len() != 4 {
-                            panic!("expected 4 duals for XYRR ellipse, got {}: {:?}", duals.len(), duals);
-                        }
-                        let duals = [
-                            duals[0].clone(),
-                            duals[1].clone(),
-                            duals[2].clone(),
-                            duals[3].clone(),
-                        ];
-                        let [ dcx, dcy, drx, dry ]: [f64; 4] = duals.map(|d| d.iter().zip(&step_vec).map(|(mask, step)| mask * step).sum());
-                        let c = e.c + R2 { x: dcx, y: dcy, };
-                        let r = e.r + R2 { x: drx, y: dry };
-                        Shape::XYRR(XYRR { c, r })
-                    },
-                },
-                duals ,
-            )
-        }).collect::<Vec<Input>>();
+        let new_inputs = shapes.iter().zip(self.duals()).map(|(s, duals)| s.step(&duals, &step_vec)).collect::<Vec<Input>>();
         for (cur, (nxt, _)) in shapes.iter().zip(new_inputs.iter()) {
             debug!("  {} -> {:?}", cur, nxt);
         }

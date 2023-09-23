@@ -5,7 +5,7 @@ use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::{r2::R2, rotate::{Rotate, RotateArg}, dual::{D, Dual}, shape::Duals, transform::{Transform::{Scale, ScaleXY, Translate, self}, CanProject, CanTransform, Projection}, math::recip::Recip};
+use crate::{r2::R2, rotate::{Rotate as _Rotate, RotateArg}, dual::{D, Dual}, shape::{Duals, Shape}, transform::{Transform::{Rotate, Scale, ScaleXY, Translate, self}, CanProject, CanTransform, Projection}, math::recip::Recip, sqrt::Sqrt};
 
 use super::{xyrrt::XYRRT, cdef::{CDEF, self}};
 
@@ -40,6 +40,7 @@ impl<D: RotateArg> XYRR<D> {
 
 impl<D: cdef::UnitIntersectionsArg> XYRR<D>
 where
+    R2<D>: CanProject<D, Output = R2<D>>,
     f64
     : Sub<D, Output = D>
     + Mul<D, Output = D>
@@ -93,8 +94,7 @@ impl<D: Display> Display for XYRR<D> {
 }
 
 impl<D: Clone + Recip> XYRR<D>
-where
-    R2<D>: Neg<Output = R2<D>>,
+where R2<D>: Neg<Output = R2<D>>,
 {
     pub fn projection(&self) -> Projection<D> {
         Projection(vec![
@@ -117,35 +117,63 @@ pub trait TransformR2<D>
 impl TransformR2<f64> for R2<f64> {}
 impl TransformR2<Dual> for R2<Dual> {}
 
-pub trait TransformD: Clone + Display {}
-impl<D: Clone + Display> TransformD for D {}
+pub trait TransformD: Clone + Display + RotateArg {}
+impl<D: Clone + Display + RotateArg> TransformD for D {}
 
 impl<D: TransformD> CanTransform<D> for XYRR<D>
 where R2<D>: TransformR2<D>,
 {
-    type Output = XYRR<D>;
-    fn transform(&self, t: &Transform<D>) -> XYRR<D> {
-        // println!("Transform XYRR:");
-        // println!("self: {}", self);
-        // println!("transform: {}", t);
+    type Output = Shape<D>;
+    fn transform(&self, t: &Transform<D>) -> Shape<D> {
         let rv = match t.clone() {
-            Translate(v) => XYRR {
+            Translate(v) => Shape::XYRR(XYRR {
                 c: self.c.clone() + v,
                 r: self.r.clone(),
-            },
-            Scale(v) => XYRR {
+            }),
+            Scale(v) => Shape::XYRR(XYRR {
                 c: self.c.clone() * v.clone(),
                 r: self.r.clone() * v,
-            },
-            ScaleXY(v) => XYRR {
-                c: self.c.clone() * v.clone(),
-                r: self.r.clone() * v,
-            },
-            // Rotate(a) => self.rotate(a),
+            }),
+            ScaleXY(xy) => Shape::XYRR(self.scale_xy(xy)),
+            Rotate(a) => Shape::XYRRT(self.rotate(&a)),
         };
-        // println!("rv: {}", rv);
-        // println!();
         rv
+    }
+}
+
+impl<D> XYRR<D>
+where R2<D>: Clone + Mul<R2<D>, Output = R2<D>>
+{
+    pub fn scale_xy(&self, xy: R2<D>) -> XYRR<D> {
+        XYRR {
+            c: self.c.clone() * xy.clone(),
+            r: self.r.clone() * xy,
+        }
+    }
+}
+
+pub trait UnitCircleGap
+: Clone
++ Into<f64>
++ PartialOrd
++ Sqrt
++ Add<Output = Self>
++ Sub<f64, Output = Self>
++ Sub<Output = Self>
++ Mul<Output = Self>
+{}
+impl UnitCircleGap for f64 {}
+impl UnitCircleGap for Dual {}
+
+impl<D: UnitCircleGap> XYRR<D> {
+    pub fn unit_circle_gap(&self) -> Option<D> {
+        let r = &self.r;
+        let distance = self.c.norm() - 1. - (if r.x < r.y { r.x.clone() } else { r.y.clone() });
+        if distance.clone().into() > 0. {
+            Some(distance)
+        } else {
+            None
+        }
     }
 }
 
@@ -153,7 +181,7 @@ where R2<D>: TransformR2<D>,
 mod tests {
     use std::{env, fmt, f64::NAN};
 
-    use crate::{dual::{Dual, d_fns}, circle::Circle, intersect::Intersect, to::To, shape::{Shape, Input, Shapes}, math::deg::Deg, fmt::Fmt};
+    use crate::{dual::{Dual, d_fns}, circle::Circle, intersect::Intersect, to::To, shape::Shape, math::deg::Deg, fmt::Fmt};
 
     use super::*;
     use approx::{AbsDiffEq, RelativeEq};

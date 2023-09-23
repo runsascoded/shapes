@@ -1,6 +1,6 @@
 use std::{ops::{Div, Neg, Add, Mul, Sub}, fmt::Display};
 
-use crate::{circle::{Circle, self}, dual::{D, Dual}, ellipses::cdef, r2::R2, transform::{CanProject, CanTransform, HasProjection}, shape::Shape, trig::Trig, theta_points::ThetaPointsArg};
+use crate::{circle::{Circle, self}, dual::{D, Dual}, ellipses::cdef, r2::R2, transform::{CanProject, CanTransform, HasProjection}, shape::Shape, trig::Trig, theta_points::ThetaPointsArg, rotate::RotateArg};
 
 pub trait Intersect<In, Out> {
     fn intersect(&self, other: &In) -> Vec<R2<Out>>;
@@ -67,8 +67,11 @@ impl<
     D
     : cdef::UnitIntersectionsArg
     + circle::UnitIntersectionsArg
+    + RotateArg
+    + Neg<Output = D>
 > UnitCircleIntersections<D> for Shape<D>
 where
+    R2<D>: CanProject<D, Output = R2<D>>,
     f64
     : Add<D, Output = D>
     + Sub<D, Output = D>
@@ -79,6 +82,7 @@ where
         match self {
             Shape::Circle(c) => c.unit_intersections(),
             Shape::XYRR(e) => e.unit_intersections(),
+            Shape::XYRRT(e) => e.unit_intersections(),
         }
     }
 }
