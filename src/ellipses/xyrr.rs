@@ -7,7 +7,7 @@ use tsify::Tsify;
 
 use crate::{r2::R2, rotate::{Rotate as _Rotate, RotateArg}, dual::{D, Dual}, shape::{Duals, Shape}, transform::{Transform::{Rotate, Scale, ScaleXY, Translate, self}, CanProject, CanTransform, Projection}, math::recip::Recip, sqrt::Sqrt, ellipses::xyrr};
 
-use super::{xyrrt::XYRRT, cdef::{CDEF, self}};
+use super::{xyrrt::XYRRT, cdef::{CDEF, self}, bcdef};
 
 #[derive(Debug, Clone, From, PartialEq, Serialize, Deserialize, Tsify)]
 pub struct XYRR<D> {
@@ -133,8 +133,8 @@ pub trait TransformR2<D>
 impl TransformR2<f64> for R2<f64> {}
 impl TransformR2<Dual> for R2<Dual> {}
 
-pub trait TransformD: Clone + Display + Div<Output = Self> + RotateArg + xyrr::CdefArg {}
-impl<D: Clone + Display + Div<Output = D> + RotateArg + xyrr::CdefArg> TransformD for D {}
+pub trait TransformD: Clone + Display + Div<Output = Self> + RotateArg + xyrr::CdefArg + bcdef::XyrrtArg {}
+impl<D: Clone + Display + Div<Output = D> + RotateArg + xyrr::CdefArg + bcdef::XyrrtArg> TransformD for D {}
 
 impl<D: TransformD> CanTransform<D> for XYRR<D>
 where R2<D>: TransformR2<D>,

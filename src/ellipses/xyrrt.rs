@@ -96,7 +96,7 @@ where R2<D>: Neg<Output = R2<D>>,
     }
 }
 
-impl<D: LevelArg + CdefArg> XYRRT<D> {
+impl<D: LevelArg + CdefArg + cdef::RotateArg> XYRRT<D> {
     fn bcdef(&self) -> BCDEF<D> {
         self.level().cdef().rotate(&self.t.clone())
     }

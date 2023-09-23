@@ -1,10 +1,10 @@
 
-use std::fmt::Display;
+use std::{fmt::Display, ops::{Add, Mul, Sub, Div}};
 
 use log::debug;
 use ordered_float::OrderedFloat;
 
-use crate::{math::{abs::AbsArg, is_zero::IsZero, recip::Recip}, r2::R2, transform::CanProject, ellipses::quartic::{Root, Quartic}, circle, dual::Dual};
+use crate::{math::{abs::AbsArg, is_zero::IsZero, recip::Recip}, r2::R2, transform::CanProject, ellipses::quartic::{Root, Quartic}, circle, dual::Dual, sqrt::Sqrt, trig::Trig};
 
 use super::{xyrr::XYRR, bcdef::BCDEF};
 
@@ -210,14 +210,76 @@ where R2<D>: CanProject<D, Output = R2<D>>
     }
 }
 
-impl<D> CDEF<D> {
+pub trait RotateArg
+: Clone
++ Recip
++ Trig
++ Add<Output = Self>
++ Sub<Output = Self>
++ Sub<f64, Output = Self>
++ Mul<Output = Self>
++ Mul<f64, Output = Self>
+{}
+impl<
+    D
+    : Clone
+    + Recip
+    + Trig
+    + Add<Output = D>
+    + Sub<Output = D>
+    + Sub<f64, Output = D>
+    + Mul<Output = D>
+    + Mul<f64, Output = D>
+> RotateArg for D {}
+
+impl<D: RotateArg> CDEF<D> {
     pub fn rotate(&self, t: &D) -> BCDEF<D> {
-        todo!()
+        let cos = t.cos();
+        let cos2 = cos.clone() * cos.clone();
+        let sin = t.sin();
+        let sin2 = sin.clone() * sin.clone();
+        let CDEF { c, d, e, f } = self;
+        let a = cos2.clone() + c.clone() * sin2.clone();
+        let ar = a.recip();
+        BCDEF {
+            b: ar.clone() * -2. * c.clone() * sin.clone() * (c.clone() - 1.),
+            c: ar.clone() * (sin2.clone() + c.clone() * cos2.clone()),
+            d: ar.clone() * (d.clone() * cos.clone() - e.clone() * sin.clone()),
+            e: ar.clone() * (d.clone() * sin.clone() + e.clone() * cos.clone()),
+            f: ar * f.clone(),
+        }
     }
 }
 
-impl<D> CDEF<D> {
+pub trait XyrrArg
+: Clone
++ Sqrt
++ Add<Output = Self>
++ Sub<Output = Self>
++ Mul<Output = Self>
++ Mul<f64, Output = Self>
++ Div<Output = Self>
++ Div<f64, Output = Self>
+{}
+impl<
+    D
+    : Clone
+    + Sqrt
+    + Add<Output = D>
+    + Sub<Output = D>
+    + Mul<Output = D>
+    + Mul<f64, Output = D>
+    + Div<Output = D>
+    + Div<f64, Output = D>
+> XyrrArg for D {}
+
+impl<D: XyrrArg> CDEF<D> {
     pub fn xyrr(&self) -> XYRR<D> {
-        todo!()
+        let CDEF { c, d, e, f } = self;
+        let rx = (d.clone() * d.clone() + e.clone() * e.clone() / c.clone() - f.clone() * 4.).sqrt() / 2.;
+        let ry = rx.clone() / c.sqrt();
+        let cx = d.clone() / -2.;
+        let cy = e.clone() / -2. / c.clone();
+        XYRR { c: R2 { x: cx, y: cy }, r: R2 { x: rx, y: ry } }
     }
 }
