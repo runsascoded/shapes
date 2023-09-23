@@ -1,9 +1,12 @@
 use std::{ops::{Div, Neg, Add, Mul, Sub}, fmt::Display};
 
-use crate::{circle::{Circle, self}, dual::{D, Dual}, ellipses::cdef, r2::R2, transform::{CanProject, CanTransform, HasProjection}, shape::Shape, trig::Trig, theta_points::ThetaPointsArg, rotate::RotateArg};
+use log::debug;
+
+use crate::{circle, dual::Dual, ellipses::{cdef, xyrrt}, r2::R2, transform::{CanProject, CanTransform, HasProjection}, shape::Shape, trig::Trig, theta_points::ThetaPointsArg, rotate::RotateArg};
 
 pub trait Intersect<In, Out> {
     fn intersect(&self, other: &In) -> Vec<R2<Out>>;
+    // fn _intersect(&self, other: &In) -> Vec<R2<Out>>;
 }
 
 pub trait IntersectShapesArg
@@ -14,6 +17,7 @@ pub trait IntersectShapesArg
 + Neg<Output = Self>
 + cdef::UnitIntersectionsArg
 + circle::UnitIntersectionsArg
++ xyrrt::UnitIntersectionsArg
 + ThetaPointsArg
 {}
 
@@ -25,8 +29,7 @@ where
     R2<D>
     : Neg<Output = R2<D>>
     + CanTransform<D, Output = R2<D>>,
-    Shape<D>
-    : CanTransform<D, Output = Shape<D>>,
+    Shape<D>: CanTransform<D, Output = Shape<D>>,
     f64
     : Add<D, Output = D>
     + Sub<D, Output = D>
@@ -34,28 +37,13 @@ where
     + Div<D, Output = D>,
 {
     fn intersect(&self, o: &Shape<D>) -> Vec<R2<D>> {
-        let projection = o.projection();
-        let rev = -projection.clone();
-        let projected = self.apply(&projection);
-        // println!("Intersecting:");
-        // println!("  self: {:?}", self);
-        // println!("  other: {:?}", o);
-        // println!("  projection: {:?}", projection);
-        // println!("  projected: {:?}", projected);
-        let unit_circle_intersections = projected.unit_circle_intersections();
-        let points = unit_circle_intersections.iter().map(|p| p.apply(&rev));
-        // println!("reverse projection: {:?}", rev);
-        // println!("points: {:?}", points.clone().collect::<Vec<_>>());
-        // println!();
-        points.collect()
-        // points.map(|p| {
-        //     let x = p.x.clone();
-        //     let y = p.y.clone();
-        //     let p = R2 { x: x.clone(), y: y.clone() };
-        //     let t0 = self.theta(p.clone());
-        //     let t1 = o.theta(p.clone());
-        //     Intersection { x, y, c0idx: self.idx(), c1idx: o.idx(), t0, t1, }
-        // }).collect()
+        match (self, o) {
+            (Shape::Circle(_), _) => self._intersect(o),
+            (_, Shape::Circle(_)) => o.intersect(&self),
+            (Shape::XYRR(_), _) => self._intersect(o),
+            (_, Shape::XYRR(_)) => o.intersect(&self),
+            (Shape::XYRRT(_), Shape::XYRRT(_)) => self._intersect(o),
+        }
     }
 }
 
@@ -67,6 +55,7 @@ impl<
     D
     : cdef::UnitIntersectionsArg
     + circle::UnitIntersectionsArg
+    + xyrrt::UnitIntersectionsArg
     + RotateArg
     + Neg<Output = D>
 > UnitCircleIntersections<D> for Shape<D>

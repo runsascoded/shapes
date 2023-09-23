@@ -1,12 +1,13 @@
 use std::{ops::{Neg, Sub, Mul, Div}, fmt::Display};
 
 use derive_more::From;
+use log::debug;
 use serde::{Serialize, Deserialize};
 use tsify::Tsify;
 
-use crate::{r2::R2, rotate::{Rotate as _Rotate, RotateArg}, dual::{D, Dual}, shape::{Duals, Shape}, transform::{Transform::{Rotate, Scale, ScaleXY, Translate, self}, Projection, CanTransform, CanProject}, math::recip::Recip};
+use crate::{r2::R2, rotate::{Rotate as _Rotate, RotateArg}, dual::{D, Dual}, shape::{Duals, Shape}, transform::{Transform::{Rotate, Scale, ScaleXY, Translate, self}, Projection, CanTransform, CanProject}, math::{recip::Recip, deg::Deg}};
 
-use super::{xyrr::{XYRR, TransformD, TransformR2, UnitCircleGap}, cdef};
+use super::{xyrr::{XYRR, TransformD, TransformR2, UnitCircleGap}, cdef, bcdef::BCDEF};
 
 #[derive(Debug, Clone, From, PartialEq, Serialize, Deserialize, Tsify)]
 pub struct XYRRT<D> {
@@ -57,7 +58,10 @@ impl<D: LevelArg> XYRRT<D> {
     }
 }
 
-impl<D: cdef::UnitIntersectionsArg + LevelArg> XYRRT<D>
+pub trait UnitIntersectionsArg: cdef::UnitIntersectionsArg + LevelArg + Deg {}
+impl<D: cdef::UnitIntersectionsArg + LevelArg + Deg> UnitIntersectionsArg for D {}
+
+impl<D: UnitIntersectionsArg> XYRRT<D>
 where
     R2<D>: CanProject<D, Output = R2<D>>,
     f64
@@ -66,6 +70,7 @@ where
     + Div<D, Output = D>,
 {
     pub fn unit_intersections(&self) -> Vec<R2<D>> {
+        debug!("XYRRT.unit_intersections: {}", self);
         self.level().unit_intersections().iter().map(|p| p.rotate(&self.t)).collect()
     }
 }
@@ -79,9 +84,9 @@ impl XYRRT<D> {
     }
 }
 
-impl<D: Display> Display for XYRRT<D> {
+impl<D: Display + Deg> Display for XYRRT<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{{ c: {}, r: {} }}", self.c, self.r)
+        write!(f, "{{ c: {}, r: {} {}° }}", self.c, self.r, self.t.deg_str())
     }
 }
 
@@ -94,6 +99,12 @@ where R2<D>: Neg<Output = R2<D>>,
             Rotate(-self.t.clone()),
             ScaleXY(self.r.clone().recip()),
         ])
+    }
+}
+
+impl<D> XYRRT<D> {
+    fn bcdef(&self) -> BCDEF<D> {
+        todo!()
     }
 }
 
@@ -113,7 +124,7 @@ where R2<D>: TransformR2<D>,
                 r: self.r.clone() * v,
                 t: self.t.clone(),
             }),
-            ScaleXY(v) => Shape::XYRRT(self.level().scale_xy(v).rotate(&self.t)),
+            ScaleXY(xy) => Shape::XYRRT(self.bcdef().scale_xy(&xy).xyrrt().rotate(&self.t)),
             Rotate(a) => Shape::XYRRT(self.rotate(&a)),
         };
         rv
@@ -141,6 +152,8 @@ mod tests {
     use std::f64::consts::PI;
 
     use super::*;
+    use test_log::test;
+    use crate::intersect::Intersect;
 
     #[test]
     fn test_level() {
@@ -197,6 +210,16 @@ mod tests {
         assert_eq!(points, vec![
             R2 { x: 0.5, y: 0.8660254037844386 },
             R2 { x: 0.49999999999999994, y: -0.8660254037844386 },
+        ]);
+    }
+
+    #[test]
+    fn intersections1() {
+        let e0 = XYRRT { c: R2 { x: 0., y: 0. }, r: R2 { x: 2., y: 1. }, t: 0. };
+        let e1 = XYRRT { c: R2 { x: 0., y: 0. }, r: R2 { x: 2., y: 1. }, t: PI / 4. };
+        let points = Shape::XYRRT(e0).intersect(&Shape::XYRRT(e1));
+        assert_eq!(points, vec![
+
         ]);
     }
 }

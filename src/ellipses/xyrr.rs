@@ -58,8 +58,9 @@ where
         }
     }
     pub fn unit_intersections(&self) -> Vec<R2<D>> {
+        debug!("XYRR.unit_intersections: {}", self);
         let points = self.cdef().unit_intersections(&self);
-        // debug!("xyrr unit_intersections: {}, points {:?}", self, points);
+        debug!("XYRR.unit_intersections: {}, points {:?}", self, points);
         for point in &points {
             let r = point.norm();
             let projected = point.apply(&self.projection());
@@ -117,8 +118,8 @@ pub trait TransformR2<D>
 impl TransformR2<f64> for R2<f64> {}
 impl TransformR2<Dual> for R2<Dual> {}
 
-pub trait TransformD: Clone + Display + RotateArg {}
-impl<D: Clone + Display + RotateArg> TransformD for D {}
+pub trait TransformD: Clone + Display + Div<Output = Self> + RotateArg {}
+impl<D: Clone + Display + Div<Output = D> + RotateArg> TransformD for D {}
 
 impl<D: TransformD> CanTransform<D> for XYRR<D>
 where R2<D>: TransformR2<D>,

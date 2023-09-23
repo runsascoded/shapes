@@ -148,7 +148,7 @@ where
     + Mul<Complex<D>, Output = Complex<D>>
     + Mul<Complex<f64>, Output = Complex<D>>
 {
-    // debug!("cubic_normalized: x^3 + {:?} x^2 + {:?} x + {:?}", b, c, d);
+    debug!("cubic_normalized: x^3 + {:?} x^2 + {:?} x + {:?}", b, c, d);
     let b3 = b.clone() / 3.;
     let p = c.clone() - b.clone() * b3.clone();
     let q = b3.clone() * b3.clone() * b3.clone() * 2. - b3.clone() * c.clone() + d.clone();
@@ -165,12 +165,12 @@ where
             DepressedRoots::Mixed(re, ims) => Mixed(re - b3.clone(), ims - b3),
         }
     };
-    // debug!("cubic_normalized roots:");
-    // for x in &rv.all() {
-    //     let x2 = x.clone() * x.clone();
-    //     let y = x2.clone() * x.clone() + x2 * b.clone() + x.clone() * c.clone() + d.clone();
-    //     debug!("  x {:?}, f(x) {:?} ({:?})", x, y, y.norm());
-    // }
+    debug!("cubic_normalized roots:");
+    for x in &rv.all() {
+        let x2 = x.clone() * x.clone();
+        let y = x2.clone() * x.clone() + x2 * b.clone() + x.clone() * c.clone() + d.clone();
+        debug!("  x {:?}, f(x) {:?} ({:?})", x, y, y.norm());
+    }
     rv
 }
 
@@ -190,7 +190,7 @@ where
     let u_1: Complex<f64> = Complex { re: -0.5, im: sin_tau3 };
     // let u_2: Complex<f64> = Complex { re: -1. / 2., im: -sin_tau3 };
 
-    // debug!("cubic_depressed: x^3 + {:?}x + {:?}", p, q);
+    debug!("cubic_depressed: x^3 + {:?}x + {:?}", p, q);
     let rv = if p.is_zero() {
         let re = -q.cbrt();
         let re2 = Complex::re(re.clone());
@@ -260,12 +260,12 @@ where
         let im = (mu.clone() - mu.recip()) * p3sq;
         DepressedRoots::Mixed(re, im)
     };
-    // debug!("cubic_depressed roots:");
-    // let f = |x: &Complex<D>| x.clone() * x.clone() * x.clone() + x.clone() * p.clone() + q.clone();
-    // for x in &rv.all() {
-    //     let y = f(x);
-    //     debug!("  x {:?}, f(x) {:?} ({:?})", x, y, y.norm());
-    // }
+    debug!("cubic_depressed roots:");
+    let f = |x: &Complex<D>| x.clone() * x.clone() * x.clone() + x.clone() * p.clone() + q.clone();
+    for x in &rv.all() {
+        let y = f(x);
+        debug!("  x {:?}, f(x) {:?} ({:?})", x, y, y.norm());
+    }
     rv
 }
 

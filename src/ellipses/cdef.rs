@@ -6,7 +6,7 @@ use ordered_float::OrderedFloat;
 
 use crate::{math::{abs::AbsArg, is_zero::IsZero, recip::Recip}, r2::R2, transform::CanProject, ellipses::quartic::{Root, Quartic}, circle, dual::Dual};
 
-use super::xyrr::XYRR;
+use super::{xyrr::XYRR, bcdef::BCDEF};
 
 /// Ellipse where "A" (the x² coefficient) is 1 and "B" (the xy coefficient) is zero:
 ///
@@ -54,20 +54,20 @@ where R2<D>: CanProject<D, Output = R2<D>>
         }).sum()
     }
     pub fn unit_intersections(&self, xyrr: &XYRR<D>) -> Vec<R2<D>> {
-        // debug!("c: {}", self.c);
-        // debug!("d: {}", self.d);
-        // debug!("e: {}", self.e);
-        // debug!("f: {}", self.f);
+        debug!("c: {}", self.c);
+        debug!("d: {}", self.d);
+        debug!("e: {}", self.e);
+        debug!("f: {}", self.f);
         let d_zero = self.d.clone().is_zero();
         let e_zero = self.e.clone().is_zero();
         if d_zero {
             let points = self._unit_intersections(xyrr, true);
-            let err = self.points_err(points.clone(), xyrr);
+            // let err = self.points_err(points.clone(), xyrr);
             // debug!("points err: {}", err);
             points
         } else if e_zero {
             let points = self._unit_intersections(xyrr, false);
-            let err = self.points_err(points.clone(), xyrr);
+            // let err = self.points_err(points.clone(), xyrr);
             // debug!("points err: {}", err);
             points
         } else {
@@ -88,7 +88,7 @@ where R2<D>: CanProject<D, Output = R2<D>>
         }
     }
     pub fn _unit_intersections(&self, xyrr: &XYRR<D>, sub_y_solve_x: bool) -> Vec<R2<D>> {
-        // debug!("_unit_intersections, sub_y_solve_x: {}", sub_y_solve_x);
+        debug!("_unit_intersections, sub_y_solve_x: {}", sub_y_solve_x);
         let [ c_2, c_1, c_0 ] = if sub_y_solve_x {        // debug!("d_zero: {}", d_zero);
             let re = -self.e.clone().recip();
             [
@@ -104,20 +104,20 @@ where R2<D>: CanProject<D, Output = R2<D>>
                 (self.f.clone() + 1.) * rd,
             ]
         };
-        // debug!("c_2: {}", c_2);
-        // debug!("c_1: {}", c_1);
-        // debug!("c_0: {}", c_0);
+        debug!("c_2: {}", c_2);
+        debug!("c_1: {}", c_1);
+        debug!("c_0: {}", c_0);
 
         let mut a_4 = c_2.clone() * c_2.clone();
         let mut a_3 = c_2.clone() * c_1.clone() * 2.;
         let a_2 = c_1.clone() * c_1.clone() + c_2.clone() * c_0.clone() * 2. + 1.;
         let a_1 = c_1.clone() * c_0.clone() * 2.;
         let a_0 = c_0.clone() * c_0.clone() - 1.;
-        // debug!("a_4: {}", a_4);
-        // debug!("a_3: {}", a_3);
-        // debug!("a_2: {}", a_2);
-        // debug!("a_1: {}", a_1);
-        // debug!("a_0: {}", a_0);
+        debug!("a_4: {}", a_4);
+        debug!("a_3: {}", a_3);
+        debug!("a_2: {}", a_2);
+        debug!("a_1: {}", a_1);
+        debug!("a_0: {}", a_0);
         let f_4: f64 = a_4.clone().into();
         let f_3: f64 = a_3.clone().into();
         let f_2: f64 = a_2.clone().into();
@@ -207,5 +207,17 @@ where R2<D>: CanProject<D, Output = R2<D>>
             }
         }
         points
+    }
+}
+
+impl<D> CDEF<D> {
+    pub fn rotate(&self, t: &D) -> BCDEF<D> {
+        todo!()
+    }
+}
+
+impl<D> CDEF<D> {
+    pub fn xyrr(&self) -> XYRR<D> {
+        todo!()
     }
 }

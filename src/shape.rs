@@ -1,10 +1,11 @@
-use std::{ops::Neg, fmt};
+use std::{ops::{Neg, Add, Sub, Mul, Div}, fmt};
 
 use derive_more::{From, Display};
+use log::debug;
 use serde::{Deserialize, Serialize};
 use tsify::{declare, Tsify};
 
-use crate::{dual::D, circle::{self, Circle}, ellipses::{xyrr::{self, XYRR, UnitCircleGap}, xyrrt::{self, XYRRT, LevelArg}}, zero::Zero, transform::{Transform, CanTransform, HasProjection, Projection}, r2::R2, math::recip::Recip};
+use crate::{dual::D, circle::{self, Circle}, ellipses::{xyrr::{self, XYRR, UnitCircleGap}, xyrrt::{self, XYRRT, LevelArg}}, zero::Zero, transform::{Transform, CanProject, CanTransform, HasProjection, Projection}, r2::R2, math::recip::Recip, intersect::{IntersectShapesArg, UnitCircleIntersections}};
 
 #[declare]
 pub type Duals = Vec<Vec<f64>>;
@@ -176,5 +177,32 @@ impl Shape<f64> {
             },
             duals.clone(),
         )
+    }
+}
+
+impl<D: IntersectShapesArg> Shape<D>
+where
+    Shape<D>: CanTransform<D, Output = Shape<D>>,
+    R2<D>: CanProject<D, Output = R2<D>>,
+    f64
+    : Add<D, Output = D>
+    + Sub<D, Output = D>
+    + Mul<D, Output = D>
+    + Div<D, Output = D>,
+{
+    pub fn _intersect(&self, o: &Shape<D>) -> Vec<R2<D>> {
+        debug!("Intersecting:");
+        debug!("  self: {:?}", self);
+        debug!("  other: {:?}", o);
+        let projection = self.projection();
+        let projected = o.apply(&projection);
+        let rev = -projection.clone();
+        debug!("  projection: {:?}", projection);
+        debug!("  projected: {:?}", projected);
+        // debug!("reverse projection: {:?}", rev);
+        let points = projected.unit_circle_intersections().iter().map(|p| p.apply(&rev)).collect();
+        // debug!("points: {:?}", points.clone().collect::<Vec<_>>());
+        // debug!();
+        points
     }
 }

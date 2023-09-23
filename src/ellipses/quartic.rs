@@ -21,7 +21,7 @@ impl Quartic for f64 {
         // let reals = find_roots_quartic(a_4, a_3, a_2, a_1, a_0).as_ref().to_vec();
 
         // crate::math::quartic
-        // debug!("{}x^4 + {}x^3 + {}x^2 + {}x + {}", a_4, a_3, a_2, a_1, a_0);
+        debug!("{}x^4 + {}x^3 + {}x^2 + {}x + {}", a_4, a_3, a_2, a_1, a_0);
         let roots0 = quartic(a_4, a_3, a_2, a_1, a_0);
         // debug!("roots0: {:?}", roots0);
         let reals = roots0.reals();
