@@ -1,6 +1,7 @@
 
-use std::{fmt::Display, ops::{Add, Mul, Sub, Div}};
+use std::{fmt::Display, ops::{Add, Mul, Sub, Div, Neg}};
 
+use approx::{AbsDiffEq, RelativeEq};
 use log::debug;
 use ordered_float::OrderedFloat;
 
@@ -20,7 +21,7 @@ use super::{xyrr::XYRR, bcdef::BCDEF};
 /// 3. Compute intersections of the axis-aligned ellipse with the unit circle.
 /// 4. Revert 2. (rotate the plane back to its original orientation).
 /// 5. Revert 1. (invert the projection).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CDEF<D> {
     pub c: D,
     pub d: D,
@@ -54,17 +55,38 @@ where R2<D>: CanProject<D, Output = R2<D>>
         }).sum()
     }
     pub fn unit_intersections(&self, xyrr: &XYRR<D>) -> Vec<R2<D>> {
-        debug!("c: {}", self.c);
-        debug!("d: {}", self.d);
-        debug!("e: {}", self.e);
-        debug!("f: {}", self.f);
-        let d_zero = self.d.clone().is_zero();
-        let e_zero = self.e.clone().is_zero();
+        let CDEF { c, d, e, f } = self;
+        debug!("C: {}", c);
+        debug!("D: {}", d);
+        debug!("E: {}", e);
+        debug!("F: {}", f);
+        let d_zero = d.clone().is_zero();
+        let e_zero = e.clone().is_zero();
         if d_zero {
-            let points = self._unit_intersections(xyrr, true);
-            // let err = self.points_err(points.clone(), xyrr);
-            // debug!("points err: {}", err);
-            points
+            if e_zero {
+                let fc = (-f.clone() - 1.) / (c.clone() - 1.);
+                let fcf: f64 = fc.clone().into();
+                if fcf >= 0. && fcf <= 1. {
+                    let y0 = fc.sqrt();
+                    let y1 = -y0.clone();
+                    let x0 = (-y0.clone() * y0.clone() + 1.).sqrt();
+                    let x1 = -x0.clone();
+                    let points = vec![
+                        R2 { x: x0.clone(), y: y0.clone() },
+                        R2 { x: x0.clone(), y: y1.clone() },
+                        R2 { x: x1.clone(), y: y0.clone() },
+                        R2 { x: x1.clone(), y: y1.clone() },
+                    ];
+                    points
+                } else {
+                    vec![]
+                }
+            } else {
+                let points = self._unit_intersections(xyrr, true);
+                // let err = self.points_err(points.clone(), xyrr);
+                // debug!("points err: {}", err);
+                points
+            }
         } else if e_zero {
             let points = self._unit_intersections(xyrr, false);
             // let err = self.points_err(points.clone(), xyrr);
@@ -242,11 +264,12 @@ impl<D: RotateArg> CDEF<D> {
         let a = cos2.clone() + c.clone() * sin2.clone();
         let ar = a.recip();
         BCDEF {
-            b: ar.clone() * -2. * c.clone() * sin.clone() * (c.clone() - 1.),
+            b: ar.clone() * -2. * cos.clone() * sin.clone() * (c.clone() - 1.),
             c: ar.clone() * (sin2.clone() + c.clone() * cos2.clone()),
             d: ar.clone() * (d.clone() * cos.clone() - e.clone() * sin.clone()),
             e: ar.clone() * (d.clone() * sin.clone() + e.clone() * cos.clone()),
             f: ar * f.clone(),
+            t: t.clone(),
         }
     }
 }
@@ -281,5 +304,60 @@ impl<D: XyrrArg> CDEF<D> {
         let cx = d.clone() / -2.;
         let cy = e.clone() / -2. / c.clone();
         XYRR { c: R2 { x: cx, y: cy }, r: R2 { x: rx, y: ry } }
+    }
+}
+
+impl<D: Clone + Display + Neg<Output = D>> Display for CDEF<D> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "x² + {}y² + {}x + {}y = {}", self.c, self.d, self.e, -self.f.clone())
+    }
+}
+
+impl<D: AbsDiffEq<Epsilon = f64> + Clone> AbsDiffEq for CDEF<D> {
+    type Epsilon = D::Epsilon;
+    fn default_epsilon() -> Self::Epsilon {
+        D::default_epsilon()
+    }
+    fn abs_diff_eq(&self, other: &Self, epsilon: Self::Epsilon) -> bool {
+        self.c.abs_diff_eq(&other.c, epsilon.clone())
+        && self.d.abs_diff_eq(&other.d, epsilon.clone())
+        && self.e.abs_diff_eq(&other.e, epsilon.clone())
+        && self.f.abs_diff_eq(&other.f, epsilon)
+    }
+}
+
+impl<D: RelativeEq<Epsilon = f64> + Clone> RelativeEq for CDEF<D> {
+    fn default_max_relative() -> Self::Epsilon {
+        D::default_max_relative()
+    }
+    fn relative_eq(&self, other: &Self, epsilon: Self::Epsilon, max_relative: Self::Epsilon) -> bool {
+        self.c.relative_eq(&other.c, epsilon.clone(), max_relative.clone())
+        && self.d.relative_eq(&other.d, epsilon.clone(), max_relative.clone())
+        && self.e.relative_eq(&other.e, epsilon.clone(), max_relative.clone())
+        && self.f.relative_eq(&other.f, epsilon, max_relative)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::f64::consts::PI;
+
+    use crate::ellipses::xyrrt::XYRRT;
+
+    use super::*;
+    use test_log::test;
+
+    #[test]
+    fn rotate_roundtrip() {
+        let cdef = CDEF { c: 4., d: 0., e: 0., f: -4., };
+        // let CDEF { c, d, e, f } = cdef.clone();
+        assert_eq!(cdef.rotate(&0.).level(), cdef);
+        let pi4 = cdef.rotate(&(PI / 4.));
+        assert_relative_eq!(pi4, BCDEF { b: -1.2, c: 1., d: 0., e: 0., f: -1.6, t: PI / 4., }, max_relative = 1e-15);
+        assert_relative_eq!(pi4.level(), cdef, max_relative = 1e-15);
+        assert_relative_eq!(pi4.xyrrt(), XYRRT { c: R2 { x: 0., y: 0., }, r: R2 { x: 2., y: 1., }, t: PI / 4., }, max_relative = 1e-15);
+        // let pi2 = cdef.rotate(&(PI / 2.));
+        // assert_relative_eq!(pi2.level(), cdef, max_relative = 1e-15);
+        // assert_relative_eq!(pi4.level(), cdef, max_relative = 1e-15);
     }
 }

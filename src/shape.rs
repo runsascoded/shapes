@@ -192,13 +192,13 @@ where
 {
     pub fn _intersect(&self, o: &Shape<D>) -> Vec<R2<D>> {
         debug!("Intersecting:");
-        debug!("  self: {:?}", self);
-        debug!("  other: {:?}", o);
+        debug!("  self: {}", self);
+        debug!("  other: {}", o);
         let projection = self.projection();
-        let projected = o.apply(&projection);
-        let rev = -projection.clone();
         debug!("  projection: {:?}", projection);
-        debug!("  projected: {:?}", projected);
+        let projected = o.apply(&projection);
+        debug!("  projected: {}", projected);
+        let rev = -projection.clone();
         // debug!("reverse projection: {:?}", rev);
         let points = projected.unit_circle_intersections().iter().map(|p| p.apply(&rev)).collect();
         // debug!("points: {:?}", points.clone().collect::<Vec<_>>());

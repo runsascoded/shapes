@@ -1,5 +1,6 @@
 use std::{ops::{Neg, Sub, Mul, Div}, fmt::Display};
 
+use approx::{RelativeEq, AbsDiffEq};
 use derive_more::From;
 use log::debug;
 use serde::{Serialize, Deserialize};
@@ -7,7 +8,7 @@ use tsify::Tsify;
 
 use crate::{r2::R2, rotate::{Rotate as _Rotate, RotateArg}, dual::{D, Dual}, shape::{Duals, Shape}, transform::{Transform::{Rotate, Scale, ScaleXY, Translate, self}, Projection, CanTransform, CanProject}, math::{recip::Recip, deg::Deg}};
 
-use super::{xyrr::{XYRR, TransformD, TransformR2, UnitCircleGap, CdefArg}, cdef, bcdef::BCDEF};
+use super::{xyrr::{XYRR, TransformD, TransformR2, UnitCircleGap, CdefArg}, cdef, bcdef::{BCDEF, self}};
 
 #[derive(Debug, Clone, From, PartialEq, Serialize, Deserialize, Tsify)]
 pub struct XYRRT<D> {
@@ -96,9 +97,14 @@ where R2<D>: Neg<Output = R2<D>>,
     }
 }
 
-impl<D: LevelArg + CdefArg + cdef::RotateArg> XYRRT<D> {
+impl<D: Deg + Display + LevelArg + CdefArg + cdef::RotateArg + bcdef::LevelArg> XYRRT<D> {
     fn bcdef(&self) -> BCDEF<D> {
-        self.level().cdef().rotate(&self.t.clone())
+        let level = self.level();
+        let cdef = level.cdef();
+        let bcdef = cdef.rotate(&self.t.clone());
+        debug!("level: {}", level);
+        debug!("cdef: {}", cdef);
+        bcdef
     }
 }
 
@@ -118,7 +124,19 @@ where R2<D>: TransformR2<D>,
                 r: self.r.clone() * v,
                 t: self.t.clone(),
             }),
-            ScaleXY(xy) => Shape::XYRRT(self.bcdef().scale_xy(&xy).xyrrt().rotate(&self.t)),
+            ScaleXY(xy) => {
+                debug!("Scaling {}", self);
+                let bcdef = self.bcdef();
+                debug!("bcdef: {}", bcdef);
+                let scaled = bcdef.scale_xy(&xy);
+                debug!("scaled bcdef: {}", scaled);
+                let xyrrt = scaled.xyrrt();
+                debug!("scaled xyrrt: {}", xyrrt);
+                Shape::XYRRT(xyrrt)
+                // let rotated = xyrrt.rotate(&self.t);
+                // debug!("rotated: {}", rotated);
+                // Shape::XYRRT(rotated)
+            },
             Rotate(a) => Shape::XYRRT(self.rotate(&a)),
         };
         rv
@@ -128,6 +146,29 @@ where R2<D>: TransformR2<D>,
 impl<D: LevelArg + UnitCircleGap> XYRRT<D> {
     pub fn unit_circle_gap(&self) -> Option<D> {
         self.level().unit_circle_gap()
+    }
+}
+
+impl<D: AbsDiffEq<Epsilon = f64> + Clone> AbsDiffEq for XYRRT<D> {
+    type Epsilon = D::Epsilon;
+    fn default_epsilon() -> Self::Epsilon {
+        D::default_epsilon()
+    }
+    fn abs_diff_eq(&self, other: &Self, epsilon: Self::Epsilon) -> bool {
+        self.c.abs_diff_eq(&other.c, epsilon.clone())
+        && self.r.abs_diff_eq(&other.r, epsilon.clone())
+        && self.t.abs_diff_eq(&other.t, epsilon.clone())
+    }
+}
+
+impl<D: RelativeEq<Epsilon = f64> + Clone> RelativeEq for XYRRT<D> {
+    fn default_max_relative() -> Self::Epsilon {
+        D::default_max_relative()
+    }
+    fn relative_eq(&self, other: &Self, epsilon: Self::Epsilon, max_relative: Self::Epsilon) -> bool {
+        self.c.relative_eq(&other.c, epsilon.clone(), max_relative.clone())
+        && self.r.relative_eq(&other.r, epsilon.clone(), max_relative.clone())
+        && self.t.relative_eq(&other.t, epsilon.clone(), max_relative.clone())
     }
 }
 
@@ -200,10 +241,28 @@ mod tests {
     #[test]
     fn intersections1() {
         let e0 = XYRRT { c: R2 { x: 0., y: 0. }, r: R2 { x: 2., y: 1. }, t: 0. };
-        let e1 = XYRRT { c: R2 { x: 0., y: 0. }, r: R2 { x: 2., y: 1. }, t: PI / 4. };
+        let e1 = XYRRT { c: R2 { x: 0., y: 0. }, r: R2 { x: 4., y: 1. }, t: PI / 4. };
         let points = Shape::XYRRT(e0).intersect(&Shape::XYRRT(e1));
         assert_eq!(points, vec![
-
+            R2 { x:  1.76727585143249  , y:  0.4681709263035157 },
+            R2 { x:  0.4311377406882232, y: -0.9764886390217573 },
+            R2 { x: -0.4311377406882232, y:  0.9764886390217573 },
+            R2 { x: -1.76727585143249  , y: -0.4681709263035157 },
         ]);
+    }
+
+    #[test]
+    fn bcdef_roundtrip() {
+        let e0 = XYRRT {
+            c: R2 { x: 0., y: 0. },
+            r: R2 { x: 2., y: 1. },
+            t: PI / 4.,
+        };
+        let bcdef = e0.bcdef();
+        debug!("bcdef: {}", bcdef);
+        let e1 = bcdef.xyrrt();
+        assert_relative_eq!(e0.c, e1.c, max_relative = 1e-15);
+        assert_relative_eq!(e0.r, e1.r, max_relative = 1e-15);
+        assert_relative_eq!(e0.t, e1.t, max_relative = 1e-15);
     }
 }
