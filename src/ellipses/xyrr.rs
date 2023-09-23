@@ -5,13 +5,12 @@ use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::{r2::R2, rotate::{Rotate as _Rotate, RotateArg}, dual::{D, Dual}, shape::{Duals, Shape}, transform::{Transform::{Rotate, Scale, ScaleXY, Translate, self}, CanProject, CanTransform, Projection}, math::recip::Recip, sqrt::Sqrt};
+use crate::{r2::R2, rotate::{Rotate as _Rotate, RotateArg}, dual::{D, Dual}, shape::{Duals, Shape}, transform::{Transform::{Rotate, Scale, ScaleXY, Translate, self}, CanProject, CanTransform, Projection}, math::recip::Recip, sqrt::Sqrt, ellipses::xyrr};
 
 use super::{xyrrt::XYRRT, cdef::{CDEF, self}};
 
 #[derive(Debug, Clone, From, PartialEq, Serialize, Deserialize, Tsify)]
 pub struct XYRR<D> {
-    // pub idx: usize,
     pub c: R2<D>,
     pub r: R2<D>,
 }
@@ -38,13 +37,25 @@ impl<D: RotateArg> XYRR<D> {
     }
 }
 
-impl<D: cdef::UnitIntersectionsArg> XYRR<D>
-where
-    R2<D>: CanProject<D, Output = R2<D>>,
-    f64
-    : Sub<D, Output = D>
-    + Mul<D, Output = D>
-    + Div<D, Output = D>,
+pub trait CdefArg
+: Clone
++ Add<Output = Self>
++ Sub<Output = Self>
++ Mul<Output = Self>
++ Mul<f64, Output = Self>
++ Div<Output = Self>
+{}
+impl<
+    D
+    : Clone
+    + Add<Output = D>
+    + Sub<Output = D>
+    + Mul<Output = D>
+    + Mul<f64, Output = D>
+    + Div<Output = D>
+> CdefArg for D {}
+
+impl<D: CdefArg> XYRR<D>
 {
     pub fn cdef(&self) -> CDEF<D> {
         let rx2 = self.r.x.clone() * self.r.x.clone();
@@ -52,11 +63,15 @@ where
         let rr2 = rr.clone() * rr.clone();
         CDEF {
             c: rr2.clone(),
-            d: -2. * self.c.x.clone(),
-            e: -2. * self.c.y.clone() * rr2.clone(),
+            d: self.c.x.clone() * -2.,
+            e: self.c.y.clone() * rr2.clone() * -2.,
             f: self.c.x.clone() * self.c.x.clone() + self.c.y.clone() * self.c.y.clone() * rr2.clone() - rx2.clone(),
         }
     }
+}
+impl<D: cdef::UnitIntersectionsArg + CdefArg> XYRR<D>
+where R2<D>: CanProject<D, Output = R2<D>>,
+{
     pub fn unit_intersections(&self) -> Vec<R2<D>> {
         debug!("XYRR.unit_intersections: {}", self);
         let points = self.cdef().unit_intersections(&self);
@@ -118,8 +133,8 @@ pub trait TransformR2<D>
 impl TransformR2<f64> for R2<f64> {}
 impl TransformR2<Dual> for R2<Dual> {}
 
-pub trait TransformD: Clone + Display + Div<Output = Self> + RotateArg {}
-impl<D: Clone + Display + Div<Output = D> + RotateArg> TransformD for D {}
+pub trait TransformD: Clone + Display + Div<Output = Self> + RotateArg + xyrr::CdefArg {}
+impl<D: Clone + Display + Div<Output = D> + RotateArg + xyrr::CdefArg> TransformD for D {}
 
 impl<D: TransformD> CanTransform<D> for XYRR<D>
 where R2<D>: TransformR2<D>,
@@ -180,31 +195,14 @@ impl<D: UnitCircleGap> XYRR<D> {
 
 #[cfg(test)]
 mod tests {
-    use std::{env, fmt, f64::NAN};
+    use std::{fmt, f64::NAN};
 
-    use crate::{dual::{Dual, d_fns}, circle::Circle, intersect::Intersect, to::To, shape::Shape, math::deg::Deg, fmt::Fmt};
+    use crate::{dual::{Dual, d_fns}, circle::Circle, intersect::Intersect, to::To, shape::Shape};
 
     use super::*;
     use approx::{AbsDiffEq, RelativeEq};
     use ordered_float::OrderedFloat;
     use test_log::test;
-
-    fn assert_intersections<D: Display + Deg + Fmt>(intersections: Vec<R2<D>>, expected: Vec<&str>) {
-        let gen_vals = env::var("GEN_VALS").map(|s| s.parse::<usize>().unwrap()).ok();
-        match gen_vals {
-            Some(_) => {
-                println!("Intersections:");
-                for node in &intersections {
-                    println!("  {:?},", format!("{}", node));
-                }
-            },
-            None => {
-                let actual = intersections.iter().map(|n| format!("{}", n)).collect::<Vec<String>>();
-                assert_eq!(actual.len(), expected.len());
-                assert_eq!(actual, expected);
-            }
-        }
-    }
 
     #[derive(Clone, Debug, PartialEq)]
     pub struct Points<D>(pub Vec<R2<D>>);

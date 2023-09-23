@@ -7,7 +7,7 @@ use tsify::Tsify;
 
 use crate::{r2::R2, rotate::{Rotate as _Rotate, RotateArg}, dual::{D, Dual}, shape::{Duals, Shape}, transform::{Transform::{Rotate, Scale, ScaleXY, Translate, self}, Projection, CanTransform, CanProject}, math::{recip::Recip, deg::Deg}};
 
-use super::{xyrr::{XYRR, TransformD, TransformR2, UnitCircleGap}, cdef, bcdef::BCDEF};
+use super::{xyrr::{XYRR, TransformD, TransformR2, UnitCircleGap, CdefArg}, cdef, bcdef::BCDEF};
 
 #[derive(Debug, Clone, From, PartialEq, Serialize, Deserialize, Tsify)]
 pub struct XYRRT<D> {
@@ -15,12 +15,6 @@ pub struct XYRRT<D> {
     pub r: R2<D>,
     pub t: D,
 }
-
-// impl<D> XYRRT<D> {
-//     pub fn abcdef(&self) -> ABCDEF<D> {
-//         ABCDEF {}
-//     }
-// }
 
 impl XYRRT<f64> {
     pub fn dual(&self, duals: &Duals) -> XYRRT<D> {
@@ -102,9 +96,9 @@ where R2<D>: Neg<Output = R2<D>>,
     }
 }
 
-impl<D> XYRRT<D> {
+impl<D: LevelArg + CdefArg> XYRRT<D> {
     fn bcdef(&self) -> BCDEF<D> {
-        todo!()
+        self.level().cdef().rotate(&self.t.clone())
     }
 }
 
@@ -130,16 +124,6 @@ where R2<D>: TransformR2<D>,
         rv
     }
 }
-
-// impl<D: RotateArg + Neg<Output = D> + UnitIntersectionsArg> XYRRT<D>
-// where
-//     f64: Mul<D, Output = D> + Div<D, Output = D>,
-// impl XYRRT<D>
-// {
-//     pub fn unit_intersections(&self) -> Vec<R2<D>> {
-//         self.level().unit_intersections().iter().map(|p| p.rotate(&self.t)).collect()
-//     }
-// }
 
 impl<D: LevelArg + UnitCircleGap> XYRRT<D> {
     pub fn unit_circle_gap(&self) -> Option<D> {
