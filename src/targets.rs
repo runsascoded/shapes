@@ -5,7 +5,7 @@ use num_traits::pow;
 use serde::{Serialize, Deserialize};
 use tsify::{declare, Tsify};
 
-use crate::zero::Zero;
+use crate::{zero::Zero, to::To};
 
 #[declare]
 pub type TargetsMap<D> = BTreeMap<String, D>;
@@ -41,6 +41,12 @@ impl Arg for i64 {}
 impl<D: Arg> From<TargetsMap<D>> for Targets<D> {
     fn from(given: TargetsMap<D>) -> Self {
         Self::new(given)
+    }
+}
+
+impl<D, const N: usize> To<TargetsMap<D>> for [(&str, D); N] {
+    fn to(self) -> TargetsMap<D> {
+        self.into_iter().map(|(k, v)| (k.to_string(), v)).collect()
     }
 }
 

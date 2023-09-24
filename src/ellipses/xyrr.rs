@@ -26,6 +26,14 @@ impl XYRR<f64> {
         let r = R2 { x: rx, y: ry };
         XYRR::from((c, r))
     }
+    pub fn getters() -> [ Box<dyn Fn(XYRR<f64>) -> f64>; 4 ] {
+        [
+            Box::new(move |e: XYRR<f64>| e.c.x),
+            Box::new(move |e: XYRR<f64>| e.c.y),
+            Box::new(move |e: XYRR<f64>| e.r.x),
+            Box::new(move |e: XYRR<f64>| e.r.y),
+        ]
+    }
 }
 
 impl<D: RotateArg> XYRR<D> {

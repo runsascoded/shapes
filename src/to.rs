@@ -13,3 +13,11 @@ impl To<f64> for f64 {
         self
     }
 }
+
+impl<const N: usize, D> To<Vec<D>> for [D; N]
+where D: Clone,
+{
+    fn to(self: Self) -> Vec<D> {
+        self.to_vec()
+    }
+}

@@ -28,6 +28,15 @@ impl XYRRT<f64> {
         let r = R2 { x: rx, y: ry };
         XYRRT::from((c, r, t))
     }
+    pub fn getters() -> [ Box<dyn Fn(XYRRT<f64>) -> f64>; 5 ] {
+        [
+            Box::new(move |e: XYRRT<f64>| e.c.x),
+            Box::new(move |e: XYRRT<f64>| e.c.y),
+            Box::new(move |e: XYRRT<f64>| e.r.x),
+            Box::new(move |e: XYRRT<f64>| e.r.y),
+            Box::new(move |e: XYRRT<f64>| e.t),
+        ]
+    }
 }
 
 impl<D: RotateArg> XYRRT<D> {

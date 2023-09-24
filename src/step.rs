@@ -6,9 +6,9 @@ use serde::{Deserialize, Serialize};
 use tsify::{declare, Tsify};
 
 use crate::math::recip::Recip;
-use crate::shape::{Input, Shape, Duals, Shapes, InputSpec};
-use crate::{circle::Circle, distance::Distance, scene::Scene, math::is_zero::IsZero, r2::R2, targets::{Targets, TargetsMap}, regions};
-use crate::dual::{Dual, D, InitDual};
+use crate::shape::{Shape, Shapes, InputSpec};
+use crate::{distance::Distance, scene::Scene, math::is_zero::IsZero, r2::R2, targets::Targets, regions};
+use crate::dual::{Dual, D};
 
 #[declare]
 pub type Errors = BTreeMap<String, Error>;

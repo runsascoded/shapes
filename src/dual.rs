@@ -396,6 +396,27 @@ impl Sum for Dual {
     }
 }
 
+/// Placeholder for the derivative component of a [`Dual`] (corresponding to one "coordinate" of a Shape, e.g. `c.x`).
+/// The `usize` argument indicates the length of the derivative vector, which should be the same for all coordinates in a [`Model`].
+/// `Zeros` values are stateless, but `OneHot`s are expanded during [`Model`]/[`Step`] construction, so that the "hot" element proceeds through the vector,
+/// i.e. the first differentiable coordinate will be `one_hot(0)`, the second will be `one_hot(1)`, etc.
+/// This level of indirection makes it easier to specify a model's Shapes, and toggle which coordinates are considered moveable (and whose error-partial-derivative ∂(error) is propagated through all calculations).
+/// See [`model::tests`] for example:
+/// ```rust
+/// let ( z, d ) = d_fns(2);
+/// let inputs = vec![
+///     (circle(0., 0., 1.), vec![ z, z, z, ]),
+///     (circle(1., 0., 1.), vec![ d, z, d, ]),
+/// ];
+/// let targets = [
+///     ("0*", 1. /  3.),  // Fizz (multiples of 3)
+///     ("*1", 1. /  5.),  // Buzz (multiples of 5)
+///     ("01", 1. / 15.),  // Fizz Buzz (multiples of both 3 and 5)
+/// ];
+/// let model = Model::new(inputs, targets.to());
+/// ```
+/// This initializes two [`Circle`]s (with f64 coordinate values), such that
+
 #[derive(Clone, Copy, Debug)]
 pub enum InitDual { Zeros(usize), OneHot(usize), }
 use InitDual::*;

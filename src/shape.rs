@@ -1,6 +1,6 @@
 use std::{ops::{Neg, Add, Sub, Mul, Div}, fmt};
 
-use derive_more::{From, Display};
+use derive_more::{From, Deref, Display};
 use log::debug;
 use serde::{Deserialize, Serialize};
 use tsify::{declare, Tsify};
@@ -29,6 +29,44 @@ impl Shapes {
     pub fn from_vec(input_specs: &Vec<InputSpec>) -> Vec<Shape<D>> {
         let mut init = InitDuals::new();
         input_specs.iter().map(|spec| init.shape(spec)).collect()
+    }
+}
+
+#[derive(Deref)]
+pub struct CoordGetter(pub Box<dyn Fn(Shape<f64>) -> f64>);
+
+pub fn circle<D>(cx: D, cy: D, r: D) -> Shape<D> {
+    Shape::Circle(Circle { c: R2 { x: cx, y: cy }, r })
+}
+pub fn xyrr<D>(cx: D, cy: D, rx: D, ry: D) -> Shape<D> {
+    Shape::XYRR(XYRR { c: R2 { x: cx, y: cy }, r: R2 { x: rx, y: ry } })
+}
+pub fn xyrrt<D>(cx: D, cy: D, rx: D, ry: D, t: D) -> Shape<D> {
+    Shape::XYRRT(XYRRT { c: R2 { x: cx, y: cy }, r: R2 { x: rx, y: ry }, t })
+}
+
+impl<D> Shape<D> {
+    pub fn getters(&self, shape_idx: usize) -> Vec<CoordGetter> {
+        match self {
+            Shape::Circle(c) => Circle::getters().map(|f| {
+                CoordGetter(Box::new(move |s: Shape<f64>| match s {
+                    Shape::Circle(c) => f(c),
+                    _ => panic!("Expected Circle at idx {}", shape_idx),
+                }))
+            }).into_iter().collect(),
+            Shape::XYRR(e) => XYRR::getters().map(|f| {
+                CoordGetter(Box::new(move |s: Shape<f64>| match s {
+                    Shape::XYRR(e) => f(e),
+                    _ => panic!("Expected XYRR at idx {}", shape_idx),
+                }))
+            }).into_iter().collect(),
+            Shape::XYRRT(e) => XYRRT::getters().map(|f| {
+                CoordGetter(Box::new(move |s: Shape<f64>| match s {
+                    Shape::XYRRT(e) => f(e),
+                    _ => panic!("Expected XYRRT at idx {}", shape_idx),
+                }))
+            }).into_iter().collect(),
+        }
     }
 }
 

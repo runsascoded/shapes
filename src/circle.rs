@@ -18,6 +18,8 @@ pub struct Circle<D> {
 
 impl<D: Eq> Eq for Circle<D> {}
 
+// static getters: [ Box<dyn Fn(Circle<f64>) -> f64>; 3 ] = ;
+
 impl Circle<f64> {
     pub fn dual(&self, duals: &Duals) -> Circle<D> {
         let x = Dual::new(self.c.x, duals[0].clone());
@@ -25,6 +27,13 @@ impl Circle<f64> {
         let r = Dual::new(self.r  , duals[2].clone());
         let c = R2 { x, y };
         Circle::from((c, r))
+    }
+    pub fn getters() -> [ Box<dyn Fn(Circle<f64>) -> f64>; 3 ] {
+        [
+            Box::new(move |c: Circle<f64>| c.c.x),
+            Box::new(move |c: Circle<f64>| c.c.y),
+            Box::new(move |c: Circle<f64>| c.r),
+        ]
     }
 }
 

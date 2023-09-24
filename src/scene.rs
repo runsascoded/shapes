@@ -286,35 +286,28 @@ where
 
 #[cfg(test)]
 pub mod tests {
-    use std::collections::BTreeMap;
-    use std::env;
-    use std::fmt::Display;
+    use std::{collections::BTreeMap, env, fmt::Display};
 
     use log::debug;
 
-    use crate::circle::Circle;
-    use crate::math::{deg::Deg, round::round};
-    use crate::dual::{Dual, D, d_fns};
-    use crate::ellipses::xyrr::XYRR;
-    use crate::fmt::Fmt;
-    use crate::r2::R2;
+    use crate::{math::{deg::Deg, round::round}, dual::{Dual, d_fns}, fmt::Fmt, shape::{xyrr, circle, Shapes}, to::To};
 
     use super::*;
     use test_log::test;
 
     #[test]
     fn test_00_10_01() {
-        let c0 = Shape::Circle(Circle { c: R2 { x: 0., y: 0. }, r: 1. });
-        let c1 = Shape::Circle(Circle { c: R2 { x: 1., y: 0. }, r: 1. });
-        let c2 = Shape::Circle(Circle { c: R2 { x: 0., y: 1. }, r: 1. });
-        let ( _z, mut d ) = d_fns(9);
-        let inputs = vec![
-            (c0, vec![ d(), d(), d() ]),
-            (c1, vec![ d(), d(), d() ]),
-            (c2, vec![ d(), d(), d() ]),
+        let c0 = circle(0., 0., 1.);
+        let c1 = circle(1., 0., 1.);
+        let c2 = circle(0., 1., 1.);
+        let ( _z, d ) = d_fns(9);
+        let inputs = [
+            (c0, vec![ d, d, d ]),
+            (c1, vec![ d, d, d ]),
+            (c2, vec![ d, d, d ]),
         ];
-        let shapes: Vec<Shape<D>> = inputs.iter().map(|(c, duals)| c.dual(duals)).collect();
-        let scene = Scene::new(shapes);
+        let shapes = Shapes::from(&inputs);
+        let scene = Scene::new(shapes.to());
         assert_eq!(scene.components.len(), 1);
         let component = scene.components[0].clone();
 
@@ -379,19 +372,15 @@ pub mod tests {
 
     #[test]
     fn test_components() {
-        let c0 = Shape::Circle(Circle { c: R2 { x: 0. , y: 0. }, r: 1. });
-        let c1 = Shape::Circle(Circle { c: R2 { x: 1. , y: 0. }, r: 1. });
-        let c2 = Shape::Circle(Circle { c: R2 { x: 0.5, y: 0. }, r: 3. });
-        let c3 = Shape::Circle(Circle { c: R2 { x: 0. , y: 3. }, r: 1. });
-        let ( _z, mut d ) = d_fns(12);
-        let inputs = vec![
-            (c0, vec![ d(), d(), d() ]),
-            (c1, vec![ d(), d(), d() ]),
-            (c2, vec![ d(), d(), d() ]),
-            (c3, vec![ d(), d(), d() ]),
+        let ( _z, d ) = d_fns(12);
+        let inputs = [
+            (circle(0. , 0., 1.), vec![ d, d, d ]),
+            (circle(1. , 0., 1.), vec![ d, d, d ]),
+            (circle(0.5, 0., 3.), vec![ d, d, d ]),
+            (circle(0. , 3., 1.), vec![ d, d, d ]),
         ];
-        let shapes: Vec<_> = inputs.iter().map(|(c, duals)| c.dual(duals)).collect();
-        let scene = Scene::new(shapes);
+        let shapes = Shapes::from(&inputs);
+        let scene = Scene::new(shapes.to_vec());
         assert_eq!(scene.components.len(), 2);
         assert_node_strs(&scene, vec![
             vec![
@@ -415,13 +404,12 @@ pub mod tests {
         let c0 = 1. / r2sqrt;
         let c1 = r2 * c0;
         let ellipses = [
-            XYRR { c: R2 { x:      c0, y:      c1, }, r: R2 { x: 1., y: r , }, },
-            XYRR { c: R2 { x: 1. + c0, y:      c1, }, r: R2 { x: 1., y: r , }, },
-            XYRR { c: R2 { x:      c1, y: 1. + c0, }, r: R2 { x: r , y: 1., }, },
-            XYRR { c: R2 { x:      c1, y:      c0, }, r: R2 { x: r , y: 1., }, },
+            xyrr(     c0,      c1, 1., r ),
+            xyrr(1. + c0,      c1, 1., r ),
+            xyrr(     c1, 1. + c0, r , 1.),
+            xyrr(     c1,      c0, r , 1.),
         ];
-        let ellipses = mask.map(|i| ellipses[i].clone());
-        ellipses.map(|e| Shape::XYRR(e))
+        mask.map(|i| ellipses[i].clone())
     }
 
     #[test]
@@ -489,14 +477,13 @@ pub mod tests {
 
     #[test]
     fn test_4_circles_lattice_0_1() {
-        let ellipses = [
-            XYRR { c: R2 { x: 0., y: 0. }, r: R2 { x: 1., y: 1., }, },
-            XYRR { c: R2 { x: 0., y: 1. }, r: R2 { x: 1., y: 1., }, },
-            XYRR { c: R2 { x: 1., y: 0. }, r: R2 { x: 1., y: 1., }, },
-            XYRR { c: R2 { x: 1., y: 1. }, r: R2 { x: 1., y: 1., }, },
+        let shapes = vec![
+            xyrr(0., 0., 1., 1.),
+            xyrr(0., 1., 1., 1.),
+            xyrr(1., 0., 1., 1.),
+            xyrr(1., 1., 1., 1.),
         ];
-        let shapes = ellipses.map(Shape::XYRR);
-        let scene = Scene::new(shapes.to_vec());
+        let scene = Scene::new(shapes);
         assert_node_strs(
             &scene,
             vec![vec![
@@ -519,14 +506,13 @@ pub mod tests {
     #[test]
     fn test_4_circles_diamond() {
         let sq3 = 3_f64.sqrt();
-        let ellipses = [
-            XYRR { c: R2 { x: 0. , y:  0.       }, r: R2 { x: 1., y: 1., }, },
-            XYRR { c: R2 { x: 1. , y:  0.       }, r: R2 { x: 1., y: 1., }, },
-            XYRR { c: R2 { x: 0.5, y:  sq3 / 2. }, r: R2 { x: 1., y: 1., }, },
-            XYRR { c: R2 { x: 0.5, y: -sq3 / 2. }, r: R2 { x: 1., y: 1., }, },
+        let shapes = vec![
+            xyrr(0. ,  0.      , 1., 1.),
+            xyrr(1. ,  0.      , 1., 1.),
+            xyrr(0.5,  sq3 / 2., 1., 1.),
+            xyrr(0.5, -sq3 / 2., 1., 1.),
         ];
-        let shapes = ellipses.map(Shape::XYRR);
-        let scene = Scene::new(shapes.to_vec());
+        let scene = Scene::new(shapes);
         assert_node_strs(
             &scene,
             vec![vec![
@@ -579,11 +565,10 @@ pub mod tests {
         //   x: 5.106010194296296, f(x): 25.37884091853862  ❌ should be 0!
         // Actual roots ≈ ±0.835153846196954, per:
         // https://www.wolframalpha.com/input?i=0.000000030743755847066437+x%5E4++%2B0.000000003666731306801131+x%5E3+%2B+1.0001928389119579+x%5E2++%2B0.000011499702220469921+x+-+0.6976068572771268
-        let ellipses = [
-            XYRR { c: R2 { x: 0.3472135954999579, y: 1.7888543819998317 }, r: R2 { x: 1.0,                y: 2.0                } },
-            XYRR { c: R2 { x: 1.4472087032327248, y: 1.7888773809286864 }, r: R2 { x: 0.9997362494738584, y: 1.9998582057729295 } },
+        let shapes = vec![
+            xyrr(0.3472135954999579, 1.7888543819998317, 1.0,                2.0               ),
+            xyrr(1.4472087032327248, 1.7888773809286864, 0.9997362494738584, 1.9998582057729295),
         ];
-        let shapes: Vec<_> = ellipses.iter().map(|e| Shape::XYRR(e.clone())).collect();
         let scene = Scene::new(shapes);
         assert_node_strs(
             &scene,
@@ -597,9 +582,9 @@ pub mod tests {
     #[test]
     fn tweaked_3_ellipses_f64() {
         let shapes = vec![
-            Shape::XYRR(XYRR { c: R2 { x: 0.3472135954999579, y: 1.7888543819998317 }, r: R2 { x: 1.0,                y: 2.0                } }),
-            Shape::XYRR(XYRR { c: R2 { x: 1.4472087032327248, y: 1.7888773809286864 }, r: R2 { x: 0.9997362494738584, y: 1.9998582057729295 } }),
-            Shape::XYRR(XYRR { c: R2 { x: 1.7890795512191124, y: 1.4471922162722848 }, r: R2 { x: 1.9998252659224116, y: 0.9994675708661026 } }),
+            xyrr(0.3472135954999579, 1.7888543819998317, 1.0,                2.0               ),
+            xyrr(1.4472087032327248, 1.7888773809286864, 0.9997362494738584, 1.9998582057729295),
+            xyrr(1.7890795512191124, 1.4471922162722848, 1.9998252659224116, 0.9994675708661026),
         ];
         let scene = Scene::new(shapes);
         assert_node_strs(
@@ -619,14 +604,13 @@ pub mod tests {
 
     #[test]
     fn fizz_bazz_buzz_qux_error() {
-        let ellipses = [
-            XYRR { c: R2 { x:  -2.0547374714862916, y:  0.7979432881804286   }, r: R2 { x: 15.303664487498873, y: 17.53077114567813  } },
-            XYRR { c: R2 { x: -11.526407092112622 , y:  3.0882189920409058   }, r: R2 { x: 22.75383340199038 , y:  5.964648612528639 } },
-            XYRR { c: R2 { x:  10.550418544451459 , y:  0.029458342547552023 }, r: R2 { x:  6.102407875525676, y: 11.431493472697646 } },
-            XYRR { c: R2 { x:   4.271631577807546 , y: -5.4473446956862155   }, r: R2 { x:  2.652054463066812, y: 10.753963707585315 } },
+        let shapes = vec![
+            xyrr( -2.0547374714862916,  0.7979432881804286  , 15.303664487498873, 17.53077114567813 ),
+            xyrr(-11.526407092112622 ,  3.0882189920409058  , 22.75383340199038 ,  5.964648612528639),
+            xyrr( 10.550418544451459 ,  0.029458342547552023,  6.102407875525676, 11.431493472697646),
+            xyrr(  4.271631577807546 , -5.4473446956862155  ,  2.652054463066812, 10.753963707585315),
         ];
-        let shapes = ellipses.map(Shape::XYRR);
-        let scene = Scene::new(shapes.to_vec());
+        let scene = Scene::new(shapes);
         assert_eq!(scene.components.len(), 1);
         let component = scene.components[0].clone();
         assert_node_strs(
@@ -647,20 +631,17 @@ pub mod tests {
             ]]
         );
         assert_eq!(component.regions.len(), 13);
-        // debug!("is_connected: {:?}", intersections.is_connected);
     }
 
     #[test]
     fn disjoint() {
-        let ellipses = [
-            XYRR { c: R2 { x: 0. , y: 0. }, r: R2 { x: 1., y: 1., }, },
-            XYRR { c: R2 { x: 3. , y: 0. }, r: R2 { x: 1., y: 1., }, },
-            XYRR { c: R2 { x: 0. , y: 3. }, r: R2 { x: 1., y: 1., }, },
-            XYRR { c: R2 { x: 3. , y: 3. }, r: R2 { x: 1., y: 1., }, },
+        let shapes = vec![
+            xyrr(0., 0., 1., 1.,),
+            xyrr(3., 0., 1., 1.,),
+            xyrr(0., 3., 1., 1.,),
+            xyrr(3., 3., 1., 1.,),
         ];
-        let shapes = ellipses.map(Shape::XYRR);
-        let scene = Scene::new(shapes.to_vec());
+        let scene = Scene::new(shapes);
         assert_eq!(scene.components.len(), 4);
-        // debug!("is_connected: {:?}", intersections.is_connected);
     }
 }
