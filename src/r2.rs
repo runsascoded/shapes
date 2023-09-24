@@ -136,6 +136,17 @@ impl<D: Add<Output = D>> Add for R2<D> {
     }
 }
 
+// Want to be able to add R2<D> + R2<f64>, but this gives an infinite recursion "overflow evaluating the requirement" error at compile time.
+// impl<D: Add<R, Output = D>, R> Add<R2<R>> for R2<D> {
+//     type Output = R2<D>;
+//     fn add(self, rhs: R2<R>) -> Self::Output {
+//         R2 {
+//             x: self.x + rhs.x,
+//             y: self.y + rhs.y,
+//         }
+//     }
+// }
+
 impl<'a, D: 'a + Clone + Add<Output = D>> Add<&'a R2<D>> for R2<D> {
     type Output = Self;
     fn add(self, rhs: &'a R2<D>) -> Self::Output {

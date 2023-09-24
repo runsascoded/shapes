@@ -77,6 +77,9 @@ impl XYRRT<D> {
     pub fn n(&self) -> usize {
         self.c.x.d().len()
     }
+    pub fn duals(&self) -> [Vec<f64>; 5] {
+        [ self.c.x.d(), self.c.y.d(), self.r.x.d(), self.r.y.d(), self.t.d() ]
+    }
 }
 
 impl<D: Display + Deg> Display for XYRRT<D> {

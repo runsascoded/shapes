@@ -5,20 +5,17 @@ use log::{info, debug, warn};
 use serde::{Deserialize, Serialize};
 use tsify::{declare, Tsify};
 
-use crate::distance;
-use crate::ellipses::xyrr::XYRR;
-use crate::ellipses::xyrrt::XYRRT;
 use crate::math::recip::Recip;
-use crate::shape::{Input, Shape, Duals, Shapes};
+use crate::shape::{Input, Shape, Duals, Shapes, InputSpec};
 use crate::{circle::Circle, distance::Distance, scene::Scene, math::is_zero::IsZero, r2::R2, targets::{Targets, TargetsMap}, regions};
-use crate::dual::{Dual, D};
+use crate::dual::{Dual, D, InitDual};
 
 #[declare]
 pub type Errors = BTreeMap<String, Error>;
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
 pub struct Step {
-    pub inputs: Vec<Input>,
+    pub shapes: Vec<Shape<D>>,
     pub components: Vec<regions::Component>,
     pub targets: Targets<f64>,
     pub total_area: Dual,
@@ -49,8 +46,11 @@ impl Display for Error {
 }
 
 impl Step {
-    pub fn new(inputs: Vec<Input>, targets: Targets<f64>) -> Step {
-        let shapes = Shapes::from(&inputs);
+    pub fn new(input_specs: Vec<InputSpec>, targets: Targets<f64>) -> Step {
+        let shapes = Shapes::from_vec(&input_specs);
+        Step::nxt(shapes, targets)
+    }
+    pub fn nxt(shapes: Vec<Shape<D>>, targets: Targets<f64>) -> Step {
         let scene = Scene::new(shapes);
         let sets = &scene.sets;
         let all_key = String::from_utf8(vec![b'*'; scene.len()]).unwrap();
@@ -160,15 +160,15 @@ impl Step {
         }
 
         debug!("all-in error: {:?}", error);
-        Step { inputs, components, targets, total_area, errors, error }
+        Step { shapes, components, targets, total_area, errors, error }
     }
 
-    pub fn shapes(&self) -> Vec<Shape<f64>> {
-        self.inputs.iter().map(|(s, _)| s.clone()).collect()
-    }
+    // pub fn shapes(&self) -> Vec<Shape<f64>> {
+    //     self.shapes.iter().map(|(s, _)| s.clone()).collect()
+    // }
 
     pub fn n(&self) -> usize {
-        self.shapes().len()
+        self.shapes.len()
     }
 
     pub fn grad_size(&self) -> usize {
@@ -200,9 +200,9 @@ impl Step {
         }).collect()
     }
 
-    pub fn duals(&self) -> Vec<Duals> {
-        self.inputs.iter().map(|(_, duals)| duals.clone()).collect()
-    }
+    // pub fn duals(&self) -> Vec<Vec<InitDual>> {
+        // self.shapes.iter().map(|(_, duals)| duals.clone()).collect()
+    // }
 
     pub fn step(&self, max_step_error_ratio: f64) -> Step {
         let error = self.error.clone();
@@ -218,11 +218,11 @@ impl Step {
         debug!("  err {:?}", error);
         debug!("  step_size {}, magnitude {}, grad_scale {}", step_size, magnitude, grad_scale);
         debug!("  step_vec {:?}", step_vec);
-        let shapes = &self.shapes();
-        let new_inputs = shapes.iter().zip(self.duals()).map(|(s, duals)| s.step(&duals, &step_vec)).collect::<Vec<Input>>();
-        for (cur, (nxt, _)) in shapes.iter().zip(new_inputs.iter()) {
-            debug!("  {} -> {:?}", cur, nxt);
+        let shapes = &self.shapes;
+        let new_shapes = shapes.iter().map(|s| s.step(&step_vec)).collect::<Vec<Shape<D>>>();
+        for (cur, nxt) in shapes.iter().zip(new_shapes.iter()) {
+            debug!("  {} -> {:?}", cur.v(), nxt.v());
         }
-        Step::new(new_inputs, self.targets.clone())
+        Step::nxt(new_shapes, self.targets.clone())
     }
 }

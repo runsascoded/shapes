@@ -1,7 +1,7 @@
 use std::{fmt::{Debug, Display}, iter::{Sum, repeat}, ops::{Add, AddAssign, Deref, Div, Mul, Neg, Sub, SubAssign}};
 
 use approx::{AbsDiffEq, RelativeEq};
-use crate::{fmt::Fmt, to::To};
+use crate::{fmt::Fmt, to::To, shape::{InputSpec, Shape, Duals}};
 use nalgebra::{ComplexField, Dyn, Matrix, RealField, U1};
 use num_dual::{Derivative, DualDVec64};
 use num_traits::Zero;
@@ -396,6 +396,33 @@ impl Sum for Dual {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum InitDual { Zeros(usize), OneHot(usize), }
+use InitDual::*;
+
+pub struct InitDuals {
+    pub nxt: usize,
+}
+impl InitDuals {
+    pub fn new() -> Self {
+        InitDuals { nxt: 0 }
+    }
+    pub fn next(&mut self, id: &InitDual) -> Vec<f64> {
+        match id {
+            Zeros(n) => vec![0.; *n],
+            OneHot(n) => {
+                let duals = one_hot(&self.nxt, n);
+                self.nxt += 1;
+                duals
+            },
+        }
+    }
+    pub fn shape(&mut self, (s, init_duals): &InputSpec) -> Shape<D> {
+        let duals: Duals = init_duals.iter().map(|init_dual| self.next(init_dual)).collect();
+        s.dual(&duals)
+    }
+}
+
 pub fn one_hot(idx: &usize, size: &usize) -> Vec<f64> {
     let mut v = vec![0.; *size];
     v[*idx] = 1.;
@@ -417,16 +444,8 @@ pub fn is_one_hot(v: &Vec<f64>) -> Option<usize> {
     idx
 }
 
-pub fn d_fns(n: usize) -> (Box<dyn Fn() -> Vec<f64>>, Box<dyn FnMut() -> Vec<f64>>) {
-    let mut idx: usize = 0;
-    (
-        Box::new(move || vec![0.; n]),
-        Box::new(move || {
-            let v = one_hot(&idx, &n);
-            idx += 1;
-            v
-        }),
-    )
+pub fn d_fns(n: usize) -> (InitDual, InitDual) {
+    ( Zeros(n), OneHot(n), )
 }
 
 #[cfg(test)]

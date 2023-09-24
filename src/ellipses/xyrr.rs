@@ -102,6 +102,9 @@ impl XYRR<D> {
     pub fn n(&self) -> usize {
         self.c.x.d().len()
     }
+    pub fn duals(&self) -> [Vec<f64>; 4] {
+        [ self.c.x.d(), self.c.y.d(), self.r.x.d(), self.r.y.d() ]
+    }
 }
 
 impl<D: Display> Display for XYRR<D> {
