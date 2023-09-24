@@ -159,6 +159,9 @@ impl Step {
             error += Dual::new(0., total_contained_penalty.d());
         }
 
+        // Take shapes back from `scene`
+        let shapes = scene.sets.into_iter().map(|s| s.shape).collect::<Vec<Shape<D>>>();
+
         debug!("all-in error: {:?}", error);
         Step { shapes, components, targets, total_area, errors, error }
     }

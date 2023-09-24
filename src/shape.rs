@@ -5,13 +5,13 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use tsify::{declare, Tsify};
 
-use crate::{dual::{D, InitDual, InitDuals, Dual}, circle::{self, Circle}, ellipses::{xyrr::{self, XYRR, UnitCircleGap}, xyrrt::{self, XYRRT, LevelArg}}, zero::Zero, transform::{Transform, CanProject, CanTransform, HasProjection, Projection}, r2::R2, math::recip::Recip, intersect::{IntersectShapesArg, UnitCircleIntersections}};
+use crate::{dual::{D, Dual}, circle::{self, Circle}, ellipses::{xyrr::{self, XYRR, UnitCircleGap}, xyrrt::{self, XYRRT, LevelArg}}, zero::Zero, transform::{Transform, CanProject, CanTransform, HasProjection, Projection}, r2::R2, math::recip::Recip, intersect::{IntersectShapesArg, UnitCircleIntersections}, duals::InitDuals};
 
 #[declare]
 pub type Duals = Vec<Vec<f64>>;
 #[declare]
 pub type Input = (Shape<f64>, Duals);
-pub type InputSpec = (Shape<f64>, Vec<InitDual>);
+pub type InputSpec = (Shape<f64>, Vec<bool>);
 
 #[derive(Debug, Display, Clone, From, PartialEq, Serialize, Deserialize, Tsify)]
 pub enum Shape<D> {
@@ -22,13 +22,11 @@ pub enum Shape<D> {
 
 pub struct Shapes {}
 impl Shapes {
-    pub fn from<const N: usize>(input_specs: &[InputSpec; N]) -> [ Shape<D>; N ] {
-        let mut init = InitDuals::new();
-        input_specs.map(|spec| init.shape(&spec))
+    pub fn from<const N: usize>(input_specs: [InputSpec; N]) -> [ Shape<D>; N ] {
+        InitDuals::from(input_specs)
     }
     pub fn from_vec(input_specs: &Vec<InputSpec>) -> Vec<Shape<D>> {
-        let mut init = InitDuals::new();
-        input_specs.iter().map(|spec| init.shape(spec)).collect()
+        InitDuals::from_vec(input_specs)
     }
 }
 
@@ -48,19 +46,19 @@ pub fn xyrrt<D>(cx: D, cy: D, rx: D, ry: D, t: D) -> Shape<D> {
 impl<D> Shape<D> {
     pub fn getters(&self, shape_idx: usize) -> Vec<CoordGetter> {
         match self {
-            Shape::Circle(c) => Circle::getters().map(|f| {
+            Shape::Circle(_) => Circle::getters().map(|f| {
                 CoordGetter(Box::new(move |s: Shape<f64>| match s {
                     Shape::Circle(c) => f(c),
                     _ => panic!("Expected Circle at idx {}", shape_idx),
                 }))
             }).into_iter().collect(),
-            Shape::XYRR(e) => XYRR::getters().map(|f| {
+            Shape::XYRR(_) => XYRR::getters().map(|f| {
                 CoordGetter(Box::new(move |s: Shape<f64>| match s {
                     Shape::XYRR(e) => f(e),
                     _ => panic!("Expected XYRR at idx {}", shape_idx),
                 }))
             }).into_iter().collect(),
-            Shape::XYRRT(e) => XYRRT::getters().map(|f| {
+            Shape::XYRRT(_) => XYRRT::getters().map(|f| {
                 CoordGetter(Box::new(move |s: Shape<f64>| match s {
                     Shape::XYRRT(e) => f(e),
                     _ => panic!("Expected XYRRT at idx {}", shape_idx),
@@ -175,21 +173,24 @@ impl Shape<Dual> {
         match self {
             Shape::Circle(s) => {
                 let [ dx, dy, dr ]: [f64; 3] = s.duals().map(|d| d.iter().zip(step_vec).map(|(mask, step)| mask * step).sum());
-                let c = R2 { x: s.c.x + dx, y: s.c.y + dy, };
-                let r = s.r + dr;
+                let Circle { c, r } = s.clone();
+                let c = R2 { x: c.x + dx, y: c.y + dy, };
+                let r = r + dr;
                 Shape::Circle(Circle { c, r })
             },
             Shape::XYRR(e) => {
                 let [ dcx, dcy, drx, dry ]: [f64; 4] = e.duals().map(|d| d.iter().zip(step_vec).map(|(mask, step)| mask * step).sum());
-                let c = R2 { x: e.c.x + dcx, y: e.c.y + dcy, };
-                let r = R2 { x: e.r.x + drx, y: e.r.y + dry, };
+                let XYRR { c, r } = e.clone();
+                let c = R2 { x: c.x + dcx, y: c.y + dcy, };
+                let r = R2 { x: r.x + drx, y: r.y + dry, };
                 Shape::XYRR(XYRR { c, r })
             },
             Shape::XYRRT(e) => {
                 let [ dcx, dcy, drx, dry, dt ]: [f64; 5] = e.duals().map(|d| d.iter().zip(step_vec).map(|(mask, step)| mask * step).sum());
-                let c = R2 { x: e.c.x + dcx, y: e.c.y + dcy, };
-                let r = R2 { x: e.r.x + drx, y: e.r.y + dry, };
-                let t = e.t + dt;
+                let XYRRT { c, r, t } = e.clone();
+                let c = R2 { x: c.x + dcx, y: c.y + dcy, };
+                let r = R2 { x: r.x + drx, y: r.y + dry, };
+                let t = t + dt;
                 Shape::XYRRT(XYRRT { c, r, t })
             },
         }

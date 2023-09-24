@@ -10,6 +10,7 @@ pub mod contains;
 pub mod d5;
 pub mod distance;
 pub mod dual;
+pub mod duals;
 pub mod edge;
 pub mod ellipses;
 pub mod float_arr;
@@ -42,7 +43,7 @@ pub mod zero;
 pub mod js_dual;
 
 use targets::Targets;
-use shape::Input;
+use shape::InputSpec;
 use step::Step;
 use dual::D;
 use ellipses::xyrr::XYRR;
@@ -83,7 +84,7 @@ pub fn update_log_level(level: JsValue) {
 
 #[wasm_bindgen]
 pub fn make_step(inputs: JsValue, targets: JsValue) -> JsValue {
-    let inputs: Vec<Input> = serde_wasm_bindgen::from_value(inputs).unwrap();
+    let inputs: Vec<InputSpec> = serde_wasm_bindgen::from_value(inputs).unwrap();
     let targets: TargetsMap<f64> = serde_wasm_bindgen::from_value(targets.clone()).unwrap();
     let step = Step::new(inputs, targets.into());
     serde_wasm_bindgen::to_value(&step).unwrap()
@@ -91,7 +92,7 @@ pub fn make_step(inputs: JsValue, targets: JsValue) -> JsValue {
 
 #[wasm_bindgen]
 pub fn make_model(inputs: JsValue, targets: JsValue) -> JsValue {
-    let inputs: Vec<Input> = serde_wasm_bindgen::from_value(inputs).unwrap();
+    let inputs: Vec<InputSpec> = serde_wasm_bindgen::from_value(inputs).unwrap();
     let targets: TargetsMap<f64> = serde_wasm_bindgen::from_value(targets.clone()).unwrap();
     let model = Model::new(inputs, targets);
     serde_wasm_bindgen::to_value(&model).unwrap()

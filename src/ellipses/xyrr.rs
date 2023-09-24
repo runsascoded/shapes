@@ -254,7 +254,7 @@ impl<D: RelativeEq<Epsilon = f64> + Clone> RelativeEq for XYRR<D> {
 mod tests {
     use std::{fmt, f64::NAN};
 
-    use crate::{dual::{Dual, d_fns}, circle::Circle, intersect::Intersect, to::To, shape::Shape};
+    use crate::{dual::Dual, circle::Circle, intersect::Intersect, to::To, shape::{Shape, xyrr, Shapes}, duals::{D, Z}};
 
     use super::*;
     use approx::{AbsDiffEq, RelativeEq};
@@ -390,12 +390,10 @@ mod tests {
 
     #[test]
     fn tangent_circles() {
-        let ( z, mut d ) = d_fns(1);
-        let ellipses = [
-            Shape::XYRR(XYRR { c: R2 { x: 0., y: 0. }, r: R2 { x: 2., y: 2., } }.dual(&vec![ z(), z(), z(), z() ])),
-            Shape::XYRR(XYRR { c: R2 { x: 3., y: 0. }, r: R2 { x: 1., y: 1., } }.dual(&vec![ d(), z(), z(), z() ])),
-        ];
-        let [ e0, e1 ] = ellipses;
+        let [ e0, e1 ] = Shapes::from([
+            (xyrr(0., 0., 2., 2.), vec![ Z, Z, Z, Z ]),
+            (xyrr(3., 0., 1., 1.), vec![ D, Z, Z, Z ]),
+        ]);
         let ps = e0.intersect(&e1);
         assert_eq!(ps, vec![
             // Heads up! Tangent points have NAN gradients. [`Scene`] detects/filters them, but at this level of the stack they are passed along

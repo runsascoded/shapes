@@ -53,7 +53,8 @@ where
 {
     pub fn new(shapes: Vec<Shape<D>>) -> Scene<D> {
         let num_shapes = (&shapes).len();
-        let mut sets = shapes.clone().into_iter().enumerate().map(|(idx, shape)| Set::new(idx, shape)).collect::<Vec<_>>();
+        let mut sets = shapes.into_iter().enumerate().map(|(idx, shape)| Set::new(idx, shape)).collect::<Vec<_>>();
+        let shapes = sets.iter().map(|s| &s.shape).collect::<Vec<_>>();
         let set_ptrs: Vec<S<D>> = sets.clone().into_iter().map(|s| Rc::new(RefCell::new(s))).collect();
         let mut nodes: Vec<N<D>> = Vec::new();
         let merge_threshold = 1e-7;
@@ -290,7 +291,7 @@ pub mod tests {
 
     use log::debug;
 
-    use crate::{math::{deg::Deg, round::round}, dual::{Dual, d_fns}, fmt::Fmt, shape::{xyrr, circle, Shapes}, to::To};
+    use crate::{math::{deg::Deg, round::round}, dual::Dual, fmt::Fmt, shape::{xyrr, circle, Shapes}, to::To, duals::D};
 
     use super::*;
     use test_log::test;
@@ -300,13 +301,12 @@ pub mod tests {
         let c0 = circle(0., 0., 1.);
         let c1 = circle(1., 0., 1.);
         let c2 = circle(0., 1., 1.);
-        let ( _z, d ) = d_fns(9);
         let inputs = [
-            (c0, vec![ d, d, d ]),
-            (c1, vec![ d, d, d ]),
-            (c2, vec![ d, d, d ]),
+            (c0, vec![ D; 3 ]),
+            (c1, vec![ D; 3 ]),
+            (c2, vec![ D; 3 ]),
         ];
-        let shapes = Shapes::from(&inputs);
+        let shapes = Shapes::from(inputs);
         let scene = Scene::new(shapes.to());
         assert_eq!(scene.components.len(), 1);
         let component = scene.components[0].clone();
@@ -372,14 +372,13 @@ pub mod tests {
 
     #[test]
     fn test_components() {
-        let ( _z, d ) = d_fns(12);
         let inputs = [
-            (circle(0. , 0., 1.), vec![ d, d, d ]),
-            (circle(1. , 0., 1.), vec![ d, d, d ]),
-            (circle(0.5, 0., 3.), vec![ d, d, d ]),
-            (circle(0. , 3., 1.), vec![ d, d, d ]),
+            (circle(0. , 0., 1.), vec![ D, D, D ]),
+            (circle(1. , 0., 1.), vec![ D, D, D ]),
+            (circle(0.5, 0., 3.), vec![ D, D, D ]),
+            (circle(0. , 3., 1.), vec![ D, D, D ]),
         ];
-        let shapes = Shapes::from(&inputs);
+        let shapes = Shapes::from(inputs);
         let scene = Scene::new(shapes.to_vec());
         assert_eq!(scene.components.len(), 2);
         assert_node_strs(&scene, vec![

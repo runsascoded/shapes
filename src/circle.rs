@@ -5,7 +5,7 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 use crate::{
-    dual::{D, Dual, d_fns},
+    dual::{D, Dual},
     r2::R2, rotate::{Rotate as _Rotate, RotateArg}, shape::{Duals, Shape, Shapes}, transform::{Projection, CanTransform}, transform::Transform::{Rotate, Scale, ScaleXY, Translate, self}, ellipses::xyrr::{XYRR, UnitCircleGap}, sqrt::Sqrt, math::{is_normal::IsNormal, recip::Recip}, to::To, intersect::Intersect
 };
 
@@ -253,10 +253,9 @@ impl Add<R2<i64>> for Circle<f64> {
 
 impl Intersect<Circle<f64>, D> for Circle<f64> {
     fn intersect(&self, other: &Circle<f64>) -> Vec<R2<D>> {
-        let ( _z, d ) = d_fns(6);
-        let [ s0, s1 ] = Shapes::from(&[
-            (Shape::Circle(* self), vec![ d; 3 ]),
-            (Shape::Circle(*other), vec![ d; 3 ]),
+        let [ s0, s1 ] = Shapes::from([
+            (Shape::Circle(* self), vec![ true; 3 ]),
+            (Shape::Circle(*other), vec![ true; 3 ]),
         ]);
         s0.intersect(&s1)
     }
@@ -279,7 +278,7 @@ mod tests {
 
     use super::*;
 
-    use crate::{intersect::Intersect, dual::d_fns};
+    use crate::{intersect::Intersect, duals::{D, Z}};
 
     pub fn r2(x: f64, dx: Vec<f64>, y: f64, dy: Vec<f64>) -> R2<D> {
         R2 { x: Dual::new(x, dx), y: Dual::new(y, dy) }
@@ -331,10 +330,9 @@ mod tests {
 
     #[test]
     fn tangent_circles() {
-        let ( z, mut d ) = d_fns(1);
-        let [ s0, s1 ] = Shapes::from(&[
-            (Shape::Circle(Circle { c: R2 { x: 0., y: 0. }, r: 2. }), vec![ z, z, z ]),
-            (Shape::Circle(Circle { c: R2 { x: 3., y: 0. }, r: 1. }), vec![ d, z, z ]),
+        let [ s0, s1 ] = Shapes::from([
+            (Shape::Circle(Circle { c: R2 { x: 0., y: 0. }, r: 2. }), vec![ Z, Z, Z ]),
+            (Shape::Circle(Circle { c: R2 { x: 3., y: 0. }, r: 1. }), vec![ D, Z, Z ]),
         ]);
         let ps = s0.intersect(&s1);
         assert_eq!(ps, vec![

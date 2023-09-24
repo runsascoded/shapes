@@ -30,8 +30,7 @@ impl Serialize for Dual {
 
 impl<'de> Deserialize<'de> for Dual {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: Deserializer<'de>
+        where D: Deserializer<'de>
     {
         #[derive(Deserialize)]
         #[serde(field_identifier, rename_all = "lowercase")]
@@ -394,79 +393,6 @@ impl Sum for Dual {
         let first = iter.next().unwrap();
         iter.fold(first, |a, b| a + b)
     }
-}
-
-/// Placeholder for the derivative component of a [`Dual`] (corresponding to one "coordinate" of a Shape, e.g. `c.x`).
-/// The `usize` argument indicates the length of the derivative vector, which should be the same for all coordinates in a [`Model`].
-/// `Zeros` values are stateless, but `OneHot`s are expanded during [`Model`]/[`Step`] construction, so that the "hot" element proceeds through the vector,
-/// i.e. the first differentiable coordinate will be `one_hot(0)`, the second will be `one_hot(1)`, etc.
-/// This level of indirection makes it easier to specify a model's Shapes, and toggle which coordinates are considered moveable (and whose error-partial-derivative ∂(error) is propagated through all calculations).
-/// See [`model::tests`] for example:
-/// ```rust
-/// let ( z, d ) = d_fns(2);
-/// let inputs = vec![
-///     (circle(0., 0., 1.), vec![ z, z, z, ]),
-///     (circle(1., 0., 1.), vec![ d, z, d, ]),
-/// ];
-/// let targets = [
-///     ("0*", 1. /  3.),  // Fizz (multiples of 3)
-///     ("*1", 1. /  5.),  // Buzz (multiples of 5)
-///     ("01", 1. / 15.),  // Fizz Buzz (multiples of both 3 and 5)
-/// ];
-/// let model = Model::new(inputs, targets.to());
-/// ```
-/// This initializes two [`Circle`]s (with f64 coordinate values), such that
-
-#[derive(Clone, Copy, Debug)]
-pub enum InitDual { Zeros(usize), OneHot(usize), }
-use InitDual::*;
-
-pub struct InitDuals {
-    pub nxt: usize,
-}
-impl InitDuals {
-    pub fn new() -> Self {
-        InitDuals { nxt: 0 }
-    }
-    pub fn next(&mut self, id: &InitDual) -> Vec<f64> {
-        match id {
-            Zeros(n) => vec![0.; *n],
-            OneHot(n) => {
-                let duals = one_hot(&self.nxt, n);
-                self.nxt += 1;
-                duals
-            },
-        }
-    }
-    pub fn shape(&mut self, (s, init_duals): &InputSpec) -> Shape<D> {
-        let duals: Duals = init_duals.iter().map(|init_dual| self.next(init_dual)).collect();
-        s.dual(&duals)
-    }
-}
-
-pub fn one_hot(idx: &usize, size: &usize) -> Vec<f64> {
-    let mut v = vec![0.; *size];
-    v[*idx] = 1.;
-    v
-}
-
-pub fn is_one_hot(v: &Vec<f64>) -> Option<usize> {
-    let mut idx = None;
-    for (i, x) in v.iter().enumerate() {
-        if *x == 1. {
-            if idx.is_some() {
-                return None;
-            }
-            idx = Some(i);
-        } else if *x != 0. {
-            return None;
-        }
-    }
-    idx
-}
-
-pub fn d_fns(n: usize) -> (InitDual, InitDual) {
-    ( Zeros(n), OneHot(n), )
 }
 
 #[cfg(test)]
