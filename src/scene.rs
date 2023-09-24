@@ -1,10 +1,10 @@
 use core::f64;
-use std::{cell::RefCell, rc::Rc, collections::BTreeSet, ops::{Neg, Add, Sub, Mul, Div}, fmt::Display};
+use std::{cell::RefCell, rc::Rc, collections::BTreeSet, ops::{Neg, Add, Sub, Mul, Div}};
 
 use log::{debug, info};
 use ordered_float::OrderedFloat;
 
-use crate::{node::{N, Node}, contains::Contains, distance::Distance, region::{RegionArg, RegionContainsArg}, set::S, shape::Shape, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::{CanTransform, HasProjection, CanProject}, intersection::Intersection, dual::Dual, to::To, math::deg::Deg, fmt::Fmt, component::{Component, self}, set::Set};
+use crate::{node::{N, Node}, contains::Contains, distance::Distance, region::{RegionArg, RegionContainsArg}, set::S, shape::Shape, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::{CanTransform, HasProjection, CanProject}, dual::Dual, to::To, math::deg::Deg, fmt::Fmt, component::Component, set::Set};
 
 #[derive(Clone, Debug)]
 pub struct Scene<D> {
@@ -288,12 +288,13 @@ where
 pub mod tests {
     use std::collections::BTreeMap;
     use std::env;
+    use std::fmt::Display;
 
     use log::debug;
 
     use crate::circle::Circle;
     use crate::math::{deg::Deg, round::round};
-    use crate::dual::{Dual, D};
+    use crate::dual::{Dual, D, d_fns};
     use crate::ellipses::xyrr::XYRR;
     use crate::fmt::Fmt;
     use crate::r2::R2;
@@ -301,23 +302,16 @@ pub mod tests {
     use super::*;
     use test_log::test;
 
-    fn duals(idx: usize, n: usize) -> Vec<Vec<f64>> {
-        let mut duals = [ vec![ 0.; 3 * n ], vec![ 0.; 3 * n ], vec![ 0.; 3 * n ] ];
-        duals[0][3 * idx + 0] = 1.;
-        duals[1][3 * idx + 1] = 1.;
-        duals[2][3 * idx + 2] = 1.;
-        duals.into()
-    }
-
     #[test]
     fn test_00_10_01() {
         let c0 = Shape::Circle(Circle { c: R2 { x: 0., y: 0. }, r: 1. });
         let c1 = Shape::Circle(Circle { c: R2 { x: 1., y: 0. }, r: 1. });
         let c2 = Shape::Circle(Circle { c: R2 { x: 0., y: 1. }, r: 1. });
+        let ( _z, mut d ) = d_fns(9);
         let inputs = vec![
-            (c0, duals(0, 3)),
-            (c1, duals(1, 3)),
-            (c2, duals(2, 3)),
+            (c0, vec![ d(), d(), d() ]),
+            (c1, vec![ d(), d(), d() ]),
+            (c2, vec![ d(), d(), d() ]),
         ];
         let shapes: Vec<Shape<D>> = inputs.iter().map(|(c, duals)| c.dual(duals)).collect();
         let scene = Scene::new(shapes);
@@ -389,11 +383,12 @@ pub mod tests {
         let c1 = Shape::Circle(Circle { c: R2 { x: 1. , y: 0. }, r: 1. });
         let c2 = Shape::Circle(Circle { c: R2 { x: 0.5, y: 0. }, r: 3. });
         let c3 = Shape::Circle(Circle { c: R2 { x: 0. , y: 3. }, r: 1. });
+        let ( _z, mut d ) = d_fns(12);
         let inputs = vec![
-            (c0, duals(0, 4)),
-            (c1, duals(1, 4)),
-            (c2, duals(2, 4)),
-            (c3, duals(3, 4)),
+            (c0, vec![ d(), d(), d() ]),
+            (c1, vec![ d(), d(), d() ]),
+            (c2, vec![ d(), d(), d() ]),
+            (c3, vec![ d(), d(), d() ]),
         ];
         let shapes: Vec<_> = inputs.iter().map(|(c, duals)| c.dual(duals)).collect();
         let scene = Scene::new(shapes);

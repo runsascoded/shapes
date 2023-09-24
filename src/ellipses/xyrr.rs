@@ -379,10 +379,10 @@ mod tests {
 
     #[test]
     fn tangent_circles() {
-        let ( z, d ) = d_fns(1);
+        let ( z, mut d ) = d_fns(1);
         let ellipses = [
-            Shape::XYRR(XYRR { c: R2 { x: 0., y: 0. }, r: R2 { x: 2., y: 2., } }.dual(&vec![ z( ), z( ), z( ), z( ) ])),
-            Shape::XYRR(XYRR { c: R2 { x: 3., y: 0. }, r: R2 { x: 1., y: 1., } }.dual(&vec![ d(0), z( ), z( ), z( ) ])),
+            Shape::XYRR(XYRR { c: R2 { x: 0., y: 0. }, r: R2 { x: 2., y: 2., } }.dual(&vec![ z(), z(), z(), z() ])),
+            Shape::XYRR(XYRR { c: R2 { x: 3., y: 0. }, r: R2 { x: 1., y: 1., } }.dual(&vec![ d(), z(), z(), z() ])),
         ];
         let [ e0, e1 ] = ellipses;
         let ps = e0.intersect(&e1);

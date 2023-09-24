@@ -241,9 +241,9 @@ impl Add<R2<i64>> for Circle<f64> {
 
 impl Intersect<Circle<f64>, D> for Circle<f64> {
     fn intersect(&self, o: &Circle<f64>) -> Vec<R2<D>> {
-        let ( _z, d ) = d_fns(6);
-        let c0 = self.dual(&vec![ d(0), d(1), d(2), ]);
-        let c1 =    o.dual(&vec![ d(3), d(4), d(5), ]);
+        let ( _z, mut d ) = d_fns(6);
+        let c0 = self.dual(&vec![ d(), d(), d(), ]);
+        let c1 =    o.dual(&vec![ d(), d(), d(), ]);
         let s0 = Shape::Circle(c0);
         let s1 = Shape::Circle(c1);
         s0.intersect(&s1)
@@ -319,10 +319,10 @@ mod tests {
 
     #[test]
     fn tangent_circles() {
-        let ( z, d ) = d_fns(1);
+        let ( z, mut d ) = d_fns(1);
         let circles = [
-            Shape::Circle(Circle { c: R2 { x: 0., y: 0. }, r: 2. }.dual(&vec![ z( ), z( ), z( ) ])),
-            Shape::Circle(Circle { c: R2 { x: 3., y: 0. }, r: 1. }.dual(&vec![ d(0), z( ), z( ) ])),
+            Shape::Circle(Circle { c: R2 { x: 0., y: 0. }, r: 2. }.dual(&vec![ z(), z(), z() ])),
+            Shape::Circle(Circle { c: R2 { x: 3., y: 0. }, r: 1. }.dual(&vec![ d(), z(), z() ])),
         ];
         let [ e0, e1 ] = circles;
         let ps = e0.intersect(&e1);

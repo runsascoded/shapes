@@ -396,9 +396,9 @@ impl Sum for Dual {
     }
 }
 
-pub fn one_hot(idx: usize, size: usize) -> Vec<f64> {
-    let mut v = vec![0.; size];
-    v[idx] = 1.;
+pub fn one_hot(idx: &usize, size: &usize) -> Vec<f64> {
+    let mut v = vec![0.; *size];
+    v[*idx] = 1.;
     v
 }
 
@@ -417,10 +417,15 @@ pub fn is_one_hot(v: &Vec<f64>) -> Option<usize> {
     idx
 }
 
-pub fn d_fns(n: usize) -> (Box<dyn Fn() -> Vec<f64>>, Box<dyn Fn(usize) -> Vec<f64>>) {
+pub fn d_fns(n: usize) -> (Box<dyn Fn() -> Vec<f64>>, Box<dyn FnMut() -> Vec<f64>>) {
+    let mut idx: usize = 0;
     (
         Box::new(move || vec![0.; n]),
-        Box::new(move |i: usize| one_hot(i, n)),
+        Box::new(move || {
+            let v = one_hot(&idx, &n);
+            idx += 1;
+            v
+        }),
     )
 }
 

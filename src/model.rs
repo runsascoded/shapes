@@ -331,10 +331,10 @@ mod tests {
         // - 1st circle is fixed unit circle at origin
         // - 2nd circle's center is fixed on x-axis (y=0)
         // This is the minimal degrees of freedom that can reach any target (relative) distribution between {"0*", "*1", and "01"} (1st circle size, 2nd circle size, intersection size).
-        let ( z, d ) = d_fns(2);
+        let ( z, mut d ) = d_fns(2);
         let inputs: Vec<Input> = vec![
-            (Shape::Circle(Circle { c: R2 { x: 0., y: 0. }, r: 1. }), vec![ z( ), z( ), z( ), ]),
-            (Shape::Circle(Circle { c: R2 { x: 1., y: 0. }, r: 1. }), vec![ d(0), z( ), d(1), ]),
+            (Shape::Circle(Circle { c: R2 { x: 0., y: 0. }, r: 1. }), vec![ z(), z(), z(), ]),
+            (Shape::Circle(Circle { c: R2 { x: 1., y: 0. }, r: 1. }), vec![ d(), z(), d(), ]),
         ];
         check(inputs, FIZZ_BUZZ.into(), "fizz_buzz_circles", 0.8, 100);
     }
@@ -342,10 +342,10 @@ mod tests {
     #[test]
     fn two_circles_disjoint() {
         // 2 Circles, initially disjoint, each already ideally sized, only 2nd circle's x can move, needs to "find" the 1st circle to get the intersection area right.
-        let ( z, d ) = d_fns(1);
+        let ( z, mut d ) = d_fns(1);
         let inputs: Vec<Input> = vec![
-            (Shape::Circle(Circle { c: R2 { x: 0., y: 0. }, r: 2. }), vec![ z( ), z( ), z( ), ]),
-            (Shape::Circle(Circle { c: R2 { x: 4., y: 0. }, r: 1. }), vec![ d(0), z( ), z( ), ]),
+            (Shape::Circle(Circle { c: R2 { x: 0., y: 0. }, r: 2. }), vec![ z(), z(), z(), ]),
+            (Shape::Circle(Circle { c: R2 { x: 4., y: 0. }, r: 1. }), vec![ d(), z(), z(), ]),
         ];
         let targets = [
             ("0*", 4.),
@@ -357,10 +357,10 @@ mod tests {
 
     #[test]
     fn two_circles_tangent() {
-        let ( z, d ) = d_fns(1);
+        let ( z, mut d ) = d_fns(1);
         let inputs: Vec<Input> = vec![
-            (Shape::Circle(Circle { c: R2 { x: 0., y: 0. }, r: 2. }), vec![ z( ), z( ), z( ), ]),
-            (Shape::Circle(Circle { c: R2 { x: 3., y: 0. }, r: 1. }), vec![ d(0), z( ), z( ), ]),
+            (Shape::Circle(Circle { c: R2 { x: 0., y: 0. }, r: 2. }), vec![ z(), z(), z(), ]),
+            (Shape::Circle(Circle { c: R2 { x: 3., y: 0. }, r: 1. }), vec![ d(), z(), z(), ]),
         ];
         let targets = [
             ("0*", 4.),
@@ -373,10 +373,10 @@ mod tests {
     #[test]
     fn two_circle_containment() {
         // 2 Circles, initially disjoint, each already ideally sized, only 2nd circle's x can move, needs to "find" the 1st circle to get the intersection area right.
-        let ( z, d ) = d_fns(1);
+        let ( z, mut d ) = d_fns(1);
         let inputs: Vec<Input> = vec![
-            (Shape::Circle(Circle { c: R2 { x: 0. , y: 0. }, r: 2. }), vec![ z( ), z( ), z( ), ]),
-            (Shape::Circle(Circle { c: R2 { x: 0.5, y: 0. }, r: 1. }), vec![ d(0), z( ), z( ), ]),
+            (Shape::Circle(Circle { c: R2 { x: 0. , y: 0. }, r: 2. }), vec![ z(), z(), z(), ]),
+            (Shape::Circle(Circle { c: R2 { x: 0.5, y: 0. }, r: 1. }), vec![ d(), z(), z(), ]),
         ];
         let targets = [
             ("0*", 4.),
@@ -388,7 +388,7 @@ mod tests {
 
     #[test]
     fn centroid_repel() {
-        let ( _z, d ) = d_fns(12);
+        let ( _z, mut d ) = d_fns(12);
         let ellipses = [
             XYRR { c: R2 { x:  0. , y: 0. }, r: R2 { x: 1., y: 3. } },
             XYRR { c: R2 { x:  0.5, y: 1. }, r: R2 { x: 1., y: 1. } },
@@ -396,9 +396,9 @@ mod tests {
         ];
         let [ e0, e1, e2 ] = ellipses;
         let inputs: Vec<Input> = vec![
-            ( Shape::XYRR(e0), vec![ d(0), d(1), d(2), d(3), ] ),
-            ( Shape::XYRR(e1), vec![ d(4), d(5), d(6), d(7), ] ),
-            ( Shape::XYRR(e2), vec![ d(8), d(9), d(10), d(11), ] ),
+            ( Shape::XYRR(e0), vec![ d(), d(), d(), d(), ] ),
+            ( Shape::XYRR(e1), vec![ d(), d(), d(), d(), ] ),
+            ( Shape::XYRR(e2), vec![ d(), d(), d(), d(), ] ),
         ];
         let targets = [
             ("0**", 3. ),
@@ -414,20 +414,20 @@ mod tests {
 
     #[test]
     fn fizz_buzz_circle_ellipse() {
-        let ( z, d ) = d_fns(3);
+        let ( z, mut d ) = d_fns(3);
         let inputs: Vec<Input> = vec![
-            ( Shape::Circle(Circle { c: R2 { x: 0., y: 0. }, r: 1.                  }), vec![ z( ), z( ), z( ),       ]),
-            ( Shape::  XYRR(  XYRR { c: R2 { x: 1., y: 0. }, r: R2 { x: 1., y: 1. } }), vec![ d(0), z( ), d(1), d(2), ]),
+            ( Shape::Circle(Circle { c: R2 { x: 0., y: 0. }, r: 1.                  }), vec![ z(), z(), z(),       ]),
+            ( Shape::  XYRR(  XYRR { c: R2 { x: 1., y: 0. }, r: R2 { x: 1., y: 1. } }), vec![ d(), z(), d(), d(), ]),
         ];
         check(inputs, FIZZ_BUZZ.into(), "fizz_buzz_circle_ellipse", 0.8, 100)
     }
 
     #[test]
     fn fizz_buzz_ellipses_diag() {
-        let ( z, d ) = d_fns(7);
+        let ( z, mut d ) = d_fns(7);
         let inputs: Vec<Input> = vec![
-            ( Shape::XYRR(XYRR { c: R2 { x: 1., y: 0. }, r: R2 { x: 1., y: 1. } }), vec![ d(0), z( ), d(1), d(2), ] ),
-            ( Shape::XYRR(XYRR { c: R2 { x: 0., y: 1. }, r: R2 { x: 1., y: 1. } }), vec![ d(3), d(4), d(5), d(6), ] ),
+            ( Shape::XYRR(XYRR { c: R2 { x: 1., y: 0. }, r: R2 { x: 1., y: 1. } }), vec![ d(), z(), d(), d(), ] ),
+            ( Shape::XYRR(XYRR { c: R2 { x: 0., y: 1. }, r: R2 { x: 1., y: 1. } }), vec![ d(), d(), d(), d(), ] ),
         ];
         // TODO: some nondeterminism sets in on the "error" field, from step 15! Debug.
         check(inputs, FIZZ_BUZZ.into(), "fizz_buzz_ellipses_diag", 0.7, 100)
@@ -435,22 +435,22 @@ mod tests {
 
     #[test]
     fn fizz_buzz_bazz_circle_ellipses() {
-        let ( z, d ) = d_fns(7);
+        let ( z, mut d ) = d_fns(7);
         let inputs: Vec<Input> = vec![
-            ( Shape::Circle(Circle { c: R2 { x: 0., y: 0. }, r: 1. }     ), vec![ z( ), z( ), z( ),       ]),
-            ( Shape::  XYRR(Circle { c: R2 { x: 1., y: 0. }, r: 1. }.to()), vec![ d(0), z( ), d(1), d(2), ]),
-            ( Shape::  XYRR(Circle { c: R2 { x: 0., y: 1. }, r: 1. }.to()), vec![ d(3), d(4), d(5), d(6), ]),
+            ( Shape::Circle(Circle { c: R2 { x: 0., y: 0. }, r: 1. }     ), vec![ z(), z(), z(),       ]),
+            ( Shape::  XYRR(Circle { c: R2 { x: 1., y: 0. }, r: 1. }.to()), vec![ d(), z(), d(), d(), ]),
+            ( Shape::  XYRR(Circle { c: R2 { x: 0., y: 1. }, r: 1. }.to()), vec![ d(), d(), d(), d(), ]),
         ];
         check(inputs, FIZZ_BUZZ_BAZZ.into(), "fizz_buzz_bazz_circle_ellipses", 0.7, 100)
     }
 
     #[test]
     fn fizz_buzz_bazz_circles() {
-        let ( z, d ) = d_fns(5);
+        let ( z, mut d ) = d_fns(5);
         let inputs: Vec<Input> = vec![
-            ( Shape::Circle(Circle { c: R2 { x: 0., y: 0. }, r: 1. }), vec![ z( ), z( ), z( ), ] ),
-            ( Shape::Circle(Circle { c: R2 { x: 1., y: 0. }, r: 1. }), vec![ d(0), z( ), d(1), ] ),
-            ( Shape::Circle(Circle { c: R2 { x: 0., y: 1. }, r: 1. }), vec![ d(2), d(3), d(4), ] ),
+            ( Shape::Circle(Circle { c: R2 { x: 0., y: 0. }, r: 1. }), vec![ z(), z(), z(), ] ),
+            ( Shape::Circle(Circle { c: R2 { x: 1., y: 0. }, r: 1. }), vec![ d(), z(), d(), ] ),
+            ( Shape::Circle(Circle { c: R2 { x: 0., y: 1. }, r: 1. }), vec![ d(), d(), d(), ] ),
         ];
         check(inputs, FIZZ_BUZZ_BAZZ.into(), "fizz_buzz_bazz_circles", 0.7, 100)
     }
@@ -461,12 +461,12 @@ mod tests {
     fn variant_callers() {
         let ellipses = ellipses4(2.);
         let [ e0, e1, e2, e3 ] = ellipses;
-        let ( z, d ) = d_fns(12);
+        let ( z, mut d ) = d_fns(12);
         let inputs: Vec<Input> = vec![
-            ( e0, vec![ z( ), z( ), z(  ), z(  ), ] ),
-            ( e1, vec![ d(0), d(1), d( 2), d( 3), ] ),
-            ( e2, vec![ d(4), d(5), d( 6), d( 7), ] ),
-            ( e3, vec![ d(8), d(9), d(10), d(11), ] ),
+            ( e0, vec![ z(), z(), z(), z(), ] ),
+            ( e1, vec![ d(), d(), d(), d(), ] ),
+            ( e2, vec![ d(), d(), d(), d(), ] ),
+            ( e3, vec![ d(), d(), d(), d(), ] ),
         ];
         // Step size 0.2, #6000, 3.54% error (72.0):
         // XYRR { c: { x: 0.057842232929273305, y: 1.3421141998408261 }, r: { x: 0.9042484099819306, y: 1.7746711918630136 } },
@@ -478,7 +478,7 @@ mod tests {
 
     #[test]
     fn disjoint_variant_callers_bug() {
-        let ( _z, d ) = d_fns(16);
+        let ( _z, mut d ) = d_fns(16);
         let ellipses = [
             XYRR { c: R2 { x: 0., y: 0., }, r: R2 { x: 1., y: 1. }, },
             XYRR { c: R2 { x: 3., y: 0., }, r: R2 { x: 1., y: 1. }, },
@@ -487,10 +487,10 @@ mod tests {
         ];
         let [ e0, e1, e2, e3 ] = ellipses;
         let inputs: Vec<Input> = vec![
-            ( Shape::XYRR(e0), vec![ d( 0), d( 1), d( 2), d( 3), ] ),
-            ( Shape::XYRR(e1), vec![ d( 4), d( 5), d( 6), d( 7), ] ),
-            ( Shape::XYRR(e2), vec![ d( 8), d( 9), d(10), d(11), ] ),
-            ( Shape::XYRR(e3), vec![ d(12), d(13), d(14), d(15), ] ),
+            ( Shape::XYRR(e0), vec![ d(), d(), d(), d(), ] ),
+            ( Shape::XYRR(e1), vec![ d(), d(), d(), d(), ] ),
+            ( Shape::XYRR(e2), vec![ d(), d(), d(), d(), ] ),
+            ( Shape::XYRR(e3), vec![ d(), d(), d(), d(), ] ),
         ];
         check(inputs, VARIANT_CALLERS.into(), "disjoint_variant_callers_bug", 0.5, 100);
     }
@@ -499,12 +499,12 @@ mod tests {
     fn variant_callers_diag() {
         let ellipses = ellipses4(2.).map(|e| e.transform(&Rotate(PI / 4.)));
         let [ e0, e1, e2, e3 ] = ellipses;
-        let ( _z, d ) = d_fns(20);
+        let ( _z, mut d ) = d_fns(20);
         let inputs: Vec<Input> = vec![
-            ( e0, vec![ d( 0), d( 1), d( 2), d( 3), d( 4), ] ),
-            ( e1, vec![ d( 5), d( 6), d( 7), d( 8), d( 9), ] ),
-            ( e2, vec![ d(10), d(11), d(12), d(13), d(14), ] ),
-            ( e3, vec![ d(15), d(16), d(17), d(18), d(19), ] ),
+            ( e0, vec![ d(), d(), d(), d(), d(), ] ),
+            ( e1, vec![ d(), d(), d(), d(), d(), ] ),
+            ( e2, vec![ d(), d(), d(), d(), d(), ] ),
+            ( e3, vec![ d(), d(), d(), d(), d(), ] ),
         ];
         check(inputs, VARIANT_CALLERS.into(), "variant_callers_diag", 0.5, 100)
     }
