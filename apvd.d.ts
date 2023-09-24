@@ -42,28 +42,31 @@ export function expand_targets(targets: any): any;
 * @returns {any}
 */
 export function xyrr_unit(xyrr: any): any;
-export interface Dual {
-    v: number;
-    d: number[];
+export type Shape<D> = { Circle: Circle<D> } | { XYRR: XYRR<D> } | { XYRRT: XYRRT<D> };
+
+export type Input = [Shape<number>, Duals];
+
+export type Duals = number[][];
+
+export interface XYRRT<D> {
+    c: R2<D>;
+    r: R2<D>;
+    t: D;
 }
 
-export interface Model {
-    steps: Step[];
-    repeat_idx: number | null;
-    min_idx: number;
-    min_error: number;
+export interface XYRR<D> {
+    c: R2<D>;
+    r: R2<D>;
 }
-
-export type D = Dual;
 
 export interface Circle<D> {
     c: R2<D>;
     r: D;
 }
 
-export interface XYRR<D> {
-    c: R2<D>;
-    r: R2<D>;
+export interface Dual {
+    v: number;
+    d: number[];
 }
 
 export interface Component {
@@ -100,6 +103,12 @@ export interface Point {
     edge_idxs: number[];
 }
 
+export interface Set<D> {
+    idx: number;
+    children: number[];
+    shape: Shape<D>;
+}
+
 export interface Targets<D> {
     all: TargetsMap<D>;
     given: string[];
@@ -108,18 +117,6 @@ export interface Targets<D> {
 }
 
 export type TargetsMap<D> = Record<string, D>;
-
-export interface Set<D> {
-    idx: number;
-    children: number[];
-    shape: Shape<D>;
-}
-
-export type Shape<D> = { Circle: Circle<D> } | { XYRR: XYRR<D> } | { XYRRT: XYRRT<D> };
-
-export type Input = [Shape<number>, Duals];
-
-export type Duals = number[][];
 
 export interface R2<D> {
     x: D;
@@ -145,7 +142,7 @@ export interface Error {
 }
 
 export interface Step {
-    inputs: Input[];
+    shapes: Shape<D>[];
     components: Component[];
     targets: Targets<number>;
     total_area: Dual;
@@ -155,11 +152,14 @@ export interface Step {
 
 export type Errors = Record<string, Error>;
 
-export interface XYRRT<D> {
-    c: R2<D>;
-    r: R2<D>;
-    t: D;
+export interface Model {
+    steps: Step[];
+    repeat_idx: number | null;
+    min_idx: number;
+    min_error: number;
 }
+
+export type D = Dual;
 
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
