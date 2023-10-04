@@ -6,6 +6,7 @@ use crate::{node::{N, Node}, math::deg::Deg, edge::{E, self, EdgeArg, Edge}, con
 
 pub type C<D> = Rc<RefCell<Component<D>>>;
 
+/// Connected component of a graph of sets
 #[derive(Clone, Debug)]
 pub struct Component<D> {
     pub set_idxs: Vec<usize>,

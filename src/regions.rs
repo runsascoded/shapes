@@ -43,6 +43,7 @@ pub struct Component {
     pub points: Vec<Point>,
     pub edges: Vec<Edge>,
     pub regions: Vec<Region>,
+    pub container_idxs: Vec<usize>,
 }
 
 impl Component {
@@ -75,6 +76,7 @@ impl Component {
             points,
             edges,
             regions,
+            container_idxs: component.container_idxs.clone().into_iter().collect(),
         }
     }
 }
