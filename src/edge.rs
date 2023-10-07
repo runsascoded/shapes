@@ -1,4 +1,6 @@
-use std::{fmt::Display, rc::Rc, cell::RefCell, collections::BTreeSet, ops::{Mul, Div, Sub}};
+use std::{fmt::Display, rc::Rc, cell::RefCell, collections::BTreeSet, ops::{Mul, Div, Sub}, f64::consts::TAU};
+
+use log::debug;
 
 use crate::{math::deg::Deg, node::N, set::S, shape::Shape::{Circle, XYRR, XYRRT}, trig::Trig, dual::Dual};
 
@@ -12,7 +14,7 @@ pub struct Edge<D> {
     pub node1: N<D>,
     pub theta0: D,
     pub theta1: D,
-    pub container_idxs: BTreeSet<usize>,
+    pub container_set_idxs: BTreeSet<usize>,
     pub is_component_boundary: bool,
     pub visits: usize,
 }
@@ -30,6 +32,11 @@ pub trait EdgeArg
 impl EdgeArg for f64 {}
 impl EdgeArg for Dual {}
 
+impl<D> Edge<D> {
+    pub fn set_idx(&self) -> usize {
+        self.set.borrow().idx
+    }
+}
 impl<D: EdgeArg> Edge<D> {
     pub fn secant_area(&self) -> D {
         let r2 = match &self.set.borrow().shape {
@@ -38,6 +45,7 @@ impl<D: EdgeArg> Edge<D> {
             XYRRT(e) => e.r.clone().x * e.clone().r.y,
         };
         let theta = self.theta();
+        // debug!("Edge {}: r2: {}, theta: {}", self, r2, theta);
         r2 / 2. * (theta.clone() - theta.sin())
     }
     /// Angle span of this Edge, in terms of the shape whose border it is part of
@@ -48,14 +56,20 @@ impl<D: EdgeArg> Edge<D> {
         }
         theta
     }
-    pub fn set_idx(&self) -> usize {
-        self.set.borrow().idx
-    }
     /// Return all shape indices that either contain this Edge, or which this Edge runs along the border of
     pub fn all_idxs(&self) -> BTreeSet<usize> {
-        let mut idxs = self.container_idxs.clone();
+        let mut idxs = self.container_set_idxs.clone();
         idxs.insert(self.set.borrow().idx);
         idxs
+    }
+}
+
+impl<D: Clone + Into<f64>> Edge<D> {
+    pub fn contains_theta(&self, theta: f64) -> bool {
+        let theta0: f64 = self.theta0.clone().into();
+        let theta1: f64 = self.theta1.clone().into();
+        let theta = if theta < theta0 { theta + TAU } else { theta };
+        return theta0 <= theta && theta <= theta1
     }
 }
 
@@ -72,7 +86,7 @@ impl<
     + Into<f64>
 > Display for Edge<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let containers: Vec<String> = self.container_idxs.iter().map(|idx| format!("{}", idx)).collect();
+        let containers: Vec<String> = self.container_set_idxs.iter().map(|idx| format!("{}", idx)).collect();
         write!(
             f,
             "C{}: {}({}) → {}({}), containers: [{}] ({})",

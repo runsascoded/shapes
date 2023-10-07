@@ -19,6 +19,12 @@ impl<D: Display> Display for R2<D> {
     }
 }
 
+impl From<R2<Dual>> for R2<f64> {
+    fn from(r: R2<Dual>) -> Self {
+        r.v()
+    }
+}
+
 impl<D: RotateArg> rotate::Rotate<D> for R2<D> {
     fn rotate(&self, theta: &D) -> Self {
         let c = (*theta).cos();

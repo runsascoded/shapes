@@ -35,6 +35,22 @@ impl Circle<f64> {
             Box::new(move |c: Circle<f64>| c.r),
         ]
     }
+    pub fn at_y(&self, y: f64) -> Vec<f64> {
+        let uy = (y - self.c.y) / self.r;
+        let uy2 = uy * uy;
+        if uy2 > 1. {
+            return vec![]
+        }
+        let ux1 = (1. - uy2).sqrt();
+        let ux0 = -ux1;
+        let x0 = self.c.x + ux0 * self.r;
+        let x1 = self.c.x + ux1 * self.r;
+        if x0 != x1 {
+            vec![ x0, x1 ]
+        } else {
+            vec![ x0 ]
+        }
+    }
 }
 
 impl Circle<D> {

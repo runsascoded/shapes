@@ -76,6 +76,19 @@ impl Shape<f64> {
             Shape::XYRRT(e) => Shape::XYRRT(e.dual(duals)),
         }
     }
+    pub fn at_y(&self, y: f64) -> Vec<f64> {
+        let xs = match self {
+            Shape::Circle(c) => c.at_y(y),
+            Shape::XYRR(e) => e.at_y(y),
+            Shape::XYRRT(e) => e.at_y(y),
+        };
+        if xs.len() < 2 {
+            // Skip tangent points
+            vec![]
+        } else {
+            xs
+        }
+    }
 }
 
 impl<D: Clone> Shape<D> {
@@ -94,6 +107,16 @@ impl<D: Clone> Shape<D> {
             Shape::Circle(c) => c.c.clone(),
             Shape::XYRR(e) => e.c.clone(),
             Shape::XYRRT(e) => e.c.clone(),
+        }
+    }
+}
+
+impl From<Shape<Dual>> for Shape<f64> {
+    fn from(s: Shape<Dual>) -> Self {
+        match s {
+            Shape::Circle(c) => Shape::Circle(c.v()),
+            Shape::XYRR(e) => Shape::XYRR(e.v()),
+            Shape::XYRRT(e) => Shape::XYRRT(e.v()),
         }
     }
 }

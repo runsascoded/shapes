@@ -1,14 +1,15 @@
 use core::f64;
-use std::{cell::RefCell, rc::Rc, collections::BTreeSet, ops::{Neg, Add, Sub, Mul, Div}};
+use std::{cell::RefCell, rc::Rc, collections::{BTreeSet, BTreeMap}, ops::{Neg, Add, Sub, Mul, Div}};
 
-use log::{debug, info};
+use log::{debug, info, error};
 use ordered_float::OrderedFloat;
 
-use crate::{node::{N, Node}, contains::Contains, distance::Distance, region::{RegionArg, RegionContainsArg}, set::S, shape::Shape, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::{CanTransform, HasProjection, CanProject}, dual::Dual, to::To, math::deg::Deg, fmt::Fmt, component::Component, set::Set};
+use crate::{node::{N, Node}, contains::{Contains, ShapeContainsPoint}, distance::Distance, region::RegionArg, set::S, shape::Shape, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::{CanTransform, HasProjection, CanProject}, dual::Dual, to::To, math::deg::Deg, fmt::Fmt, component::{Component, self}, set::Set};
 
+/// Collection of [`Shape`]s (wrapped in [`Set`]s), and segmented into connected [`Component`]s.
 #[derive(Clone, Debug)]
 pub struct Scene<D> {
-    pub sets: Vec<Set<D>>,
+    pub sets: Vec<S<D>>,
     pub components: Vec<Component<D>>,
 }
 
@@ -20,7 +21,7 @@ pub trait SceneD
 + Deg
 + Fmt
 + RegionArg
-+ RegionContainsArg
++ ShapeContainsPoint
 {}
 impl SceneD for f64 {}
 impl SceneD for Dual {}
@@ -47,18 +48,18 @@ impl SceneFloat<Dual> for f64 {}
 
 impl<D: SceneD> Scene<D>
 where
-    R2<D>: SceneR2<D>,
+    R2<D>: Into<R2<f64>> + SceneR2<D>,
+    Shape<f64>: From<Shape<D>>,
     Shape<D>: CanTransform<D, Output = Shape<D>> + HasProjection<D>,
     f64: SceneFloat<D>,
 {
     pub fn new(shapes: Vec<Shape<D>>) -> Scene<D> {
         let num_shapes = (&shapes).len();
-        let mut sets = shapes.into_iter().enumerate().map(|(idx, shape)| Set::new(idx, shape)).collect::<Vec<_>>();
-        let shapes = sets.iter().map(|s| &s.shape).collect::<Vec<_>>();
-        let set_ptrs: Vec<S<D>> = sets.clone().into_iter().map(|s| Rc::new(RefCell::new(s))).collect();
+        let sets = shapes.into_iter().enumerate().map(|(idx, shape)| Set::new(idx, shape)).collect::<Vec<_>>();
+        let mut set_ptrs: Vec<S<D>> = sets.into_iter().map(|s| Rc::new(RefCell::new(s))).collect();
         let mut nodes: Vec<N<D>> = Vec::new();
         let merge_threshold = 1e-7;
-        let zero = shapes[0].zero();
+        let zero = set_ptrs[0].borrow().zero();
 
         let mut is_directly_connected: Vec<Vec<bool>> = Vec::new();
         // Intersect all shapes, pair-wise
@@ -162,7 +163,8 @@ where
 
         // shape_idx -> shape_idxs
         let mut unconnected_containers: Vec<BTreeSet<usize>> = Vec::new();
-        for (idx, shape) in shapes.iter().enumerate() {
+        for (idx, set_ptr) in set_ptrs.iter().enumerate() {
+            let shape = &set_ptr.borrow().shape;
             let mut containers: BTreeSet<usize> = BTreeSet::new();
             for (jdx, container) in set_ptrs.iter().enumerate() {
                 if !is_connected[idx][jdx] &&
@@ -203,39 +205,94 @@ where
             .map(|component_idxs| Component::new(component_idxs, &unconnected_containers, &nodes_by_shape, &set_ptrs, num_shapes))
             .collect();
 
+        let components_map = components.iter().map(|c| (c.key.clone(), c.clone())).collect::<BTreeMap<_, _>>();
+
         let component_ptrs = components.iter().map(|c| Rc::new(RefCell::new(c.clone()))).collect::<Vec<_>>();
-        for (component_idx, component) in components.iter().enumerate() {
-            for container_idx in &component.container_idxs {
-                set_ptrs[*container_idx].borrow_mut().children.insert(component_idx);
+        for component in components.iter() {
+            for set_idx in &component.container_set_idxs {
+                // debug!("Set {} contains component {}", set_idx, component.key);
+                set_ptrs[*set_idx].borrow_mut().child_component_keys.insert(component.key.clone());
             }
         }
-        for set in &mut sets {
-            set.prune_children(&components);
+        for set in &mut set_ptrs {
+            set.borrow_mut().prune_children(&components_map);
+            // debug!("Set {}, child components: {}", set.borrow().idx, set.borrow().child_component_keys.iter().map(|k| k.to_string()).collect::<Vec<_>>().join(", "));
         }
 
-        for (component_idx, component_ptr) in component_ptrs.iter().enumerate() {
-            let key = (0..num_shapes).map(|i| {
-                if component_ptr.borrow().container_idxs.contains(&i) {
-                    i.to_string()
-                } else {
-                    "-".to_string()
-                }
-            }).collect::<String>();
-            let p = component_ptr.borrow().sets[0].borrow().shape.c();
+        // let mut component_depths: BTreeMap<component::Key, usize> = BTreeMap::new();
+        for component_ptr in component_ptrs.iter() {
+            let key = &component_ptr.borrow().key;
+            let p: R2<f64> = component_ptr.borrow().sets[0].borrow().shape.c().into();
+            // debug!("{}: {} at {}", component_idx, key, p);
             for container_component in &mut components {
-                if container_component.children().contains(&component_idx) {
-                    container_component.regions.iter_mut().filter(|r| r.key == key && r.contains(&p)).for_each(|r| {
-                        r.children.push(component_ptr.clone());
-                    });
-                    break;
+                // dbg!(children.clone());
+                if container_component.contains(key) {
+                    container_component.child_component_keys.insert(key.clone());
+                    // debug!("  {} contains {}, checking {} regions", container_component.idx, component_idx, container_component.regions.len());
+                    let container_shapes: BTreeMap<usize, Shape<f64>> = container_component.sets.iter().map(|s| {
+                        let idx = s.borrow().idx;
+                        let s = s.borrow().shape.clone().into();
+                        (idx, s)
+                    }).collect();
+                    let mut container_regions: Vec<_> = container_component.regions.iter_mut().filter(|r| {
+                        // let contains = r.contains(&p);
+                        // debug!("  {} contains {}: {}", r.key, p, contains);
+                        // contains
+                        r.contains(&p, &container_shapes)
+                    }).collect();
+                    if container_regions.len() != 1 {
+                        panic!(
+                            "Expected 1 container region within component {:?} containing {:?}, found {}: {:?}",
+                            container_component.key,
+                            component_ptr.borrow().key,
+                            container_regions.len(),
+                            container_regions,
+                        );
+                    }
+                    container_regions[0].child_components.push(component_ptr.clone());
                 }
             }
         }
-        Scene { sets, components, }
+        let component_depths_map = Scene::compute_component_depths(&mut components);
+        components.sort_by_cached_key(|c| -component_depths_map.get(&c.key).unwrap());
+        Scene { sets: set_ptrs, components, }
+    }
+
+    pub fn compute_component_depths(components: &mut Vec<Component<D>>) -> BTreeMap<component::Key, i64> {
+        let components_map = components.iter().map(|c| (c.key.clone(), c.clone())).collect::<BTreeMap<_, _>>();
+        let mut component_depths_map = BTreeMap::new();
+        for component in &mut *components {
+            Scene::compute_component_depth(component, &components_map, &mut component_depths_map);
+        }
+        component_depths_map
+    }
+
+    pub fn compute_component_depth(
+        component: &Component<D>,
+        components_map: &BTreeMap<component::Key, Component<D>>,
+        component_depths_map: &mut BTreeMap<component::Key, i64>,
+    ) -> i64 {
+        match component_depths_map.get(&component.key) {
+            Some(depth) => depth.clone(),
+            None => {
+                if component.child_component_keys.is_empty() {
+                    component_depths_map.insert(component.key.clone(), 0);
+                    0
+                } else {
+                    let depth = component.child_component_keys.iter().map(|key| {
+                        let child_component = components_map.get(key).unwrap();
+                        let child_depth = Scene::compute_component_depth(child_component, components_map, component_depths_map);
+                        child_depth + 1
+                    }).max().unwrap();
+                    component_depths_map.insert(component.key.clone(), depth);
+                    depth
+                }
+            }
+        }
     }
 
     pub fn total_area(&self) -> D {
-        self.components.iter().filter(|c| c.container_idxs.is_empty()).map(|c| c.area()).sum()
+        self.components.iter().filter(|c| c.container_set_idxs.is_empty()).map(|c| c.area()).sum()
     }
 
     pub fn area(&self, key: &String) -> Option<D> {
@@ -281,14 +338,15 @@ where
     // }
 
     pub fn zero(&self) -> D {
-        self.sets[0].zero()
+        self.sets[0].borrow().zero()
     }
 }
 
 #[cfg(test)]
 pub mod tests {
-    use std::{collections::BTreeMap, env, fmt::Display};
+    use std::{collections::BTreeMap, env, fmt::Display, f64::consts::PI};
 
+    use itertools::Itertools;
     use log::debug;
 
     use crate::{math::{deg::Deg, round::round}, dual::Dual, fmt::Fmt, shape::{xyrr, circle, Shapes}, to::To, duals::D};
@@ -307,7 +365,7 @@ pub mod tests {
             (c2, vec![ D; 3 ]),
         ];
         let shapes = Shapes::from(inputs);
-        let scene = Scene::new(shapes.to());
+        let scene = Scene::<Dual>::new(shapes.to());
         assert_eq!(scene.components.len(), 1);
         let component = scene.components[0].clone();
 
@@ -382,13 +440,13 @@ pub mod tests {
         let scene = Scene::new(shapes.to_vec());
         assert_eq!(scene.components.len(), 2);
         assert_node_strs(&scene, vec![
-            vec![
-                "N0( 0.500, vec![ 0.500,  0.866,  1.000,  0.500, -0.866, -1.000,  0.000,  0.000,  0.000,  0.000,  0.000,  0.000],  0.866, vec![ 0.289,  0.500,  0.577, -0.289,  0.500,  0.577,  0.000,  0.000,  0.000,  0.000,  0.000,  0.000]: C0(  60 [1895, -3283, -1895, -1895, 3283, 3791,    0,    0,    0,    0,    0,    0]), C1( 120 [-1895, -3283, -3791, 1895, 3283, 1895,    0,    0,    0,    0,    0,    0]))",
-                "N1( 0.500, vec![ 0.500, -0.866,  1.000,  0.500,  0.866, -1.000,  0.000,  0.000,  0.000,  0.000,  0.000,  0.000], -0.866, vec![-0.289,  0.500, -0.577,  0.289,  0.500, -0.577,  0.000,  0.000,  0.000,  0.000,  0.000,  0.000]: C0( -60 [-1895, -3283, 1895, 1895, 3283, -3791,    0,    0,    0,    0,    0,    0]), C1(-120 [1895, -3283, 3791, -1895, 3283, -1895,    0,    0,    0,    0,    0,    0]))",
-              ],
               vec![
                 "N2( 0.999, vec![ 0.000,  0.000,  0.000,  0.000,  0.000,  0.000,  0.007,  0.042,  0.042,  0.993, -0.042,  0.994],  2.958, vec![ 0.000,  0.000,  0.000,  0.000,  0.000,  0.000,  0.168,  0.993,  1.007, -0.168,  0.007, -0.168]: C2(  80 [   0,    0,    0,    0,    0,    0, 1102,  -46,  138, -1102,   46, -1103]), C3(  -2 [   0,    0,    0,    0,    0,    0,  550, 3263, 3309, -550, -3263, -414]))",
                 "N3(-0.932, vec![ 0.000,  0.000,  0.000,  0.000,  0.000,  0.000,  0.175, -0.322, -0.366,  0.825,  0.322, -0.886],  2.636, vec![ 0.000,  0.000,  0.000,  0.000,  0.000,  0.000, -0.448,  0.825,  0.939,  0.448,  0.175, -0.481]: C2( 119 [   0,    0,    0,    0,    0,    0, 1027,  401, -138, -1027, -401, 1103]), C3(-159 [   0,    0,    0,    0,    0,    0, 1579, -2908, -3309, -1579, 2908,  414]))",
+              ],
+              vec![
+                "N0( 0.500, vec![ 0.500,  0.866,  1.000,  0.500, -0.866, -1.000,  0.000,  0.000,  0.000,  0.000,  0.000,  0.000],  0.866, vec![ 0.289,  0.500,  0.577, -0.289,  0.500,  0.577,  0.000,  0.000,  0.000,  0.000,  0.000,  0.000]: C0(  60 [1895, -3283, -1895, -1895, 3283, 3791,    0,    0,    0,    0,    0,    0]), C1( 120 [-1895, -3283, -3791, 1895, 3283, 1895,    0,    0,    0,    0,    0,    0]))",
+                "N1( 0.500, vec![ 0.500, -0.866,  1.000,  0.500,  0.866, -1.000,  0.000,  0.000,  0.000,  0.000,  0.000,  0.000], -0.866, vec![-0.289,  0.500, -0.577,  0.289,  0.500, -0.577,  0.000,  0.000,  0.000,  0.000,  0.000,  0.000]: C0( -60 [-1895, -3283, 1895, 1895, 3283, -3791,    0,    0,    0,    0,    0,    0]), C1(-120 [1895, -3283, 3791, -1895, 3283, -1895,    0,    0,    0,    0,    0,    0]))",
               ],
         ]);
     }
@@ -642,5 +700,98 @@ pub mod tests {
         ];
         let scene = Scene::new(shapes);
         assert_eq!(scene.components.len(), 4);
+    }
+
+    fn verify_singleton_component(component: &Component<f64>, num_child_components: usize, area: f64) {
+        assert_eq!(component.regions.len(), 1);
+        let region = component.regions[0].clone();
+        assert_eq!(region.child_components.len(), num_child_components);
+        assert_eq!(component.hull.area(), area);
+    }
+
+    #[test]
+    fn containment_2() {
+        let shapes = vec![
+            xyrr(0., 0., 1., 1.,),
+            xyrr(0., 0., 2., 2.,),
+        ];
+        fn check(shapes: Vec<Shape<f64>>) {
+            let scene = Scene::new(shapes);
+            assert_eq!(scene.components.len(), 2);
+            for component in &scene.components {
+                assert_eq!(component.nodes.len(), 1);
+                assert_eq!(component.edges.len(), 1);
+                assert_eq!(component.regions.len(), 1);
+            }
+            verify_singleton_component(&scene.components[0], 1, 4. * PI);
+            verify_singleton_component(&scene.components[1], 0, 1. * PI);
+        }
+        shapes.into_iter().permutations(2).for_each(|shapes| check(shapes.clone()));
+    }
+
+    #[test]
+    fn containment_3() {
+        let shapes = vec![
+            xyrr(0., 0., 1., 1.,),
+            xyrr(0., 0., 2., 2.,),
+            xyrr(0., 0., 3., 3.,),
+        ];
+        fn check(shapes: Vec<Shape<f64>>) {
+            let scene = Scene::new(shapes);
+            assert_eq!(scene.components.len(), 3);
+            for component in &scene.components {
+                assert_eq!(component.nodes.len(), 1);
+                assert_eq!(component.edges.len(), 1);
+                assert_eq!(component.regions.len(), 1);
+            }
+            verify_singleton_component(&scene.components[0], 1, 9. * PI);
+            verify_singleton_component(&scene.components[1], 1, 4. * PI);
+            verify_singleton_component(&scene.components[2], 0, 1. * PI);
+        }
+        shapes.into_iter().permutations(3).for_each(|shapes| check(shapes.clone()));
+    }
+
+    #[test]
+    fn containment_4() {
+        let shapes = vec![
+            xyrr(0., 0., 1., 1.,),
+            xyrr(0., 0., 2., 2.,),
+            xyrr(0., 0., 3., 3.,),
+            xyrr(0., 0., 4., 4.,),
+        ];
+        fn check(shapes: Vec<Shape<f64>>) {
+            let scene = Scene::new(shapes);
+            assert_eq!(scene.components.len(), 4);
+            for component in &scene.components {
+                assert_eq!(component.nodes.len(), 1);
+                assert_eq!(component.edges.len(), 1);
+                assert_eq!(component.regions.len(), 1);
+            }
+            verify_singleton_component(&scene.components[0], 1, 16. * PI);
+            verify_singleton_component(&scene.components[1], 1,  9. * PI);
+            verify_singleton_component(&scene.components[2], 1,  4. * PI);
+            verify_singleton_component(&scene.components[3], 0,  1. * PI);
+        }
+        shapes.into_iter().permutations(4).for_each(|shapes| check(shapes.clone()));
+    }
+
+    #[test]
+    fn containment_2_1() {
+        let shapes = vec![
+            xyrr(-1., 0., 2., 2.,),
+            xyrr( 1., 0., 2., 2.,),
+            xyrr( 0., 0., 0.5, 0.5,),
+        ];
+        let scene = Scene::new(shapes);
+        assert_eq!(scene.components.len(), 2);
+        let c0 = &scene.components[0];
+        c0.regions.iter().for_each(|r| {
+            if r.key == "01-" {
+                assert_eq!(r.child_components.len(), 1);
+                assert_eq!(r.child_components[0].borrow().key.0, "2");
+            } else {
+                assert_eq!(r.child_components.len(), 0);
+            }
+        });
     }
 }

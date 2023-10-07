@@ -31,6 +31,21 @@ impl<D: XyrrtArg> BCDEF<D> {
         xyrr.rotate(&self.t)
     }
 }
+impl BCDEF<f64> {
+    pub fn at_y(&self, y: f64) -> Vec<f64> {
+        let b = (self.b * y + self.d) / -2.;
+        let c = self.c * y * y + self.e * y + self.f;
+        let d = b * b - c;
+        if d < 0. {
+            vec![]
+        } else if d == 0. {
+            vec![b]
+        } else {
+            let d = d.sqrt();
+            vec![b - d, b + d]
+        }
+    }
+}
 impl<
     D
     : Clone

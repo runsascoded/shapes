@@ -34,6 +34,22 @@ impl XYRR<f64> {
             Box::new(move |e: XYRR<f64>| e.r.y),
         ]
     }
+    pub fn at_y(&self, y: f64) -> Vec<f64> {
+        let uy = (y - self.c.y) / self.r.y;
+        let uy2 = uy * uy;
+        if uy2 > 1. {
+            return vec![]
+        }
+        let ux1 = (1. - uy2).sqrt() * self.r.x;
+        let ux0 = -ux1;
+        let x0 = self.c.x + ux0 * self.r.y;
+        let x1 = self.c.x + ux1 * self.r.y;
+        if x0 != x1 {
+            vec![ x0, x1 ]
+        } else {
+            vec![ x0 ]
+        }
+    }
 }
 
 impl<D: RotateArg> XYRR<D> {
@@ -85,21 +101,22 @@ where R2<D>: CanProject<D, Output = R2<D>>,
         debug!("XYRR.unit_intersections: {}", self);
         let points = self.cdef().unit_intersections(&self);
         debug!("XYRR.unit_intersections: {}, points {:?}", self, points);
-        for point in &points {
+        points.into_iter().filter(|point| {
             let r = point.norm();
             let projected = point.apply(&self.projection());
             let self_r = projected.norm();
             let err = (-1. + self_r.clone().into()).abs();
             if err > 1e-2 {
                 if err > 0.1 {
-                    panic!("Bad unit_intersections: {}\npoint: {}\nunit.r: {}\nself.r: {}", self, point, r, self_r);
+                    warn!("Bad unit_intersections; dropping: {:?}\npoint: {}\nunit.r: {}\nself.r: {}", self, point, r, self_r);
+                    return false
                 } else {
-                    warn!("Bad unit_intersections: {}\npoint: {}\nunit.r: {}\nself.r: {}", self, point, r, self_r);
+                    warn!("Bad unit_intersections: {:?}\npoint: {}\nunit.r: {}\nself.r: {}", self, point, r, self_r);
                 }
             }
+            return true
             // debug!("  point: {}, unit.r: {}, self.r: {}", point, r, self_r);
-        }
-        points
+        }).collect()
     }
 }
 
@@ -368,6 +385,13 @@ mod tests {
             R2 { x: Dual::new( 0.000, vec![ 1.000,  0.000, -1.000,  0.000]),
                  y: Dual::new(-1.000, vec![ 0.000,  0.000,  0.000,  0.000]), },
         ], 1e-3);
+    }
+
+    #[test]
+    fn unit_intersections_webapp1() {
+        let xyrr = XYRR { c: R2 { x: 1.3345311198605432, y: 2.8430120216925644e-16 }, r: R2 { x: 2.362476333635918, y: 2.8207141903440474 } };
+        let points = xyrr.unit_intersections();
+        assert_eq!(points, vec![]);
     }
 
     #[test]

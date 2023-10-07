@@ -37,6 +37,9 @@ impl XYRRT<f64> {
             Box::new(move |e: XYRRT<f64>| e.t),
         ]
     }
+    pub fn at_y(&self, y: f64) -> Vec<f64> {
+        self.bcdef().at_y(y)
+    }
 }
 
 impl<D: RotateArg> XYRRT<D> {

@@ -78,7 +78,7 @@ mod tests {
     use std::{env, path::Path, f64::consts::PI};
     use polars::prelude::*;
 
-    use crate::{dual::Dual, duals::{is_one_hot, D, Z}, shape::{circle, InputSpec, xyrr}, to::To, transform::{CanTransform, Transform::Rotate}};
+    use crate::{dual::Dual, duals::{is_one_hot, D, Z}, scene::tests::ellipses4, shape::{circle, InputSpec, xyrr, xyrrt}, to::To, transform::{CanTransform, Transform::Rotate}, ellipses::xyrrt::XYRRT, r2::R2};
     use derive_more::Deref;
 
     use super::*;
@@ -392,8 +392,6 @@ mod tests {
         check(inputs, FIZZ_BUZZ_BAZZ, "fizz_buzz_bazz_circles", 0.7, 100)
     }
 
-    use crate::scene::tests::ellipses4;
-
     #[test]
     fn variant_callers() {
         let ellipses = ellipses4(2.);
@@ -434,5 +432,15 @@ mod tests {
             ( e3, vec![ D; 5 ] ),
         ];
         check(inputs, VARIANT_CALLERS, "variant_callers_diag", 0.5, 100)
+    }
+
+    #[test]
+    fn webapp_bug1() {
+        let inputs = vec![
+            ( xyrrt(0.7319754427924579, -2.1575408875986393e-16, 1.2448120381919545, 0.9798569195408114, 4.8268551130929626e-17), vec![ D; 5 ] ),
+            ( xyrrt(-1.5088966066610663, 1.0407479831736694e-16, 1.97886101672388, 2.178313681735663, -3.664600361442153e-17), vec![ D; 5 ] ),
+            ( xyrrt(2.2769211638686104, 1.2002706758532478e-16, 2.8997542067333413, 2.8817259204197674, 2.976941513813048e-17), vec![ D; 5 ] ),
+        ];
+        check(inputs, FIZZ_BUZZ_BAZZ, "webapp_bug1", 0.1, 100)
     }
 }

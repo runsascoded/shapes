@@ -101,7 +101,7 @@ impl Step {
             let set_idxs: Vec<usize> = key.chars().enumerate().filter(|(_, c)| *c != '*' && *c != '-').map(|(idx, _)| idx).collect();
             let n = set_idxs.len();
             let nf = n as f64;
-            let centroid: R2<Dual> = set_idxs.iter().map(|idx| sets[*idx].shape.center()).sum::<R2<Dual>>();
+            let centroid: R2<Dual> = set_idxs.iter().map(|idx| sets[*idx].borrow().shape.center()).sum::<R2<Dual>>();
             let centroid = R2 { x: centroid.x / nf, y: centroid.y / nf };
             let parents_key = key.replace('-', "*");
             let parent_regions_exist = errors.get(&parents_key).unwrap().actual_area.clone().filter(|a| !a.is_zero()).is_some();
@@ -120,7 +120,7 @@ impl Step {
                 let np = parents.len() as f64;
                 debug!("  {} parents: {}", np, parents.iter().map(|idx| format!("{}", idx)).collect::<Vec<String>>().join(", "));
                 for parent_idx in &parents {
-                    let center = scene.sets[*parent_idx].shape.center();
+                    let center = sets[*parent_idx].borrow().shape.center();
                     let distance = center.distance(&centroid);
                     if distance.is_zero() {
                         warn!("  missing region penalty: {}, parent {}, distance {}, skipping", key, parent_idx, &distance);
@@ -133,7 +133,7 @@ impl Step {
             } else {
                 set_idxs.iter().for_each(|idx| {
                     let set = &sets[*idx];
-                    let distance = set.shape.center().distance(&centroid);
+                    let distance = set.borrow().shape.center().distance(&centroid);
                     debug!("  missing region penalty: {}, shape {}, distance {}", key, idx, &distance);
                     total_disjoint_penalty += distance * target / nf;
                 });
@@ -160,15 +160,11 @@ impl Step {
         }
 
         // Take shapes back from `scene`
-        let shapes = scene.sets.into_iter().map(|s| s.shape).collect::<Vec<Shape<D>>>();
+        let shapes = sets.into_iter().map(|s| s.borrow().to_owned().shape).collect::<Vec<Shape<D>>>();
 
         debug!("all-in error: {:?}", error);
         Step { shapes, components, targets, total_area, errors, error }
     }
-
-    // pub fn shapes(&self) -> Vec<Shape<f64>> {
-    //     self.shapes.iter().map(|(s, _)| s.clone()).collect()
-    // }
 
     pub fn n(&self) -> usize {
         self.shapes.len()
