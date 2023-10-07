@@ -42,17 +42,31 @@ export function expand_targets(targets: any): any;
 * @returns {any}
 */
 export function xyrr_unit(xyrr: any): any;
+export interface Error {
+    key: string;
+    actual_area: Dual | null;
+    actual_frac: Dual;
+    target_area: number;
+    target_frac: number;
+    error: Dual;
+}
+
+export interface Step {
+    shapes: Shape<D>[];
+    components: Component[];
+    targets: Targets<number>;
+    total_area: Dual;
+    errors: Errors;
+    error: Dual;
+}
+
+export type Errors = Record<string, Error>;
+
 export type Shape<D> = { Circle: Circle<D> } | { XYRR: XYRR<D> } | { XYRRT: XYRRT<D> };
 
 export type Input = [Shape<number>, Duals];
 
 export type Duals = number[][];
-
-export interface XYRRT<D> {
-    c: R2<D>;
-    r: R2<D>;
-    t: D;
-}
 
 export interface XYRR<D> {
     c: R2<D>;
@@ -64,23 +78,22 @@ export interface Circle<D> {
     r: D;
 }
 
-export interface Dual {
-    v: number;
-    d: number[];
-}
-
 export interface Component {
+    key: string;
     sets: Set<number>[];
     points: Point[];
     edges: Edge[];
     regions: Region[];
+    container_idxs: number[];
+    hull: Region;
 }
 
 export interface Region {
     key: string;
     segments: Segment[];
     area: Dual;
-    container_idxs: number[];
+    container_set_idxs: number[];
+    child_component_keys: string[];
 }
 
 export interface Segment {
@@ -103,10 +116,25 @@ export interface Point {
     edge_idxs: number[];
 }
 
-export interface Set<D> {
-    idx: number;
-    children: number[];
-    shape: Shape<D>;
+export interface Model {
+    steps: Step[];
+    repeat_idx: number | null;
+    min_idx: number;
+    min_error: number;
+}
+
+export type D = Dual;
+
+export interface R2<D> {
+    x: D;
+    y: D;
+}
+
+export type Key = string;
+
+export interface Dual {
+    v: number;
+    d: number[];
 }
 
 export interface Targets<D> {
@@ -118,9 +146,10 @@ export interface Targets<D> {
 
 export type TargetsMap<D> = Record<string, D>;
 
-export interface R2<D> {
-    x: D;
-    y: D;
+export interface Set<D> {
+    idx: number;
+    child_component_keys: Key[];
+    shape: Shape<D>;
 }
 
 export interface Intersection<D> {
@@ -132,34 +161,11 @@ export interface Intersection<D> {
     t1: D;
 }
 
-export interface Error {
-    key: string;
-    actual_area: Dual | null;
-    actual_frac: Dual;
-    target_area: number;
-    target_frac: number;
-    error: Dual;
+export interface XYRRT<D> {
+    c: R2<D>;
+    r: R2<D>;
+    t: D;
 }
-
-export interface Step {
-    shapes: Shape<D>[];
-    components: Component[];
-    targets: Targets<number>;
-    total_area: Dual;
-    errors: Errors;
-    error: Dual;
-}
-
-export type Errors = Record<string, Error>;
-
-export interface Model {
-    steps: Step[];
-    repeat_idx: number | null;
-    min_idx: number;
-    min_error: number;
-}
-
-export type D = Dual;
 
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
