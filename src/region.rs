@@ -108,7 +108,7 @@ where Shape<f64>: From<Shape<D>>
         let mut cur_set_idxs: BTreeSet<usize> = BTreeSet::new();
         // debug!("Checking containment: region {}, p: {}, shapes {}, points_at_y: {:?}", self.key, p, all_shapes.keys().join(","), points_at_y);
         for (idx, (prv, cur)) in points_at_y.into_iter().tuple_windows().enumerate() {
-            let (set_idx, x, theta) = cur;
+            let (set_idx, x, _) = cur;
             if idx == 0 {
                 if p.x <= prv.1 {
                     // debug!("  point is outside first x");
@@ -121,10 +121,14 @@ where Shape<f64>: From<Shape<D>>
                     // debug!("  breaking between {} and {}: {:?} != {:?}", prv.1, x, cur_set_idxs, self.container_set_idxs);
                     return false;
                 }
-                if self.edges_for_set(prv.0).iter().find(|edge| edge.borrow().contains_theta(theta)).is_none() {
+                let prv_edges = self.edges_for_set(prv.0);
+                if prv_edges.iter().find(|edge| edge.borrow().contains_theta(prv.2)).is_none() {
+                    // debug!("  breaking between {} and {}: {} does not contain theta {}", prv.1, x, prv_edges.iter().map(|e| format!("{}", e.borrow())).join(","), prv.2);
                     return false
                 }
-                if self.edges_for_set(cur.0).iter().find(|edge| edge.borrow().contains_theta(theta)).is_none() {
+                let cur_edges = self.edges_for_set(cur.0);
+                if cur_edges.iter().find(|edge| edge.borrow().contains_theta(cur.2)).is_none() {
+                    // debug!("  breaking between {} and {}: {} does not contain theta {}", prv.1, x, cur_edges.iter().map(|e| format!("{}", e.borrow())).join(","), cur.2);
                     return false
                 }
                 return true

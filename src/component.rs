@@ -21,7 +21,6 @@ pub struct Component<D> {
     pub edges: Vec<E<D>>,
     pub container_set_idxs: BTreeSet<usize>,
     pub regions: Vec<Region<D>>,
-    pub container_regions: Vec<R<D>>,
     pub child_component_keys: BTreeSet<Key>,
     pub hull: Region<D>,
 }
@@ -100,7 +99,6 @@ where R2<D>: To<R2<f64>>,
                 nodes: vec![n.clone()],
                 edges: vec![e.clone()],
                 container_set_idxs: container_set_idxs.clone(),
-                container_regions: vec![],  // populated by `Scene`, once all `Component`s have been created
                 child_component_keys: BTreeSet::new(),  // populated by `Scene`, once all `Component`s have been created
                 regions: vec![ region.clone() ],
                 hull: Region {
@@ -180,7 +178,6 @@ where R2<D>: To<R2<f64>>,
             nodes,
             edges,
             container_set_idxs,
-            container_regions: vec![],  // populated by `Scene`, once all `Component`s have been created
             child_component_keys: BTreeSet::new(),  // populated by `Scene`, once all `Component`s have been created
             regions,
             hull,

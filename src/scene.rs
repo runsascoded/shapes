@@ -1,7 +1,7 @@
 use core::f64;
 use std::{cell::RefCell, rc::Rc, collections::{BTreeSet, BTreeMap}, ops::{Neg, Add, Sub, Mul, Div}};
 
-use log::{debug, info};
+use log::{debug, info, error};
 use ordered_float::OrderedFloat;
 
 use crate::{node::{N, Node}, contains::{Contains, ShapeContainsPoint}, distance::Distance, region::RegionArg, set::S, shape::Shape, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::{CanTransform, HasProjection, CanProject}, dual::Dual, to::To, math::deg::Deg, fmt::Fmt, component::{Component, self}, set::Set};
@@ -249,9 +249,7 @@ where
                             container_regions,
                         );
                     }
-                    // let container_region = container_regions[0];
                     container_regions[0].child_components.push(component_ptr.clone());
-                    // container_region
                 }
             }
         }
@@ -775,5 +773,25 @@ pub mod tests {
             verify_singleton_component(&scene.components[3], 0,  1. * PI);
         }
         shapes.into_iter().permutations(4).for_each(|shapes| check(shapes.clone()));
+    }
+
+    #[test]
+    fn containment_2_1() {
+        let shapes = vec![
+            xyrr(-1., 0., 2., 2.,),
+            xyrr( 1., 0., 2., 2.,),
+            xyrr( 0., 0., 0.5, 0.5,),
+        ];
+        let scene = Scene::new(shapes);
+        assert_eq!(scene.components.len(), 2);
+        let c0 = &scene.components[0];
+        c0.regions.iter().for_each(|r| {
+            if r.key == "01-" {
+                assert_eq!(r.child_components.len(), 1);
+                assert_eq!(r.child_components[0].borrow().key.0, "2");
+            } else {
+                assert_eq!(r.child_components.len(), 0);
+            }
+        });
     }
 }
