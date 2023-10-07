@@ -704,12 +704,18 @@ pub mod tests {
         assert_eq!(scene.components.len(), 4);
     }
 
+    fn verify_singleton_component(component: &Component<f64>, num_child_components: usize, area: f64) {
+        assert_eq!(component.regions.len(), 1);
+        let region = component.regions[0].clone();
+        assert_eq!(region.child_components.len(), num_child_components);
+        assert_eq!(component.hull.area(), area);
+    }
+
     #[test]
     fn containment_2() {
         let shapes = vec![
             xyrr(0., 0., 1., 1.,),
             xyrr(0., 0., 2., 2.,),
-            // xyrr(0., 0., 3., 3.,),
         ];
         fn check(shapes: Vec<Shape<f64>>) {
             let scene = Scene::new(shapes);
@@ -719,18 +725,10 @@ pub mod tests {
                 assert_eq!(component.edges.len(), 1);
                 assert_eq!(component.regions.len(), 1);
             }
-            let container = scene.components[0].clone();
-            let region = container.regions[0].clone();
-            assert_eq!(region.child_components.len(), 1);
-            assert_eq!(container.hull.area(), 4. * PI);
-
-            let container = scene.components[1].clone();
-            let region = container.regions[0].clone();
-            assert_eq!(region.child_components.len(), 0);
-            assert_eq!(container.hull.area(), PI);
+            verify_singleton_component(&scene.components[0], 1, 4. * PI);
+            verify_singleton_component(&scene.components[1], 0, 1. * PI);
         }
-        check(shapes.clone());
-        check(shapes.into_iter().rev().collect());
+        shapes.into_iter().permutations(2).for_each(|shapes| check(shapes.clone()));
     }
 
     #[test]
@@ -748,22 +746,34 @@ pub mod tests {
                 assert_eq!(component.edges.len(), 1);
                 assert_eq!(component.regions.len(), 1);
             }
-            let container = scene.components[0].clone();
-            let region = container.regions[0].clone();
-            assert_eq!(region.child_components.len(), 1);
-            assert_eq!(container.hull.area(), 9. * PI);
-
-            let container = scene.components[1].clone();
-            let region = container.regions[0].clone();
-            assert_eq!(region.child_components.len(), 1);
-            assert_eq!(container.hull.area(), 4. * PI);
-
-            let container = scene.components[2].clone();
-            let region = container.regions[0].clone();
-            assert_eq!(region.child_components.len(), 0);
-            assert_eq!(container.hull.area(), PI);
+            verify_singleton_component(&scene.components[0], 1, 9. * PI);
+            verify_singleton_component(&scene.components[1], 1, 4. * PI);
+            verify_singleton_component(&scene.components[2], 0, 1. * PI);
         }
-        // check(shapes);
         shapes.into_iter().permutations(3).for_each(|shapes| check(shapes.clone()));
+    }
+
+    #[test]
+    fn containment_4() {
+        let shapes = vec![
+            xyrr(0., 0., 1., 1.,),
+            xyrr(0., 0., 2., 2.,),
+            xyrr(0., 0., 3., 3.,),
+            xyrr(0., 0., 4., 4.,),
+        ];
+        fn check(shapes: Vec<Shape<f64>>) {
+            let scene = Scene::new(shapes);
+            assert_eq!(scene.components.len(), 4);
+            for component in &scene.components {
+                assert_eq!(component.nodes.len(), 1);
+                assert_eq!(component.edges.len(), 1);
+                assert_eq!(component.regions.len(), 1);
+            }
+            verify_singleton_component(&scene.components[0], 1, 16. * PI);
+            verify_singleton_component(&scene.components[1], 1,  9. * PI);
+            verify_singleton_component(&scene.components[2], 1,  4. * PI);
+            verify_singleton_component(&scene.components[3], 0,  1. * PI);
+        }
+        shapes.into_iter().permutations(4).for_each(|shapes| check(shapes.clone()));
     }
 }
