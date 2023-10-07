@@ -55,6 +55,7 @@ impl From<&region::Region<D>> for Region {
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
 pub struct Component {
+    pub key: String,
     pub sets: Vec<Set<f64>>,
     pub points: Vec<Point>,
     pub edges: Vec<Edge>,
@@ -85,6 +86,7 @@ impl Component {
         }).collect();
         let hull: Region = (&component.hull).into();
         Component {
+            key: component.key.0.clone(),
             sets,
             points,
             edges,
