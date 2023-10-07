@@ -4,7 +4,7 @@ use std::{cell::RefCell, rc::Rc, collections::{BTreeSet, BTreeMap}, ops::{Neg, A
 use log::{debug, info};
 use ordered_float::OrderedFloat;
 
-use crate::{node::{N, Node}, contains::Contains, distance::Distance, region::{RegionArg, RegionContainsArg}, set::S, shape::Shape, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::{CanTransform, HasProjection, CanProject}, dual::Dual, to::To, math::deg::Deg, fmt::Fmt, component::{Component, self}, set::Set};
+use crate::{node::{N, Node}, contains::{Contains, ShapeContainsPoint}, distance::Distance, region::RegionArg, set::S, shape::Shape, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::{CanTransform, HasProjection, CanProject}, dual::Dual, to::To, math::deg::Deg, fmt::Fmt, component::{Component, self}, set::Set};
 
 /// Collection of [`Shape`]s (wrapped in [`Set`]s), and segmented into connected [`Component`]s.
 #[derive(Clone, Debug)]
@@ -21,7 +21,7 @@ pub trait SceneD
 + Deg
 + Fmt
 + RegionArg
-+ RegionContainsArg
++ ShapeContainsPoint
 {}
 impl SceneD for f64 {}
 impl SceneD for Dual {}
@@ -48,7 +48,8 @@ impl SceneFloat<Dual> for f64 {}
 
 impl<D: SceneD> Scene<D>
 where
-    R2<D>: SceneR2<D>,
+    R2<D>: Into<R2<f64>> + SceneR2<D>,
+    Shape<f64>: From<Shape<D>>,
     Shape<D>: CanTransform<D, Output = Shape<D>> + HasProjection<D>,
     f64: SceneFloat<D>,
 {
@@ -221,18 +222,23 @@ where
         // let mut component_depths: BTreeMap<component::Key, usize> = BTreeMap::new();
         for component_ptr in component_ptrs.iter() {
             let key = &component_ptr.borrow().key;
-            let p = component_ptr.borrow().sets[0].borrow().shape.c();
+            let p: R2<f64> = component_ptr.borrow().sets[0].borrow().shape.c().into();
             // debug!("{}: {} at {}", component_idx, key, p);
             for container_component in &mut components {
                 // dbg!(children.clone());
                 if container_component.contains(key) {
                     container_component.child_component_keys.insert(key.clone());
                     // debug!("  {} contains {}, checking {} regions", container_component.idx, component_idx, container_component.regions.len());
+                    let container_shapes: BTreeMap<usize, Shape<f64>> = container_component.sets.iter().map(|s| {
+                        let idx = s.borrow().idx;
+                        let s = s.borrow().shape.clone().into();
+                        (idx, s)
+                    }).collect();
                     let mut container_regions: Vec<_> = container_component.regions.iter_mut().filter(|r| {
                         // let contains = r.contains(&p);
                         // debug!("  {} contains {}: {}", r.key, p, contains);
                         // contains
-                        r.contains(&p)
+                        r.contains(&p, &container_shapes)
                     }).collect();
                     if container_regions.len() != 1 {
                         panic!(
@@ -361,7 +367,7 @@ pub mod tests {
             (c2, vec![ D; 3 ]),
         ];
         let shapes = Shapes::from(inputs);
-        let scene = Scene::new(shapes.to());
+        let scene = Scene::<Dual>::new(shapes.to());
         assert_eq!(scene.components.len(), 1);
         let component = scene.components[0].clone();
 
@@ -757,6 +763,7 @@ pub mod tests {
             assert_eq!(region.child_components.len(), 0);
             assert_eq!(container.hull.area(), PI);
         }
+        // check(shapes);
         shapes.into_iter().permutations(3).for_each(|shapes| check(shapes.clone()));
     }
 }

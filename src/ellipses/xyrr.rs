@@ -34,6 +34,22 @@ impl XYRR<f64> {
             Box::new(move |e: XYRR<f64>| e.r.y),
         ]
     }
+    pub fn at_y(&self, y: f64) -> Vec<f64> {
+        let uy = (y - self.c.y) / self.r.y;
+        let uy2 = uy * uy;
+        if uy2 > 1. {
+            return vec![]
+        }
+        let ux1 = (1. - uy2).sqrt() * self.r.x;
+        let ux0 = -ux1;
+        let x0 = self.c.x + ux0 * self.r.y;
+        let x1 = self.c.x + ux1 * self.r.y;
+        if x0 != x1 {
+            vec![ x0, x1 ]
+        } else {
+            vec![ x0 ]
+        }
+    }
 }
 
 impl<D: RotateArg> XYRR<D> {

@@ -1,4 +1,4 @@
-use std::{fmt::Display, rc::Rc, cell::RefCell, collections::BTreeSet, ops::{Mul, Div, Sub}};
+use std::{fmt::Display, rc::Rc, cell::RefCell, collections::BTreeSet, ops::{Mul, Div, Sub}, f64::consts::TAU};
 
 use log::debug;
 
@@ -32,6 +32,11 @@ pub trait EdgeArg
 impl EdgeArg for f64 {}
 impl EdgeArg for Dual {}
 
+impl<D> Edge<D> {
+    pub fn set_idx(&self) -> usize {
+        self.set.borrow().idx
+    }
+}
 impl<D: EdgeArg> Edge<D> {
     pub fn secant_area(&self) -> D {
         let r2 = match &self.set.borrow().shape {
@@ -51,14 +56,20 @@ impl<D: EdgeArg> Edge<D> {
         }
         theta
     }
-    pub fn set_idx(&self) -> usize {
-        self.set.borrow().idx
-    }
     /// Return all shape indices that either contain this Edge, or which this Edge runs along the border of
     pub fn all_idxs(&self) -> BTreeSet<usize> {
         let mut idxs = self.container_set_idxs.clone();
         idxs.insert(self.set.borrow().idx);
         idxs
+    }
+}
+
+impl<D: Clone + Into<f64>> Edge<D> {
+    pub fn contains_theta(&self, theta: f64) -> bool {
+        let theta0: f64 = self.theta0.clone().into();
+        let theta1: f64 = self.theta1.clone().into();
+        let theta = if theta < theta0 { theta + TAU } else { theta };
+        return theta0 <= theta && theta <= theta1
     }
 }
 
