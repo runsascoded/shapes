@@ -2,7 +2,7 @@ use std::{fmt::{Formatter, Display, self}, ops::{Add, Sub}, iter::Sum, collectio
 
 use log::debug;
 
-use crate::{segment::Segment, intersection::Intersection, edge::{Edge, EdgeArg}, math::abs::{Abs, AbsArg}, r2::R2, to::To, dual::Dual, component::C, contains::{Contains, ShapeContainsPoint}, transform::{CanProject, HasProjection}, shape::Shape, theta_points::{ThetaPoints, ThetaPointsArg}};
+use crate::{segment::Segment, edge::{Edge, EdgeArg}, math::abs::{Abs, AbsArg}, r2::R2, to::To, dual::Dual, component::C, contains::{Contains, ShapeContainsPoint}, transform::{CanProject, HasProjection}, shape::Shape, theta_points::{ThetaPoints, ThetaPointsArg}};
 
 #[derive(Debug, Clone)]
 pub struct Region<D> {

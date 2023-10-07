@@ -1,5 +1,6 @@
 use std::{rc::Rc, cell::RefCell, collections::{BTreeSet, BTreeMap}};
 
+use log::debug;
 use serde::{Serialize, Deserialize};
 use tsify::Tsify;
 
@@ -7,6 +8,7 @@ use crate::{shape::Shape, zero::Zero, component::{Component, self}, dual::Dual};
 
 pub type S<D> = Rc<RefCell<Set<D>>>;
 
+/// Wrapper around a [`Shape`] within a [`Scene`]; stores [`component::Key`]s of components that are contained within this [`Shape`].
 #[derive(Clone, Debug, Serialize, Deserialize, Tsify)]
 pub struct Set<D> {
     pub idx: usize,
@@ -37,7 +39,7 @@ impl<D> Set<D> {
             shape,
         }
     }
-    /// Only store direct descendents in `children`.
+    /// Only store direct descendents in `child_component_keys`.
     pub fn prune_children(&mut self, components: &BTreeMap<component::Key, Component<D>>) {
         self.child_component_keys = self.descendent_depths(components).into_iter().filter(|(_, v)| *v == 1).map(|(k, _)| k).collect();
     }
@@ -49,7 +51,13 @@ impl<D> Set<D> {
             }
             let child_component = &components[child_component_key];
             for child_set in &child_component.sets {
-                let cur_depths: BTreeMap<component::Key, usize> = child_set.borrow().descendent_depths(components).into_iter().map(|(k, v)| (k, v + 1)).collect();
+                let cur_depths: BTreeMap<component::Key, usize> =
+                    child_set
+                    .borrow()
+                    .descendent_depths(components)
+                    .into_iter()
+                    .map(|(k, v)| (k, v + 1))
+                    .collect();
                 for (k, v) in &cur_depths {
                     if !descendent_depths.contains_key(k) || descendent_depths[k] < *v {
                         descendent_depths.insert(k.clone(), *v);
@@ -57,6 +65,7 @@ impl<D> Set<D> {
                 }
             }
         }
+        // debug!("Set {}: children {:?}, descendent depths: {:?}", self.idx, self.child_component_keys, descendent_depths);
         descendent_depths
     }
 }

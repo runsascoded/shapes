@@ -11,7 +11,7 @@ pub type C<D> = Rc<RefCell<Component<D>>>;
 #[derive(Clone, Debug, derive_more::Deref, derive_more::Display, Eq, derive_more::From, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Tsify)]
 pub struct Key(pub String);
 
-/// Connected component of a graph of sets
+/// Connected component within a [`Scene`] of [`Set`]s
 #[derive(Clone, Debug)]
 pub struct Component<D> {
     pub key: Key,
@@ -165,7 +165,7 @@ where R2<D>: To<R2<f64>>,
             key: String::new(),
             segments: hull_segments,
             container_set_idxs: container_set_idxs.iter().cloned().collect(),
-            child_components: vec![],  // populated by `Scene`, once all `Component`s have been created
+            child_components: vec![],  // not populated/relevant, a `hull` is a special Region (TODO: give it its own type?)// populated by `Scene`, once all `Component`s have been created
         };
 
         let total_expected_visits = edges.iter().map(|e| e.borrow().expected_visits()).sum::<usize>();
@@ -437,7 +437,4 @@ impl<D> Component<D> {
     pub fn contains(&self, key: &Key) -> bool {
         self.sets.iter().any(|set| set.borrow().child_component_keys.contains(key))
     }
-    // pub fn child_component_keys(&self) -> BTreeSet<Key> {
-        // self.sets.iter().flat_map(|set| set.borrow().child_component_keys.clone()).collect()
-    // }
 }
