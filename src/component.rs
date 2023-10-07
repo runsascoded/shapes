@@ -1,21 +1,30 @@
 use std::{collections::{BTreeSet, BTreeMap}, cell::RefCell, rc::Rc, f64::consts::TAU, fmt};
 
 use log::{debug, error};
+use serde::{Serialize, Deserialize};
+use tsify::Tsify;
 
-use crate::{node::{N, Node}, math::deg::Deg, edge::{E, self, EdgeArg, Edge}, contains::{Contains, ShapeContainsPoint}, region::{Region, RegionArg}, segment::Segment, set::S, theta_points::{ThetaPoints, ThetaPointsArg}, r2::R2, to::To, zero::Zero, fmt::Fmt};
+use crate::{node::{N, Node}, math::deg::Deg, edge::{E, self, EdgeArg, Edge}, contains::{Contains, ShapeContainsPoint}, region::{Region, RegionArg, R}, segment::Segment, set::S, theta_points::{ThetaPoints, ThetaPointsArg}, r2::R2, to::To, zero::Zero, fmt::Fmt};
 
 pub type C<D> = Rc<RefCell<Component<D>>>;
+
+#[derive(Clone, Debug, derive_more::Deref, derive_more::Display, Eq, derive_more::From, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Tsify)]
+pub struct Key(pub String);
 
 /// Connected component of a graph of sets
 #[derive(Clone, Debug)]
 pub struct Component<D> {
+    pub key: Key,
     pub set_idxs: Vec<usize>,
     pub sets: Vec<S<D>>,
     pub nodes: Vec<N<D>>,
     pub edges: Vec<E<D>>,
-    pub container_idxs: BTreeSet<usize>,
+    pub container_set_idxs: BTreeSet<usize>,
     pub regions: Vec<Region<D>>,
+    pub container_regions: Vec<R<D>>,
+    pub child_component_keys: BTreeSet<Key>,
     pub hull: Region<D>,
+    pub depth: Option<i64>,
 }
 
 impl<D: Deg + EdgeArg + fmt::Debug + Fmt + ShapeContainsPoint + ThetaPointsArg + Zero> Component<D>
@@ -30,11 +39,12 @@ where R2<D>: To<R2<f64>>,
     ) -> Component<D> {
         debug!("Making component: {:?}", set_idxs);
         let component_sets = sets.into_iter().filter(|set| set_idxs.contains(&set.borrow().idx)).cloned().collect();
+        let key: Key = set_idxs.iter().map(|i| i.to_string()).collect::<Vec<String>>().join("").into();
         let mut set_idxs_iter = set_idxs.iter().map(|i| unconnected_containers[*i].clone()).enumerate();
-        let component_container_idxs = set_idxs_iter.next().unwrap().1;
+        let container_set_idxs = set_idxs_iter.next().unwrap().1;
         for (jdx, containers) in set_idxs_iter {
-            if component_container_idxs != containers {
-                panic!("Expected all sets to share the same container_idxs, but found {}: {:?} vs. {}: {:?}", 0, component_container_idxs, jdx, containers);
+            if container_set_idxs != containers {
+                panic!("Expected all sets to share the same container_set_idxs, but found {}: {:?} vs. {}: {:?}", 0, container_set_idxs, jdx, containers);
             }
         }
 
@@ -60,41 +70,47 @@ where R2<D>: To<R2<f64>>,
                 node1: n.clone(),
                 theta0: zero,
                 theta1: tau.clone(),
-                container_idxs: component_container_idxs.clone(),
+                container_set_idxs: container_set_idxs.clone(),
                 is_component_boundary: true,
                 visits: 0,
             };
             let e = Rc::new(RefCell::new(edge));
-            let mut key = String::new();
-            for i in 0..num_sets {
-                if i == set_idx || component_container_idxs.contains(&i) {
-                    key += &i.to_string();
-                } else {
-                    key += "-";
+            let region = {
+                let mut key = String::new();
+                for i in 0..num_sets {
+                    if i == set_idx || container_set_idxs.contains(&i) {
+                        key += &i.to_string();
+                    } else {
+                        key += "-";
+                    }
                 }
-            }
-            let mut container_idxs = component_container_idxs.clone();
-            container_idxs.insert(set_idx);
-            let region = Region {
-                key,
-                segments: vec![ Segment { edge: e.clone(), fwd: true } ],
-                container_idxs: container_idxs.clone(),
-                children: vec![],
+                let mut region_container_set_idxs = container_set_idxs.clone();  // TODO: shadow?
+                region_container_set_idxs.insert(set_idx);
+                Region {
+                    key,
+                    segments: vec![ Segment { edge: e.clone(), fwd: true } ],
+                    container_set_idxs: region_container_set_idxs.clone(),
+                    child_components: vec![],  // populated by `Scene`, once all `Component`s have been created
+                }
             };
             node.add_edge(e.clone());
             let component = Component {
+                key,
                 set_idxs: vec![set_idx],
                 sets: component_sets,
                 nodes: vec![n.clone()],
                 edges: vec![e.clone()],
-                container_idxs: component_container_idxs,
+                container_set_idxs: container_set_idxs.clone(),
+                container_regions: vec![],  // populated by `Scene`, once all `Component`s have been created
+                child_component_keys: BTreeSet::new(),  // populated by `Scene`, once all `Component`s have been created
                 regions: vec![ region.clone() ],
                 hull: Region {
                     key: String::new(),
                     segments: vec![ Segment { edge: e.clone(), fwd: true } ],
-                    container_idxs: BTreeSet::new(),
-                    children: vec![],
+                    container_set_idxs,
+                    child_components: vec![],  // not populated/relevant, a `hull` is a special Region (TODO: give it its own type?)
                 },
+                depth: None,
             };
             debug!("singleton component: {}", set_idx);
             debug!("  node: {}", node);
@@ -117,7 +133,7 @@ where R2<D>: To<R2<f64>>,
             .collect();
         nodes.sort_by_cached_key(|n| n.borrow().idx);
         debug!("Connected component: {}", set_idxs.iter().map(|i| i.to_string()).collect::<Vec<String>>().join(", "));
-        let edges = Component::edges(&set_idxs, &nodes_by_set, &sets, &component_container_idxs);
+        let edges = Component::edges(&set_idxs, &nodes_by_set, &sets, &container_set_idxs);
 
         let first_hull_edge = edges.iter().find(|e| e.borrow().is_component_boundary).expect(
             format!(
@@ -150,23 +166,27 @@ where R2<D>: To<R2<f64>>,
         let hull = Region {
             key: String::new(),
             segments: hull_segments,
-            container_idxs: component_container_idxs.iter().cloned().collect(),
-            children: vec![],
+            container_set_idxs: container_set_idxs.iter().cloned().collect(),
+            child_components: vec![],  // populated by `Scene`, once all `Component`s have been created
         };
 
         let total_expected_visits = edges.iter().map(|e| e.borrow().expected_visits()).sum::<usize>();
-        let regions = Component::regions(&edges, num_sets, total_expected_visits, &component_container_idxs);
+        let regions = Component::regions(&edges, num_sets, total_expected_visits, &container_set_idxs);
         // let total_visits = edges.iter().map(|e| e.borrow().visits).sum::<usize>();
 
         // debug!("Made component: {:?}, {:?}", set_idxs, sets);
         Component {
+            key,
             set_idxs: set_idxs.clone(),
             sets: component_sets,
             nodes,
             edges,
-            container_idxs: component_container_idxs,
+            container_set_idxs,
+            container_regions: vec![],  // populated by `Scene`, once all `Component`s have been created
+            child_component_keys: BTreeSet::new(),  // populated by `Scene`, once all `Component`s have been created
             regions,
             hull,
+            depth: None,
         }
     }
     pub fn edges(
@@ -210,7 +230,7 @@ where R2<D>: To<R2<f64>>,
                     set: set.clone(),
                     node0: cur_node, node1: nxt_node,
                     theta0: cur_theta, theta1: nxt_theta,
-                    container_idxs,
+                    container_set_idxs: container_idxs,
                     is_component_boundary,
                     visits: 0,
                 }));
@@ -352,8 +372,8 @@ where R2<D>: To<R2<f64>>,
                 let region = Region {
                     key,
                     segments: segments.clone(),
-                    container_idxs: container_idxs.iter().cloned().collect(),
-                    children: vec![],
+                    container_set_idxs: container_idxs.iter().cloned().collect(),
+                    child_components: vec![],
                 };
                 regions.push(region);
             }
@@ -417,7 +437,10 @@ where R2<D>: To<R2<f64>>,
 }
 
 impl<D> Component<D> {
-    pub fn children(&self) -> BTreeSet<usize> {
-        self.sets.iter().flat_map(|set| set.borrow().children.clone()).collect()
+    pub fn contains(&self, key: &Key) -> bool {
+        self.sets.iter().any(|set| set.borrow().child_component_keys.contains(key))
     }
+    // pub fn child_component_keys(&self) -> BTreeSet<Key> {
+        // self.sets.iter().flat_map(|set| set.borrow().child_component_keys.clone()).collect()
+    // }
 }

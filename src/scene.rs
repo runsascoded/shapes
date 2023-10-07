@@ -1,10 +1,10 @@
 use core::f64;
-use std::{cell::RefCell, rc::Rc, collections::BTreeSet, ops::{Neg, Add, Sub, Mul, Div}};
+use std::{cell::RefCell, rc::Rc, collections::{BTreeSet, BTreeMap}, ops::{Neg, Add, Sub, Mul, Div}};
 
 use log::{debug, info};
 use ordered_float::OrderedFloat;
 
-use crate::{node::{N, Node}, contains::Contains, distance::Distance, region::{RegionArg, RegionContainsArg}, set::S, shape::Shape, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::{CanTransform, HasProjection, CanProject}, dual::Dual, to::To, math::deg::Deg, fmt::Fmt, component::Component, set::Set};
+use crate::{node::{N, Node}, contains::Contains, distance::Distance, region::{RegionArg, RegionContainsArg}, set::S, shape::Shape, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::{CanTransform, HasProjection, CanProject}, dual::Dual, to::To, math::deg::Deg, fmt::Fmt, component::{Component, self}, set::Set};
 
 #[derive(Clone, Debug)]
 pub struct Scene<D> {
@@ -203,39 +203,81 @@ where
             .map(|component_idxs| Component::new(component_idxs, &unconnected_containers, &nodes_by_shape, &set_ptrs, num_shapes))
             .collect();
 
+        let components_map = components.iter().map(|c| (c.key.clone(), c.clone())).collect::<BTreeMap<_, _>>();
+
         let component_ptrs = components.iter().map(|c| Rc::new(RefCell::new(c.clone()))).collect::<Vec<_>>();
-        for (component_idx, component) in components.iter().enumerate() {
-            for container_idx in &component.container_idxs {
-                set_ptrs[*container_idx].borrow_mut().children.insert(component_idx);
+        for component in components.iter() {
+            for container_idx in &component.container_set_idxs {
+                set_ptrs[*container_idx].borrow_mut().child_component_keys.insert(component.key.clone());
             }
         }
         for set in &mut sets {
-            set.prune_children(&components);
+            set.prune_children(&components_map);
         }
 
-        for (component_idx, component_ptr) in component_ptrs.iter().enumerate() {
-            let key = (0..num_shapes).map(|i| {
-                if component_ptr.borrow().container_idxs.contains(&i) {
-                    i.to_string()
-                } else {
-                    "-".to_string()
-                }
-            }).collect::<String>();
+        // let mut component_depths: BTreeMap<component::Key, usize> = BTreeMap::new();
+        for component_ptr in component_ptrs.iter() {
+            let key = &component_ptr.borrow().key;
             let p = component_ptr.borrow().sets[0].borrow().shape.c();
+            // debug!("{}: {} at {}", component_idx, key, p);
             for container_component in &mut components {
-                if container_component.children().contains(&component_idx) {
-                    container_component.regions.iter_mut().filter(|r| r.key == key && r.contains(&p)).for_each(|r| {
-                        r.children.push(component_ptr.clone());
-                    });
-                    break;
+                // dbg!(children.clone());
+                if container_component.contains(key) {
+                    container_component.child_component_keys.insert(key.clone());
+                    // debug!("  {} contains {}, checking {} regions", container_component.idx, component_idx, container_component.regions.len());
+                    let mut container_regions: Vec<_> = container_component.regions.iter_mut().filter(|r| {
+                        // let contains = r.contains(&p);
+                        // debug!("  {} contains {}: {}", r.key, p, contains);
+                        r.contains(&p)
+                    }).collect();
+                    if container_regions.len() != 1 {
+                        panic!(
+                            "Expected 1 container region for component {:?} containing {:?}, got {}: {:?}",
+                            container_component.key,
+                            component_ptr.borrow().key,
+                            container_regions.len(),
+                            container_regions,
+                        );
+                    }
+                    // let container_region = container_regions[0];
+                    container_regions[0].child_components.push(component_ptr.clone());
+                    // container_region
                 }
             }
         }
+        Scene::compute_component_depths(&mut components);
+        components.sort_by_cached_key(|c| -c.depth.unwrap());
         Scene { sets, components, }
     }
 
+    pub fn compute_component_depths(components: &mut Vec<Component<D>>) {
+        let components_map = components.iter().map(|c| (c.key.clone(), c.clone())).collect::<BTreeMap<_, _>>();
+        for component in &mut *components {
+            let depth = Scene::compute_component_depth(component, &components_map);
+            debug!("component {}: depth {}", component.key, depth);
+            component.depth = Some(depth);
+        }
+    }
+
+    pub fn compute_component_depth(component: &Component<D>, components_map: &BTreeMap<component::Key, Component<D>>) -> i64 {
+        match component.depth {
+            Some(depth) => depth,
+            None => {
+                if component.child_component_keys.is_empty() {
+                    0
+                } else {
+                    component.child_component_keys.iter().map(|key| {
+                        let child_component = components_map.get(key).unwrap();
+                        let child_depth = Scene::compute_component_depth(child_component, components_map);
+                        child_depth + 1
+                    }).max().unwrap()
+                }
+            }
+        }
+    }
+
     pub fn total_area(&self) -> D {
-        self.components.iter().filter(|c| c.container_idxs.is_empty()).map(|c| c.area()).sum()
+        self.components.iter().filter(|c| c.container_set_idxs.is_empty()).map(|c| c.area()).sum()
     }
 
     pub fn area(&self, key: &String) -> Option<D> {
@@ -287,7 +329,7 @@ where
 
 #[cfg(test)]
 pub mod tests {
-    use std::{collections::BTreeMap, env, fmt::Display};
+    use std::{collections::BTreeMap, env, fmt::Display, f64::consts::PI};
 
     use log::debug;
 
@@ -642,5 +684,30 @@ pub mod tests {
         ];
         let scene = Scene::new(shapes);
         assert_eq!(scene.components.len(), 4);
+    }
+
+    #[test]
+    fn containment() {
+        let shapes = vec![
+            xyrr(0. , 0., 1., 1.,),
+            xyrr(0.5, 0., 2., 2.,),
+            // xyrr(0., 0., 3., 3.,),
+        ];
+        let scene = Scene::new(shapes);
+        assert_eq!(scene.components.len(), 2);
+        for component in &scene.components {
+            assert_eq!(component.nodes.len(), 1);
+            assert_eq!(component.edges.len(), 1);
+            assert_eq!(component.regions.len(), 1);
+        }
+        let container = scene.components[0].clone();
+        let region = container.regions[0].clone();
+        assert_eq!(region.child_components.len(), 1);
+        assert_eq!(container.hull.area(), 4. * PI);
+
+        let container = scene.components[1].clone();
+        let region = container.regions[0].clone();
+        assert_eq!(region.child_components.len(), 0);
+        assert_eq!(container.hull.area(), PI);
     }
 }

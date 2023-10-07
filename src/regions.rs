@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use serde::{Serialize, Deserialize};
 use tsify::Tsify;
 
-use crate::{dual::{Dual, D}, r2::R2, component, set::Set};
+use crate::{dual::{Dual, D}, r2::R2, component, set::Set, region};
 
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
@@ -34,7 +34,23 @@ pub struct Region {
     pub key: String,
     pub segments: Vec<Segment>,
     pub area: Dual,
-    pub container_idxs: Vec<usize>,
+    pub container_set_idxs: Vec<usize>,
+    pub child_component_keys: Vec<String>,
+}
+
+impl From<&region::Region<D>> for Region {
+    fn from(region: &region::Region<D>) -> Self {
+        Region {
+            key: region.key.clone(),
+            segments: region.segments.iter().map(|s| Segment {
+                edge_idx: s.edge.borrow().idx,
+                fwd: s.fwd,
+            }).collect(),
+            area: region.area(),
+            container_set_idxs: region.container_set_idxs.clone().into_iter().collect(),
+            child_component_keys: region.child_components.iter().map(|c| c.borrow().key.0.clone()).collect(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
@@ -44,6 +60,7 @@ pub struct Component {
     pub edges: Vec<Edge>,
     pub regions: Vec<Region>,
     pub container_idxs: Vec<usize>,
+    pub hull: Region,
 }
 
 impl Component {
@@ -59,24 +76,21 @@ impl Component {
             node1_idx: e.borrow().node1.borrow().idx,
             theta0: e.borrow().theta0.v(),
             theta1: e.borrow().theta1.v(),
-            container_idxs: e.borrow().container_idxs.clone(),
+            container_idxs: e.borrow().container_set_idxs.clone(),
             is_component_boundary: e.borrow().is_component_boundary,
         }).collect();
-        let regions = component.regions.iter().map(|r| Region {
-            key: r.key.clone(),
-            segments: r.segments.iter().map(|s| Segment {
-                edge_idx: s.edge.borrow().idx,
-                fwd: s.fwd,
-            }).collect(),
-            area: r.area(),
-            container_idxs: r.container_idxs.clone().into_iter().collect(),
+        let regions: Vec<Region> = component.regions.iter().map(|r| {
+            let region: Region = r.into();
+            region
         }).collect();
+        let hull: Region = (&component.hull).into();
         Component {
             sets,
             points,
             edges,
             regions,
-            container_idxs: component.container_idxs.clone().into_iter().collect(),
+            container_idxs: component.container_set_idxs.clone().into_iter().collect(),
+            hull,
         }
     }
 }
