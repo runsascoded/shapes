@@ -24,7 +24,6 @@ pub struct Component<D> {
     pub container_regions: Vec<R<D>>,
     pub child_component_keys: BTreeSet<Key>,
     pub hull: Region<D>,
-    pub depth: Option<i64>,
 }
 
 impl<D: Deg + EdgeArg + fmt::Debug + Fmt + ShapeContainsPoint + ThetaPointsArg + Zero> Component<D>
@@ -110,7 +109,6 @@ where R2<D>: To<R2<f64>>,
                     container_set_idxs,
                     child_components: vec![],  // not populated/relevant, a `hull` is a special Region (TODO: give it its own type?)
                 },
-                depth: None,
             };
             debug!("singleton component: {}", set_idx);
             debug!("  node: {}", node);
@@ -186,7 +184,6 @@ where R2<D>: To<R2<f64>>,
             child_component_keys: BTreeSet::new(),  // populated by `Scene`, once all `Component`s have been created
             regions,
             hull,
-            depth: None,
         }
     }
     pub fn edges(

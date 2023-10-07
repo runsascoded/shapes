@@ -245,32 +245,41 @@ where
                 }
             }
         }
-        Scene::compute_component_depths(&mut components);
-        components.sort_by_cached_key(|c| -c.depth.unwrap());
+        let component_depths_map = Scene::compute_component_depths(&mut components);
+        components.sort_by_cached_key(|c| -component_depths_map.get(&c.key).unwrap());
         Scene { sets, components, }
     }
 
-    pub fn compute_component_depths(components: &mut Vec<Component<D>>) {
+    pub fn compute_component_depths(components: &mut Vec<Component<D>>) -> BTreeMap<component::Key, i64> {
         let components_map = components.iter().map(|c| (c.key.clone(), c.clone())).collect::<BTreeMap<_, _>>();
+        let mut component_depths_map = BTreeMap::new();
         for component in &mut *components {
-            let depth = Scene::compute_component_depth(component, &components_map);
+            let depth = Scene::compute_component_depth(component, &components_map, &mut component_depths_map);
             debug!("component {}: depth {}", component.key, depth);
-            component.depth = Some(depth);
+            // component.depth = Some(depth);
         }
+        component_depths_map
     }
 
-    pub fn compute_component_depth(component: &Component<D>, components_map: &BTreeMap<component::Key, Component<D>>) -> i64 {
-        match component.depth {
-            Some(depth) => depth,
+    pub fn compute_component_depth(
+        component: &Component<D>,
+        components_map: &BTreeMap<component::Key, Component<D>>,
+        component_depths_map: &mut BTreeMap<component::Key, i64>,
+    ) -> i64 {
+        match component_depths_map.get(&component.key) {
+            Some(depth) => depth.clone(),
             None => {
                 if component.child_component_keys.is_empty() {
+                    component_depths_map.insert(component.key.clone(), 0);
                     0
                 } else {
-                    component.child_component_keys.iter().map(|key| {
+                    let depth = component.child_component_keys.iter().map(|key| {
                         let child_component = components_map.get(key).unwrap();
-                        let child_depth = Scene::compute_component_depth(child_component, components_map);
+                        let child_depth = Scene::compute_component_depth(child_component, components_map, component_depths_map);
                         child_depth + 1
-                    }).max().unwrap()
+                    }).max().unwrap();
+                    component_depths_map.insert(component.key.clone(), depth);
+                    depth
                 }
             }
         }
