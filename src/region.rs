@@ -95,19 +95,24 @@ where
 {
     pub fn contains(&self, p: &R2<D>) -> bool {
         for segment in &self.segments {
-            let set = segment.edge.borrow().set.clone();
-            let set_contains_region = self.container_set_idxs.contains(&set.borrow().idx);
-            let shape = &set.borrow().shape;
-            let set_contains_point = shape.contains(p);
-            // debug!("  region {} vs point {}: set_contains_region: {}, set_contains_point: {}", self.key, p, set_contains_region, set_contains_point);
-            if set_contains_region != set_contains_point {
+            let edge = segment.edge.clone();
+            let edge_set = edge.borrow().set.clone();
+            let edge_set_contains_region = self.container_set_idxs.contains(&edge_set.borrow().idx);
+            let shape = &edge_set.borrow().shape;
+            let edge_set_contains_point = shape.contains(p);
+            // debug!(
+                // "  region {}: segment {} vs point {}: edge_set_contains_region: {}, edge_set_contains_point: {}",
+                // self.key, segment, p,
+                // edge_set_contains_region, edge_set_contains_point,
+            // );
+            if edge_set_contains_region != edge_set_contains_point {
                 return false;
             }
-            let start = segment.start().borrow().p.clone();
-            let end = segment.end().borrow().p.clone();
+            let start = edge.borrow().node0.borrow().p.clone();
+            let end = edge.borrow().node1.borrow().p.clone();
             let start_theta: f64 = shape.theta(&start).into();
             let mut end_theta: f64 = shape.theta(&end).into();
-            if start_theta == end_theta {
+            if start_theta >= end_theta {
                 end_theta += TAU;
             }
             let mut theta: f64 = shape.theta(p).into();
