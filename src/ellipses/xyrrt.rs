@@ -38,6 +38,8 @@ impl XYRRT<f64> {
     pub fn at_y(&self, y: f64) -> Vec<f64> {
         self.bcdef().at_y(y)
     }
+    pub fn names(&self) -> [String; 5] { Self::getters().map(|g| g.name).into() }
+    pub fn vals(&self) -> [f64; 5] { [ self.c.x, self.c.y, self.r.x, self.r.y, self.t ] }
 }
 
 impl<D: RotateArg> XYRRT<D> {

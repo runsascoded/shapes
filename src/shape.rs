@@ -80,6 +80,14 @@ impl<D> Shape<D> {
 }
 
 impl Shape<f64> {
+    pub fn from_coords(coords: Vec<(&str, f64)>) -> Shape<f64> {
+        match coords.as_slice() {
+            [ ("cx", cx), ("cy", cy), ("r", r) ] => circle(*cx, *cy, *r),
+            [ ("cx", cx), ("cy", cy), ("rx", rx), ("ry", ry) ] => xyrr(*cx, *cy, *rx, *ry),
+            [ ("cx", cx), ("cy", cy), ("rx", rx), ("ry", ry), ("t", t) ] => xyrrt(*cx, *cy, *rx, *ry, *t),
+            _ => panic!("Unrecognized coord keys: {:?}", coords),
+        }
+    }
     pub fn dual(&self, duals: &Duals) -> Shape<D> {
         match self {
             Shape::Circle(c) => Shape::Circle(c.dual(duals)),
@@ -98,6 +106,20 @@ impl Shape<f64> {
             vec![]
         } else {
             xs
+        }
+    }
+    pub fn names(&self) -> Vec<String> {
+        match self {
+            Shape::Circle(c) => c.names().to_vec(),
+            Shape::XYRR(e) => e.names().to_vec(),
+            Shape::XYRRT(e) => e.names().to_vec(),
+        }
+    }
+    pub fn vals(&self) -> Vec<f64> {
+        match self {
+            Shape::Circle(c) => c.vals().to_vec(),
+            Shape::XYRR(e) => e.vals().to_vec(),
+            Shape::XYRRT(e) => e.vals().to_vec(),
         }
     }
 }

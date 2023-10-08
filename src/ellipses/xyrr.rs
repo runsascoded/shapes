@@ -48,6 +48,8 @@ impl XYRR<f64> {
             vec![ x0 ]
         }
     }
+    pub fn names(&self) -> [String; 4] { Self::getters().map(|g| g.name).into() }
+    pub fn vals(&self) -> [f64; 4] { [ self.c.x, self.c.y, self.r.x, self.r.y ] }
 }
 
 impl<D: RotateArg> XYRR<D> {
