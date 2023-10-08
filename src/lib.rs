@@ -18,6 +18,7 @@ pub mod float_vec;
 pub mod float_wrap;
 pub mod fmt;
 pub mod gap;
+pub mod history;
 pub mod intersect;
 pub mod intersection;
 pub mod node;

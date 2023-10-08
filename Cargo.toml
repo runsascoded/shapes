@@ -15,7 +15,7 @@ log = "0.4.20"
 nalgebra = { version = "0.32.3" }
 num-dual = { version = "0.7.1" }
 num-traits = "0.2.16"
-ordered-float = "3.9.1"
+ordered-float = "4.1.0"
 roots = "0.0.8"
 serde = { version = "1.0.183", features = ["derive"] }
 serde-wasm-bindgen = "0.6.0"
