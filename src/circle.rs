@@ -6,19 +6,16 @@ use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 use crate::{
     dual::{D, Dual},
-    r2::R2, rotate::{Rotate as _Rotate, RotateArg}, shape::{Duals, Shape, Shapes}, transform::{Projection, CanTransform}, transform::Transform::{Rotate, Scale, ScaleXY, Translate, self}, ellipses::xyrr::{XYRR, UnitCircleGap}, sqrt::Sqrt, math::{is_normal::IsNormal, recip::Recip}, to::To, intersect::Intersect
+    r2::R2, rotate::{Rotate as _Rotate, RotateArg}, shape::{Duals, Shape, Shapes}, transform::{Projection, CanTransform}, transform::Transform::{Rotate, Scale, ScaleXY, Translate, self}, ellipses::xyrr::{XYRR, UnitCircleGap}, sqrt::Sqrt, math::{is_normal::IsNormal, recip::Recip}, to::To, intersect::Intersect, coord_getter::{CoordGetter, coord_getter}
 };
 
 #[derive(Debug, Clone, Copy, From, PartialEq, Tsify, Serialize, Deserialize)]
 pub struct Circle<D> {
-    // pub idx: usize,
     pub c: R2<D>,
     pub r: D,
 }
 
 impl<D: Eq> Eq for Circle<D> {}
-
-// static getters: [ Box<dyn Fn(Circle<f64>) -> f64>; 3 ] = ;
 
 impl Circle<f64> {
     pub fn dual(&self, duals: &Duals) -> Circle<D> {
@@ -28,13 +25,12 @@ impl Circle<f64> {
         let c = R2 { x, y };
         Circle::from((c, r))
     }
-    pub fn getters() -> [ Box<dyn Fn(Circle<f64>) -> f64>; 3 ] {
-        [
-            Box::new(move |c: Circle<f64>| c.c.x),
-            Box::new(move |c: Circle<f64>| c.c.y),
-            Box::new(move |c: Circle<f64>| c.r),
-        ]
-    }
+
+    pub fn getters() -> [ CoordGetter<Self>; 3 ] {[
+        coord_getter("cx", |c: Self| c.c.x),
+        coord_getter("cy", |c: Self| c.c.y),
+        coord_getter( "r", |c: Self| c.r  ),
+    ]}
     pub fn at_y(&self, y: f64) -> Vec<f64> {
         let uy = (y - self.c.y) / self.r;
         let uy2 = uy * uy;

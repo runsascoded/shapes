@@ -1,11 +1,11 @@
 use std::{ops::{Neg, Add, Sub, Mul, Div}, fmt};
 
-use derive_more::{From, Deref, Display};
+use derive_more::{From, Display};
 use log::debug;
 use serde::{Deserialize, Serialize};
 use tsify::{declare, Tsify};
 
-use crate::{dual::{D, Dual}, circle::{self, Circle}, ellipses::{xyrr::{self, XYRR, UnitCircleGap}, xyrrt::{self, XYRRT, LevelArg}}, zero::Zero, transform::{Transform, CanProject, CanTransform, HasProjection, Projection}, r2::R2, math::recip::Recip, intersect::{IntersectShapesArg, UnitCircleIntersections}, duals::InitDuals};
+use crate::{dual::{D, Dual}, circle::{self, Circle}, ellipses::{xyrr::{self, XYRR, UnitCircleGap}, xyrrt::{self, XYRRT, LevelArg}}, zero::Zero, transform::{Transform, CanProject, CanTransform, HasProjection, Projection}, r2::R2, math::recip::Recip, intersect::{IntersectShapesArg, UnitCircleIntersections}, duals::InitDuals, coord_getter::CoordGetter};
 
 #[declare]
 pub type Duals = Vec<Vec<f64>>;
@@ -30,9 +30,6 @@ impl Shapes {
     }
 }
 
-#[derive(Deref)]
-pub struct CoordGetter(pub Box<dyn Fn(Shape<f64>) -> f64>);
-
 pub fn circle<D>(cx: D, cy: D, r: D) -> Shape<D> {
     Shape::Circle(Circle { c: R2 { x: cx, y: cy }, r })
 }
@@ -44,25 +41,39 @@ pub fn xyrrt<D>(cx: D, cy: D, rx: D, ry: D, t: D) -> Shape<D> {
 }
 
 impl<D> Shape<D> {
-    pub fn getters(&self, shape_idx: usize) -> Vec<CoordGetter> {
+    pub fn getters(&self, shape_idx: usize) -> Vec<CoordGetter<Shape<f64>>> {
         match self {
-            Shape::Circle(_) => Circle::getters().map(|f| {
-                CoordGetter(Box::new(move |s: Shape<f64>| match s {
-                    Shape::Circle(c) => f(c),
-                    _ => panic!("Expected Circle at idx {}", shape_idx),
-                }))
+            Shape::Circle(_) => Circle::getters().map(|CoordGetter { name, get }| {
+                // TODO: `CoordGetter.map`; "`getter` does not live long enough"
+                // getter.map(Box::new(move |s: Shape<f64>| match s {
+                //     Shape::Circle(c) => c,
+                //     _ => panic!("Expected Circle at idx {}", shape_idx),
+                // }))
+                CoordGetter {
+                    name,
+                    get: Box::new(move |s: Shape<f64>| match s {
+                        Shape::Circle(c) => get(c),
+                        _ => panic!("Expected Circle at idx {}", shape_idx),
+                    })
+                }
             }).into_iter().collect(),
-            Shape::XYRR(_) => XYRR::getters().map(|f| {
-                CoordGetter(Box::new(move |s: Shape<f64>| match s {
-                    Shape::XYRR(e) => f(e),
-                    _ => panic!("Expected XYRR at idx {}", shape_idx),
-                }))
+            Shape::XYRR(_) => XYRR::getters().map(|CoordGetter { name, get }| {
+                CoordGetter {
+                    name,
+                    get: Box::new(move |s: Shape<f64>| match s {
+                        Shape::XYRR(e) => get(e),
+                        _ => panic!("Expected XYRR at idx {}", shape_idx),
+                    })
+                }
             }).into_iter().collect(),
-            Shape::XYRRT(_) => XYRRT::getters().map(|f| {
-                CoordGetter(Box::new(move |s: Shape<f64>| match s {
-                    Shape::XYRRT(e) => f(e),
-                    _ => panic!("Expected XYRRT at idx {}", shape_idx),
-                }))
+            Shape::XYRRT(_) => XYRRT::getters().map(|CoordGetter { name, get }| {
+                CoordGetter {
+                    name,
+                    get: Box::new(move |s: Shape<f64>| match s {
+                        Shape::XYRRT(e) => get(e),
+                        _ => panic!("Expected XYRRT at idx {}", shape_idx),
+                    })
+                }
             }).into_iter().collect(),
         }
     }

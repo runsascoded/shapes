@@ -74,10 +74,9 @@ impl Model {
 #[cfg(test)]
 mod tests {
     use std::{env, path::Path, f64::consts::PI};
-    use polars::prelude::*;
+    use polars::{prelude::*, series::SeriesIter};
 
-    use crate::{dual::Dual, duals::{is_one_hot, D, Z}, scene::tests::ellipses4, shape::{circle, InputSpec, xyrr, xyrrt}, to::To, transform::{CanTransform, Transform::Rotate}, ellipses::xyrrt::XYRRT, r2::R2};
-    use derive_more::Deref;
+    use crate::{duals::{is_one_hot, D, Z}, scene::tests::ellipses4, shape::{circle, InputSpec, xyrr, xyrrt}, to::To, transform::{CanTransform, Transform::Rotate}, coord_getter::CoordGetter};
 
     use super::*;
     use test_log::test;
@@ -122,98 +121,79 @@ mod tests {
     /// - error gradient (with respect to each shape-coordinate)
     #[derive(Clone, Debug, PartialEq)]
     pub struct ExpectedStep {
-        vals: Vec<f64>,
         err: f64,
-        grads: Vec<f64>,
+        vals: Vec<f64>,
     }
-    impl ExpectedStep {
-        pub fn dual(&self) -> Dual {
-            Dual::new(self.err, self.grads.clone())
-        }
-    }
-    impl<const N: usize> From<([f64; N], f64, [f64; N])> for ExpectedStep {
-        fn from((vals, err, grads): ([f64; N], f64, [f64; N])) -> Self {
-            ExpectedStep { vals: vals.to_vec(), err, grads: grads.to_vec() }
+    impl<const N: usize> From<([f64; N], f64)> for ExpectedStep {
+        fn from((vals, err): ([f64; N], f64)) -> Self {
+            ExpectedStep { err, vals: vals.to_vec() }
         }
     }
 
-    fn get_actual(step: &Step, getters: &Vec<CoordGetter>) -> ExpectedStep {
+    fn get_actual(step: &Step, getters: &Vec<CoordGetter<Step>>) -> ExpectedStep {
         let error = step.error.clone();
         let err = error.v();
         let mut vals: Vec<f64> = Vec::new();
-        let mut grads: Vec<f64> = Vec::new();
-        getters.iter().enumerate().for_each(|(coord_idx, getter)| {
+        getters.iter().for_each(|getter| {
             let val: f64 = getter(step.clone());
             vals.push(val);
-            let error_d = error.d();
-            let err_grad = error_d[coord_idx];
-            grads.push(-err_grad);
         });
-        ExpectedStep { vals, err, grads }
+        ExpectedStep { err, vals }
     }
 
     use AnyValue::Float64;
 
     fn load_expecteds(path: &str) -> (DataFrame, Vec<ExpectedStep>) {
-        let mut df = CsvReader::from_path(path).unwrap().has_header(false).finish().unwrap();
-        let num_columns = df.shape().1;
-        if num_columns % 2 == 0 {
-            panic!("Expected odd number of columns, got {}", num_columns);
-        }
-        let n = (num_columns - 1) / 2;
+        let mut df = CsvReader::from_path(path).unwrap().has_header(true).finish().unwrap();
         df.as_single_chunk_par();
-        let mut iters = df.iter().map(|s| s.iter()).collect::<Vec<_>>();
-
+        let mut iters = df.iter().map(|s| s.iter());
+        let mut err_iter = iters.next().unwrap();
+        // let mut err_iter = iters.pop().unwrap();
+        let mut val_iters = iters.collect::<Vec<_>>();
         let mut expecteds: Vec<ExpectedStep> = Vec::new();
-        for _ in 0..df.height() {
-            let mut vals: Vec<f64> = Vec::new();
-            let mut grads: Vec<f64> = Vec::new();
-            let mut err: Option<f64> = None;
-            for (j, iter) in &mut iters.iter_mut().enumerate() {
-                let v = match iter.next().expect("should have as many iterations as rows") {
-                    Float64(f) => f,
-                    _ => panic!("Expected Float64, got {:?}", iter.next().unwrap()),
-                };
-                if j < n {
-                    vals.push(v);
-                } else if j == n {
-                    err = Some(v)
-                } else {
-                    grads.push(v);
-                }
+
+        let next = |j: usize, iter: &mut SeriesIter| -> f64 {
+            match iter.next().expect("should have as many iterations as rows") {
+                Float64(f) => f,
+                v => panic!("Expected Float64 in col {}, got {:?}", j, v),
             }
-            expecteds.push(ExpectedStep { vals, err: err.unwrap(), grads });
+        };
+
+        for _ in 0..df.height() {
+            let err = next(0, &mut err_iter);
+            let mut vals: Vec<f64> = Vec::new();
+            for (j, mut iter) in val_iters.iter_mut().enumerate() {
+                let val = next(j + 1, &mut iter);
+                vals.push(val);
+            }
+            expecteds.push(ExpectedStep { err, vals });
         }
         (df, expecteds)
     }
 
-    fn write_expecteds(path: &str, expecteds: Vec<ExpectedStep>) -> Result<DataFrame, PolarsError> {
+    fn write_expecteds(path: &str, col_names: Vec<String>, expecteds: Vec<ExpectedStep>) -> Result<DataFrame, PolarsError> {
         let mut cols: Vec<Vec<f64>> = vec![];
         let n = expecteds[0].vals.len();
-        let num_columns = 1 + n + n;
+        let num_columns = 1 + n;
         for _ in 0..num_columns {
             cols.push(vec![]);
         }
         let path = Path::new(&path);
         let dir = path.parent().unwrap();
         std::fs::create_dir_all(dir)?;
-        for ExpectedStep { vals, err, grads } in expecteds {
+        for ExpectedStep { err, vals } in expecteds {
+            cols[0].push(err);
             for (j, val) in vals.into_iter().enumerate() {
-                cols[j].push(val);
-            }
-            cols[n].push(err);
-            for (j, grad) in grads.into_iter().enumerate() {
-                cols[n+1+j].push(grad);
+                cols[j + 1].push(val);
             }
         }
 
         let series = cols.into_iter().enumerate().map(|(j, col)| {
-            let name = format!("{}", j);
-            Series::new(&name, col)
+            Series::new(&col_names[j], col)
         }).collect();
         let mut df = DataFrame::new(series)?;
         let mut file = std::fs::File::create(path)?;
-        CsvWriter::new(&mut file).has_header(false).finish(&mut df)?;
+        CsvWriter::new(&mut file).has_header(true).finish(&mut df)?;
         Ok(df)
     }
 
@@ -236,9 +216,6 @@ mod tests {
         ( "0123",  11. ),
     ];
 
-    #[derive(Deref)]
-    pub struct CoordGetter(pub Box<dyn Fn(Step) -> f64>);
-
     fn check<const N: usize>(
         inputs: Vec<InputSpec>,
         targets: [(&str, f64); N],
@@ -253,15 +230,17 @@ mod tests {
         let last_step = model.steps[model.steps.len() - 1].clone();
         let shapes = last_step.shapes;
 
-        let mut coord_getters: Vec<(usize, CoordGetter)> = shapes.iter().enumerate().flat_map(
+        let mut coord_getters: Vec<(usize, CoordGetter<Step>)> = shapes.iter().enumerate().flat_map(
             |(shape_idx, shape)| {
                 let getters = shape.getters(shape_idx);
                 getters.into_iter().zip(shape.duals()).filter_map(|(getter, dual_vec)| {
                     is_one_hot(&dual_vec).map(|grad_idx| (
                         grad_idx,
-                        CoordGetter(Box::new(move |step: Step| getter(step.shapes[shape_idx].v())))
-                    )
-                )
+                        CoordGetter {
+                            name: format!("{}.{}", shape_idx, getter.name),
+                            get: Box::new(move |step: Step| getter(step.shapes[shape_idx].v())),
+                        }
+                    ))
                 }).collect::<Vec<_>>()
         }).collect();
         coord_getters.sort_by(|(a, _), (b, _)| a.cmp(b));
@@ -277,7 +256,9 @@ mod tests {
         match generate_vals {
             Some(_) => {
                 let expecteds: Vec<ExpectedStep> = steps.iter().map(|step| get_actual(step, &coord_getters)).collect();
-                let df = write_expecteds(&expected_path, expecteds).unwrap();
+                let mut col_names: Vec<_> = coord_getters.iter().map(|getter| getter.name.clone()).collect();
+                col_names.insert(0, "error".to_string());
+                let df = write_expecteds(&expected_path, col_names, expecteds).unwrap();
                 info!("Wrote expecteds to {}", expected_path);
                 info!("{}", df);
             }

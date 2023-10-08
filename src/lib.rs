@@ -7,6 +7,7 @@ extern crate console_error_panic_hook;
 pub mod circle;
 pub mod component;
 pub mod contains;
+pub mod coord_getter;
 pub mod d5;
 pub mod distance;
 pub mod dual;

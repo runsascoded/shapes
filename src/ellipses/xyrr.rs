@@ -6,7 +6,7 @@ use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::{r2::R2, rotate::{Rotate as _Rotate, RotateArg}, dual::{D, Dual}, shape::{Duals, Shape}, transform::{Transform::{Rotate, Scale, ScaleXY, Translate, self}, CanProject, CanTransform, Projection}, math::{recip::Recip, deg::Deg, is_zero::IsZero}, sqrt::Sqrt, ellipses::xyrr, zero::Zero};
+use crate::{r2::R2, rotate::{Rotate as _Rotate, RotateArg}, dual::{D, Dual}, shape::{Duals, Shape}, transform::{Transform::{Rotate, Scale, ScaleXY, Translate, self}, CanProject, CanTransform, Projection}, math::{recip::Recip, deg::Deg, is_zero::IsZero}, sqrt::Sqrt, ellipses::xyrr, zero::Zero, coord_getter::{CoordGetter, coord_getter}};
 
 use super::{xyrrt::XYRRT, cdef::{CDEF, self}, bcdef};
 
@@ -26,14 +26,12 @@ impl XYRR<f64> {
         let r = R2 { x: rx, y: ry };
         XYRR::from((c, r))
     }
-    pub fn getters() -> [ Box<dyn Fn(XYRR<f64>) -> f64>; 4 ] {
-        [
-            Box::new(move |e: XYRR<f64>| e.c.x),
-            Box::new(move |e: XYRR<f64>| e.c.y),
-            Box::new(move |e: XYRR<f64>| e.r.x),
-            Box::new(move |e: XYRR<f64>| e.r.y),
-        ]
-    }
+    pub fn getters() -> [ CoordGetter<Self>; 4 ] {[
+        coord_getter("cx", |e: Self| e.c.x),
+        coord_getter("cy", |e: Self| e.c.y),
+        coord_getter("rx", |e: Self| e.r.x),
+        coord_getter("ry", |e: Self| e.r.y),
+    ]}
     pub fn at_y(&self, y: f64) -> Vec<f64> {
         let uy = (y - self.c.y) / self.r.y;
         let uy2 = uy * uy;
