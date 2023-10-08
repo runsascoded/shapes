@@ -76,7 +76,7 @@ mod tests {
     use std::{env, path::Path, f64::consts::PI};
     use polars::{prelude::*, series::SeriesIter};
 
-    use crate::{duals::{is_one_hot, D, Z}, scene::tests::ellipses4, shape::{circle, InputSpec, xyrr, xyrrt}, to::To, transform::{CanTransform, Transform::Rotate}, coord_getter::CoordGetter};
+    use crate::{duals::{D, Z}, scene::tests::ellipses4, shape::{circle, InputSpec, xyrr, xyrrt}, to::To, transform::{CanTransform, Transform::Rotate}, coord_getter::{CoordGetter, CoordGetters}};
 
     use super::*;
     use test_log::test;
@@ -227,26 +227,10 @@ mod tests {
         let mut model = Model::new(inputs.clone(), targets);
         let max_steps = env::var("STEPS").map(|s| s.parse::<usize>().unwrap()).unwrap_or(max_steps);
         model.train(max_step_error_ratio, max_steps);
-        let last_step = model.steps[model.steps.len() - 1].clone();
-        let shapes = last_step.shapes;
 
-        let mut coord_getters: Vec<(usize, CoordGetter<Step>)> = shapes.iter().enumerate().flat_map(
-            |(shape_idx, shape)| {
-                let getters = shape.getters(shape_idx);
-                getters.into_iter().zip(shape.duals()).filter_map(|(getter, dual_vec)| {
-                    is_one_hot(&dual_vec).map(|grad_idx| (
-                        grad_idx,
-                        CoordGetter {
-                            name: format!("{}.{}", shape_idx, getter.name),
-                            get: Box::new(move |step: Step| getter(step.shapes[shape_idx].v())),
-                        }
-                    ))
-                }).collect::<Vec<_>>()
-        }).collect();
-        coord_getters.sort_by(|(a, _), (b, _)| a.cmp(b));
+        let coord_getters: CoordGetters<Step> = inputs.into();
         assert_eq!(model.grad_size(), coord_getters.len());
-        let coord_getters: Vec<_> = coord_getters.into_iter().map(|(_, getter)| getter).collect();
-        // println!("coord_getters: {:?}", coord_getters.iter().map(|(idx, _)| idx).collect::<Vec<_>>());
+        // debug!("coord_getters: {:?}", coord_getters.iter().map(|(idx, _)| idx).collect::<Vec<_>>());
 
         let steps = model.steps;
         let generate_vals = env::var("GEN_VALS").map(|s| s.parse::<usize>().unwrap()).ok();
