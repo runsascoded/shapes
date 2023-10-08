@@ -73,10 +73,9 @@ impl Model {
 
 #[cfg(test)]
 mod tests {
-    use std::{env, path::Path, f64::consts::PI};
-    use polars::{prelude::*, series::SeriesIter};
+    use std::{env, f64::consts::PI};
 
-    use crate::{duals::{D, Z}, scene::tests::ellipses4, shape::{circle, InputSpec, xyrr, xyrrt}, to::To, transform::{CanTransform, Transform::Rotate}, coord_getter::{CoordGetter, CoordGetters}};
+    use crate::{duals::{D, Z}, scene::tests::ellipses4, shape::{circle, InputSpec, xyrr, xyrrt}, to::To, transform::{CanTransform, Transform::Rotate}, coord_getter::CoordGetters, history::{History, self}};
 
     use super::*;
     use test_log::test;
@@ -115,93 +114,6 @@ mod tests {
         ( "0123",  36. ),
     ];
 
-    /// Convenience struct for test cases, containing:
-    /// - shape-coordinate values
-    /// - overall error
-    /// - error gradient (with respect to each shape-coordinate)
-    #[derive(Clone, Debug, PartialEq)]
-    pub struct ExpectedStep {
-        err: f64,
-        vals: Vec<f64>,
-    }
-    impl<const N: usize> From<([f64; N], f64)> for ExpectedStep {
-        fn from((vals, err): ([f64; N], f64)) -> Self {
-            ExpectedStep { err, vals: vals.to_vec() }
-        }
-    }
-
-    fn get_actual(step: &Step, getters: &Vec<CoordGetter<Step>>) -> ExpectedStep {
-        let error = step.error.clone();
-        let err = error.v();
-        let mut vals: Vec<f64> = Vec::new();
-        getters.iter().for_each(|getter| {
-            let val: f64 = getter(step.clone());
-            vals.push(val);
-        });
-        ExpectedStep { err, vals }
-    }
-
-    #[derive(Clone, Debug, derive_more::Deref, PartialEq)]
-    pub struct ExpectedSteps(pub Vec<ExpectedStep>);
-
-    use AnyValue::Float64;
-
-    impl ExpectedSteps {
-            pub fn load(path: &str) -> (DataFrame, ExpectedSteps) {
-            let mut df = CsvReader::from_path(path).unwrap().has_header(true).finish().unwrap();
-            df.as_single_chunk_par();
-            let mut iters = df.iter().map(|s| s.iter());
-            let mut err_iter = iters.next().unwrap();
-            let mut val_iters = iters.collect::<Vec<_>>();
-            let mut expecteds: Vec<ExpectedStep> = Vec::new();
-
-            let next = |j: usize, iter: &mut SeriesIter| -> f64 {
-                match iter.next().expect("should have as many iterations as rows") {
-                    Float64(f) => f,
-                    v => panic!("Expected Float64 in col {}, got {:?}", j, v),
-                }
-            };
-
-            for _ in 0..df.height() {
-                let err = next(0, &mut err_iter);
-                let mut vals: Vec<f64> = Vec::new();
-                for (j, mut iter) in val_iters.iter_mut().enumerate() {
-                    let val = next(j + 1, &mut iter);
-                    vals.push(val);
-                }
-                expecteds.push(ExpectedStep { err, vals });
-            }
-            (df, Self(expecteds))
-        }
-
-
-        pub fn write(self, path: &str, col_names: Vec<String>) -> Result<DataFrame, PolarsError> {
-            let mut cols: Vec<Vec<f64>> = vec![];
-            let n = self[0].vals.len();
-            let num_columns = 1 + n;
-            for _ in 0..num_columns {
-                cols.push(vec![]);
-            }
-            let path = Path::new(&path);
-            let dir = path.parent().unwrap();
-            std::fs::create_dir_all(dir)?;
-            for ExpectedStep { err, vals } in self.0 {
-                cols[0].push(err);
-                for (j, val) in vals.into_iter().enumerate() {
-                    cols[j + 1].push(val);
-                }
-            }
-
-            let series = cols.into_iter().enumerate().map(|(j, col)| {
-                Series::new(&col_names[j], col)
-            }).collect();
-            let mut df = DataFrame::new(series)?;
-            let mut file = std::fs::File::create(path)?;
-            CsvWriter::new(&mut file).has_header(true).finish(&mut df)?;
-            Ok(df)
-        }
-    }
-
     // Values from https://jitc.bmj.com/content/jitc/10/2/e003027.full.pdf?with-ds=yes (pg. 13)
     static MPOWER: [ (&str, f64); 15 ] = [
         ( "0---",  42. ),
@@ -237,27 +149,24 @@ mod tests {
         assert_eq!(model.grad_size(), coord_getters.len());
         // debug!("coord_getters: {:?}", coord_getters.iter().map(|(idx, _)| idx).collect::<Vec<_>>());
 
-        let steps = model.steps;
         let generate_vals = env::var("GEN_VALS").map(|s| s.parse::<usize>().unwrap()).ok();
         let os = env::consts::OS;
         let os = if os == "macos" { "macos" } else { "linux" };
         let expected_path = format!("testdata/{}/{}.csv", name, os);
         match generate_vals {
             Some(_) => {
-                let expecteds = ExpectedSteps(steps.iter().map(|step| get_actual(step, &coord_getters)).collect());
-                let mut col_names: Vec<_> = coord_getters.iter().map(|getter| getter.name.clone()).collect();
-                col_names.insert(0, "error".to_string());
-                let df = expecteds.write(&expected_path, col_names).unwrap();
+                let history: History = model.into();
+                let df = history.save(&expected_path).unwrap();
                 info!("Wrote expecteds to {}", expected_path);
                 info!("{}", df);
             }
             None => {
-                let (df, expecteds) = ExpectedSteps::load(&expected_path);
-                info!("Read expecteds from {}", expected_path);
-                info!("{}", df);
+                let history = History::load(&expected_path).unwrap();
+                let expecteds = history.0;
+                let steps = model.steps;
                 assert_eq!(steps.len(), expecteds.len());
-                for (idx, (step, expected)) in steps.iter().zip(expecteds.0.into_iter()).enumerate() {
-                    let actual = get_actual(step, &coord_getters);
+                for (idx, (step, expected)) in steps.into_iter().zip(expecteds.into_iter()).enumerate() {
+                    let actual: history::Step = step.into();
                     assert_eq!(actual, expected, "Step {}", idx);
                 }
             }

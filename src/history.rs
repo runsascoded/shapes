@@ -50,7 +50,7 @@ impl From<Model> for History {
     }
 }
 
-use AnyValue::Float64;
+static ERROR_COL: &str = "error";
 
 #[derive(Debug, thiserror::Error)]
 pub enum LoadErr {
@@ -64,6 +64,7 @@ pub enum LoadErr {
 use LoadErr::{UnexpectedFirstCol, InvalidCol, InvalidVal};
 
 use anyhow::Result;
+use AnyValue::Float64;
 
 impl History {
     pub fn load(path: &str) -> Result<History> {
@@ -71,8 +72,7 @@ impl History {
         df.as_single_chunk_par();
         let mut iters = df.iter().map(|s| (s.name(), s.iter()));
         let (err_name, mut err_iter) = iters.next().unwrap();
-        if err_name != "error" {
-            // let e: anyhow::Error = UnexpectedFirstCol(err_name.to_string()).into();
+        if err_name != ERROR_COL {
             return Err(UnexpectedFirstCol(err_name.to_string()).into());
         }
         let (names, mut val_iters): (Vec<_>, Vec<_>) = iters.unzip();
@@ -121,9 +121,9 @@ impl History {
     pub fn save(self, path: &str) -> Result<DataFrame> {
         let mut cols: Vec<Vec<f64>> = vec![];
         let first = &self[0];
-        let col_names = first.names();
-        let n = col_names.len();
-        let num_columns = 1 + n;
+        let mut col_names = first.names();
+        col_names.insert(0, ERROR_COL.to_string());
+        let num_columns = col_names.len();
         for _ in 0..num_columns {
             cols.push(vec![]);
         }
@@ -139,7 +139,8 @@ impl History {
         }
 
         let series = cols.into_iter().enumerate().map(|(j, col)| {
-            Series::new(&col_names[j], col)
+            let col_name = col_names.get(j).expect(&format!("Expected {} columns, indexing {}; {:?}", num_columns, j, col_names));
+            Series::new(col_name, col)
         }).collect();
         let mut df = DataFrame::new(series)?;
         let mut file = std::fs::File::create(path)?;
