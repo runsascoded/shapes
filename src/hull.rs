@@ -8,7 +8,7 @@ where R2<D>: To<R2<f64>>,
 {
     pub fn area(&self) -> D {
         let polygon_area = Region::polygon_area(&self);
-        let secant_area = Region::secant_area("", &self, &self.0.iter().map(|s| s.edge.borrow().set_idx()).collect());
+        let secant_area = Region::secant_area(&self);
         polygon_area + secant_area
     }
 }

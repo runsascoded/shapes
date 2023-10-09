@@ -1,10 +1,26 @@
-use std::{fmt::{Formatter, Display, self}, ops::{Add, Sub}, iter::Sum, collections::{BTreeSet, BTreeMap}, rc::Rc, cell::RefCell};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, BTreeSet},
+    fmt::{self, Display, Formatter},
+    iter::Sum,
+    ops::{Add, Sub},
+    rc::Rc,
+};
 
 use itertools::Itertools;
-use log::debug;
 use ordered_float::OrderedFloat;
 
-use crate::{segment::Segment, edge::{Edge, EdgeArg, E}, math::{abs::{Abs, AbsArg}, deg::Deg}, r2::R2, to::To, dual::Dual, component::C, shape::Shape, theta_points::ThetaPoints};
+use crate::{
+    component::C,
+    dual::Dual,
+    edge::{Edge, EdgeArg, E},
+    math::abs::{Abs, AbsArg},
+    r2::R2,
+    segment::Segment,
+    shape::Shape,
+    theta_points::ThetaPoints,
+    to::To,
+};
 
 #[derive(Debug, Clone)]
 pub struct Region<D> {
@@ -20,22 +36,21 @@ pub struct Region<D> {
 
 pub type R<D> = Rc<RefCell<Region<D>>>;
 
-pub trait RegionArg
-: EdgeArg
-+ AbsArg
-+ Sum
-+ Add<Output = Self>
-+ Sub<Output = Self>
-{}
+pub trait RegionArg: EdgeArg + AbsArg + Sum + Add<Output = Self> + Sub<Output = Self> {}
 impl RegionArg for f64 {}
 impl RegionArg for Dual {}
 
 impl<D: RegionArg> Region<D>
-where R2<D>: To<R2<f64>>,
+where
+    R2<D>: To<R2<f64>>,
 {
-    pub fn new(key: String, segments: Vec<Segment<D>>, container_set_idxs: BTreeSet<usize>) -> Self {
+    pub fn new(
+        key: String,
+        segments: Vec<Segment<D>>,
+        container_set_idxs: BTreeSet<usize>,
+    ) -> Self {
         let polygon_area = Self::polygon_area(&segments);
-        let secant_area = Self::secant_area(&key, &segments, &container_set_idxs);
+        let secant_area = Self::secant_area(&segments);
         let total_area = (polygon_area.clone() + secant_area.clone()).abs();
         // debug!(
         //     "Region {} polygon_area: {}, secant_area: {}, total: {}",
@@ -48,7 +63,7 @@ where R2<D>: To<R2<f64>>,
             key,
             segments,
             container_set_idxs,
-            child_components: vec![],  // populated by `Scene`, once all `Component`s have been created
+            child_components: vec![], // populated by `Scene`, once all `Component`s have been created
             polygon_area,
             secant_area,
             total_area,
@@ -58,33 +73,21 @@ where R2<D>: To<R2<f64>>,
         self.segments.len()
     }
     pub fn polygon_area(segments: &Vec<Segment<D>>) -> D {
-        segments.iter().map(|s| {
-            let cur = s.start().borrow().p.clone();
-            let nxt = s.end().borrow().p.clone();
-            cur.x * nxt.y - cur.y * nxt.x
-        }).sum::<D>() / 2.
+        segments
+            .iter()
+            .map(|s| {
+                let cur = s.start().borrow().p.clone();
+                let nxt = s.end().borrow().p.clone();
+                cur.x * nxt.y - cur.y * nxt.x
+            })
+            .sum::<D>()
+            / 2.
     }
-    pub fn secant_area(key: &str, segments: &Vec<Segment<D>>, container_set_idxs: &BTreeSet<usize>) -> D {
-        let is_singleton = segments.len() == 1;
-        segments.iter().map(|s| {
-            s.secant_area()
-            // let area = s.secant_area();
-            // let edge = s.edge.borrow();
-            // let set_idx = edge.set_idx();
-            // if key == "---3" {
-                // debug!(
-                //     "  Region {} secant_area, set {} ({} → {} {}): {} (container_set_idxs {:?})",
-                //     key,
-                //     set_idx,
-                //     Into::<f64>::into(edge.theta0.clone()).deg_str(),
-                //     Into::<f64>::into(edge.theta1.clone()).deg_str(),
-                //     if s.fwd { "fwd" } else { "rev" },
-                //     Into::<f64>::into(area.clone()),
-                //     container_set_idxs,
-                // );
-            // }
-            // if is_singleton || container_set_idxs.contains(&set_idx) { area } else { -area }
-        }).sum::<D>()
+    pub fn secant_area(segments: &Vec<Segment<D>>) -> D {
+        segments
+            .iter()
+            .map(|s| { s.secant_area() })
+            .sum::<D>()
     }
     /// Area of this region (excluding any child components)
     pub fn area(&self) -> D {
@@ -102,7 +105,7 @@ where R2<D>: To<R2<f64>>,
                 return false;
             }
             if ch != '*' && !is_container {
-                return false
+                return false;
             }
         }
         true
@@ -111,29 +114,42 @@ where R2<D>: To<R2<f64>>,
 
 impl<D: fmt::Debug> Region<D> {
     pub fn segments_for_set(&self, set_idx: usize) -> Vec<&Segment<D>> {
-        self.segments.iter().filter(|s| {
-            s.edge.borrow().set_idx() == set_idx
-        }).collect()
+        self.segments
+            .iter()
+            .filter(|s| s.edge.borrow().set_idx() == set_idx)
+            .collect()
     }
     pub fn edges_for_set(&self, set_idx: usize) -> Vec<E<D>> {
-        self.segments_for_set(set_idx).iter().map(|s| s.edge.clone()).collect()
+        self.segments_for_set(set_idx)
+            .iter()
+            .map(|s| s.edge.clone())
+            .collect()
     }
 }
 
 impl<D: Clone + Display + fmt::Debug + Into<f64> + PartialOrd> Region<D>
-where Shape<f64>: From<Shape<D>>
+where
+    Shape<f64>: From<Shape<D>>,
 {
     pub fn contains(&self, p: &R2<f64>, all_shapes: &BTreeMap<usize, Shape<f64>>) -> bool {
         let y = p.y;
-        let mut points_at_y: Vec<(usize, f64, f64)> = all_shapes.into_iter().flat_map(|(idx, s)| {
-            s.at_y(y).into_iter().map(|x| {
-                let p = R2 { x, y };
-                let theta = s.theta(&p);
-                (*idx, x, theta)
+        let mut points_at_y: Vec<(usize, f64, f64)> = all_shapes
+            .into_iter()
+            .flat_map(|(idx, s)| {
+                s.at_y(y).into_iter().map(|x| {
+                    let p = R2 { x, y };
+                    let theta = s.theta(&p);
+                    (*idx, x, theta)
+                })
             })
-        }).collect();
+            .collect();
         points_at_y.sort_by_cached_key(|(_, x, _)| OrderedFloat(*x));
-        let component_container_set_idxs: BTreeSet<usize> = self.container_set_idxs.iter().filter(|set_idx| all_shapes.contains_key(set_idx)).cloned().collect();
+        let component_container_set_idxs: BTreeSet<usize> = self
+            .container_set_idxs
+            .iter()
+            .filter(|set_idx| all_shapes.contains_key(set_idx))
+            .cloned()
+            .collect();
         let mut cur_set_idxs: BTreeSet<usize> = BTreeSet::new();
         // debug!("Checking containment: region {}, p: {}, shapes {}, points_at_y: {:?}", self.key, p, all_shapes.keys().join(","), points_at_y);
         for (idx, (prv, cur)) in points_at_y.into_iter().tuple_windows().enumerate() {
@@ -151,16 +167,24 @@ where Shape<f64>: From<Shape<D>>
                     return false;
                 }
                 let prv_edges = self.edges_for_set(prv.0);
-                if prv_edges.iter().find(|edge| edge.borrow().contains_theta(prv.2)).is_none() {
+                if prv_edges
+                    .iter()
+                    .find(|edge| edge.borrow().contains_theta(prv.2))
+                    .is_none()
+                {
                     // debug!("  breaking between {} and {}: {} does not contain theta {}", prv.1, x, prv_edges.iter().map(|e| format!("{}", e.borrow())).join(","), prv.2);
-                    return false
+                    return false;
                 }
                 let cur_edges = self.edges_for_set(cur.0);
-                if cur_edges.iter().find(|edge| edge.borrow().contains_theta(cur.2)).is_none() {
+                if cur_edges
+                    .iter()
+                    .find(|edge| edge.borrow().contains_theta(cur.2))
+                    .is_none()
+                {
                     // debug!("  breaking between {} and {}: {} does not contain theta {}", prv.1, x, cur_edges.iter().map(|e| format!("{}", e.borrow())).join(","), cur.2);
-                    return false
+                    return false;
                 }
-                return true
+                return true;
             }
             if cur_set_idxs.contains(&set_idx) {
                 // debug!("  removing set_idx {}", set_idx);
@@ -170,23 +194,28 @@ where Shape<f64>: From<Shape<D>>
                 cur_set_idxs.insert(set_idx);
             }
         }
-        return false
+        return false;
     }
 }
 
 impl<D: Display> Display for Region<D>
 where
-    Edge<D>: Display
+    Edge<D>: Display,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
-            f, "R({}\n\t{}\n)",
-            self.container_set_idxs.iter().map(|i| {
-                format!("{}", i)
-            }).collect::<Vec<String>>().join(", "),
-            self.segments.iter().map(|s| {
-                format!("{}", s)
-            }).collect::<Vec<String>>().join(",\n\t")
+            f,
+            "R({}\n\t{}\n)",
+            self.container_set_idxs
+                .iter()
+                .map(|i| { format!("{}", i) })
+                .collect::<Vec<String>>()
+                .join(", "),
+            self.segments
+                .iter()
+                .map(|s| { format!("{}", s) })
+                .collect::<Vec<String>>()
+                .join(",\n\t")
         )
     }
 }
