@@ -1,4 +1,4 @@
-use std::fmt::{Display, Formatter, self};
+use std::{fmt::{Display, Formatter, self}, ops::Neg};
 
 use crate::{edge::{E, EdgeArg, Edge}, node::N, r2::R2, to::To};
 
@@ -8,13 +8,13 @@ pub struct Segment<D> {
     pub fwd: bool,
 }
 
-impl<D: EdgeArg> Segment<D>
+impl<D: EdgeArg + Neg<Output = D>> Segment<D>
 where
-    // Intersection<D>: Display,
     R2<D>: To<R2<f64>>,
 {
     pub fn secant_area(&self) -> D {
-        self.edge.borrow().secant_area()
+        let secant_area = self.edge.borrow().secant_area();
+        if self.fwd { secant_area } else { -secant_area }
     }
     pub fn start(&self) -> N<D> {
         let e = self.edge.borrow();

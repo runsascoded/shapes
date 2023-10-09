@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use serde::{Serialize, Deserialize};
 use tsify::Tsify;
 
-use crate::{dual::Dual, r2::R2, component, set::Set, region};
+use crate::{dual::Dual, r2::R2, component, set::Set, region, segment};
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
 pub struct Point {
@@ -28,6 +28,15 @@ pub struct Segment {
     pub fwd: bool,
 }
 
+impl From<&segment::Segment<Dual>> for Segment {
+    fn from(s: &segment::Segment<Dual>) -> Self {
+        Segment {
+            edge_idx: s.edge.borrow().idx,
+            fwd: s.fwd,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
 pub struct Region {
     pub key: String,
@@ -41,10 +50,7 @@ impl From<&region::Region<Dual>> for Region {
     fn from(region: &region::Region<Dual>) -> Self {
         Region {
             key: region.key.clone(),
-            segments: region.segments.iter().map(|s| Segment {
-                edge_idx: s.edge.borrow().idx,
-                fwd: s.fwd,
-            }).collect(),
+            segments: region.segments.iter().map(|s| s.into()).collect(),
             area: region.area().v(),
             container_set_idxs: region.container_set_idxs.clone().into_iter().collect(),
             child_component_keys: region.child_components.iter().map(|c| c.borrow().key.0.clone()).collect(),
@@ -60,7 +66,7 @@ pub struct Component {
     pub edges: Vec<Edge>,
     pub regions: Vec<Region>,
     pub container_idxs: Vec<usize>,
-    pub hull: Region,
+    pub hull: Vec<Segment>,
 }
 
 impl Component {
@@ -83,7 +89,7 @@ impl Component {
             let region: Region = r.into();
             region
         }).collect();
-        let hull: Region = (&component.hull).into();
+        let hull: Vec<Segment> = component.hull.0.iter().map(|s| s.into()).collect();
         Component {
             key: component.key.0.clone(),
             sets,

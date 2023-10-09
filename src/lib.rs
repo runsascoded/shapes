@@ -20,6 +20,7 @@ pub mod float_wrap;
 pub mod fmt;
 pub mod gap;
 pub mod history;
+pub mod hull;
 pub mod intersect;
 pub mod intersection;
 pub mod node;

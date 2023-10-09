@@ -4,7 +4,7 @@ use itertools::Itertools;
 use log::debug;
 use ordered_float::OrderedFloat;
 
-use crate::{segment::Segment, edge::{Edge, EdgeArg, E}, math::abs::{Abs, AbsArg}, r2::R2, to::To, dual::Dual, component::C, shape::Shape, theta_points::ThetaPoints};
+use crate::{segment::Segment, edge::{Edge, EdgeArg, E}, math::{abs::{Abs, AbsArg}, deg::Deg}, r2::R2, to::To, dual::Dual, component::C, shape::Shape, theta_points::ThetaPoints};
 
 #[derive(Debug, Clone)]
 pub struct Region<D> {
@@ -12,6 +12,10 @@ pub struct Region<D> {
     pub segments: Vec<Segment<D>>,
     pub container_set_idxs: BTreeSet<usize>,
     pub child_components: Vec<C<D>>,
+    pub polygon_area: D,
+    pub secant_area: D,
+    /// Area of this region (including any child components)
+    pub total_area: D,
 }
 
 pub type R<D> = Rc<RefCell<Region<D>>>;
@@ -29,36 +33,62 @@ impl RegionArg for Dual {}
 impl<D: RegionArg> Region<D>
 where R2<D>: To<R2<f64>>,
 {
+    pub fn new(key: String, segments: Vec<Segment<D>>, container_set_idxs: BTreeSet<usize>) -> Self {
+        let polygon_area = Self::polygon_area(&segments);
+        let secant_area = Self::secant_area(&key, &segments, &container_set_idxs);
+        let total_area = (polygon_area.clone() + secant_area.clone()).abs();
+        // debug!(
+        //     "Region {} polygon_area: {}, secant_area: {}, total: {}",
+        //     key,
+        //     Into::<f64>::into(polygon_area.clone()),
+        //     Into::<f64>::into(secant_area.clone()),
+        //     Into::<f64>::into(total_area.clone())
+        // );
+        Region {
+            key,
+            segments,
+            container_set_idxs,
+            child_components: vec![],  // populated by `Scene`, once all `Component`s have been created
+            polygon_area,
+            secant_area,
+            total_area,
+        }
+    }
     pub fn len(&self) -> usize {
         self.segments.len()
     }
-    pub fn polygon_area(&self) -> D {
-        (self.segments.iter().map(|s| {
+    pub fn polygon_area(segments: &Vec<Segment<D>>) -> D {
+        segments.iter().map(|s| {
             let cur = s.start().borrow().p.clone();
             let nxt = s.end().borrow().p.clone();
             cur.x * nxt.y - cur.y * nxt.x
-        }).sum::<D>() / 2.).abs()
+        }).sum::<D>() / 2.
     }
-    pub fn secant_area(&self) -> D {
-        let is_singleton = self.segments.len() == 1;
-        self.segments.iter().map(|s| {
-            let area = s.secant_area();
-            let set_idx = s.edge.borrow().set_idx();
-            // debug!("  secant_area: {}, set_idx: {}, container_set_idxs {:?}", area, set_idx, self.container_set_idxs);
-            if is_singleton || self.container_set_idxs.contains(&set_idx) { area } else { -area }
+    pub fn secant_area(key: &str, segments: &Vec<Segment<D>>, container_set_idxs: &BTreeSet<usize>) -> D {
+        let is_singleton = segments.len() == 1;
+        segments.iter().map(|s| {
+            s.secant_area()
+            // let area = s.secant_area();
+            // let edge = s.edge.borrow();
+            // let set_idx = edge.set_idx();
+            // if key == "---3" {
+                // debug!(
+                //     "  Region {} secant_area, set {} ({} → {} {}): {} (container_set_idxs {:?})",
+                //     key,
+                //     set_idx,
+                //     Into::<f64>::into(edge.theta0.clone()).deg_str(),
+                //     Into::<f64>::into(edge.theta1.clone()).deg_str(),
+                //     if s.fwd { "fwd" } else { "rev" },
+                //     Into::<f64>::into(area.clone()),
+                //     container_set_idxs,
+                // );
+            // }
+            // if is_singleton || container_set_idxs.contains(&set_idx) { area } else { -area }
         }).sum::<D>()
-    }
-    /// Area of this region (including any child components)
-    pub fn total_area(&self) -> D {
-        let polygon_area = self.polygon_area();
-        let secant_area = self.secant_area();
-        let area = polygon_area.clone() + secant_area.clone();
-        // debug!("Region {}: polygon_area: {}, secant_area: {}, total: {}", self.key, polygon_area, secant_area, area);
-        area
     }
     /// Area of this region (excluding any child components)
     pub fn area(&self) -> D {
-        let mut area = self.total_area();
+        let mut area = self.total_area.clone();
         for child_component in &self.child_components {
             // TODO: implement SubAssign
             area = area - child_component.borrow().area();
@@ -78,7 +108,6 @@ where R2<D>: To<R2<f64>>,
         true
     }
 }
-
 
 impl<D: fmt::Debug> Region<D> {
     pub fn segments_for_set(&self, set_idx: usize) -> Vec<&Segment<D>> {

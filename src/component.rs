@@ -1,10 +1,11 @@
-use std::{collections::{BTreeSet, BTreeMap}, cell::RefCell, rc::Rc, f64::consts::TAU, fmt};
+use std::{collections::{BTreeSet, BTreeMap}, cell::RefCell, rc::Rc, f64::consts::TAU, fmt, ops::Sub};
+use anyhow::{Result, anyhow};
 
 use log::{debug, error};
 use serde::{Serialize, Deserialize};
 use tsify::Tsify;
 
-use crate::{node::{N, Node}, math::deg::Deg, edge::{E, self, EdgeArg, Edge}, contains::{Contains, ShapeContainsPoint}, region::{Region, RegionArg, R}, segment::Segment, set::S, theta_points::{ThetaPoints, ThetaPointsArg}, r2::R2, to::To, zero::Zero, fmt::Fmt};
+use crate::{node::{N, Node}, math::deg::Deg, edge::{E, self, EdgeArg, Edge}, contains::{Contains, ShapeContainsPoint}, region::{Region, RegionArg, R}, segment::Segment, set::S, theta_points::{ThetaPoints, ThetaPointsArg}, r2::R2, to::To, zero::Zero, fmt::Fmt, hull::Hull, shape::AreaArg};
 
 pub type C<D> = Rc<RefCell<Component<D>>>;
 
@@ -22,10 +23,10 @@ pub struct Component<D> {
     pub container_set_idxs: BTreeSet<usize>,
     pub regions: Vec<Region<D>>,
     pub child_component_keys: BTreeSet<Key>,
-    pub hull: Region<D>,
+    pub hull: Hull<D>,
 }
 
-impl<D: Deg + EdgeArg + fmt::Debug + Fmt + ShapeContainsPoint + ThetaPointsArg + Zero> Component<D>
+impl<D: Deg + EdgeArg + fmt::Debug + Fmt + RegionArg + ShapeContainsPoint + ThetaPointsArg + Zero> Component<D>
 where R2<D>: To<R2<f64>>,
 {
     pub fn new(
@@ -84,12 +85,11 @@ where R2<D>: To<R2<f64>>,
                 }
                 let mut region_container_set_idxs = container_set_idxs.clone();  // TODO: shadow?
                 region_container_set_idxs.insert(set_idx);
-                Region {
+                Region::new(
                     key,
-                    segments: vec![ Segment { edge: e.clone(), fwd: true } ],
-                    container_set_idxs: region_container_set_idxs.clone(),
-                    child_components: vec![],  // populated by `Scene`, once all `Component`s have been created
-                }
+                    vec![ Segment { edge: e.clone(), fwd: true } ],
+                    region_container_set_idxs.clone()
+                )
             };
             node.add_edge(e.clone());
             let component = Component {
@@ -101,12 +101,7 @@ where R2<D>: To<R2<f64>>,
                 container_set_idxs: container_set_idxs.clone(),
                 child_component_keys: BTreeSet::new(),  // populated by `Scene`, once all `Component`s have been created
                 regions: vec![ region.clone() ],
-                hull: Region {
-                    key: String::new(),
-                    segments: vec![ Segment { edge: e.clone(), fwd: true } ],
-                    container_set_idxs,
-                    child_components: vec![],  // not populated/relevant, a `hull` is a special Region (TODO: give it its own type?)
-                },
+                hull: Hull(vec![ Segment { edge: e.clone(), fwd: true } ]),
             };
             debug!("singleton component: {}", set_idx);
             debug!("  node: {}", node);
@@ -159,12 +154,7 @@ where R2<D>: To<R2<f64>>,
             let successor = successors[0].clone();
             hull_segments.push(successor);
         }
-        let hull = Region {
-            key: String::new(),
-            segments: hull_segments,
-            container_set_idxs: container_set_idxs.iter().cloned().collect(),
-            child_components: vec![],  // not populated/relevant, a `hull` is a special Region (TODO: give it its own type?)// populated by `Scene`, once all `Component`s have been created
-        };
+        let hull = Hull(hull_segments);
 
         let total_expected_visits = edges.iter().map(|e| e.borrow().expected_visits()).sum::<usize>();
         let regions = Component::regions(&edges, num_sets, total_expected_visits, &container_set_idxs);
@@ -363,12 +353,11 @@ where R2<D>: To<R2<f64>>,
                         key += "-";
                     }
                 }
-                let region = Region {
+                let region = Region::new(
                     key,
-                    segments: segments.clone(),
-                    container_set_idxs: container_idxs.iter().cloned().collect(),
-                    child_components: vec![],
-                };
+                    segments.clone(),
+                    container_idxs.iter().cloned().collect(),
+                );
                 regions.push(region);
             }
         } else {
@@ -426,12 +415,42 @@ impl<D: RegionArg> Component<D>
 where R2<D>: To<R2<f64>>,
 {
     pub fn area(&self) -> D {
-        self.regions.iter().map(|r| r.total_area()).sum::<D>()
+        self.regions.iter().map(|r| r.total_area.clone()).sum::<D>()
     }
 }
 
 impl<D> Component<D> {
     pub fn contains(&self, key: &Key) -> bool {
         self.sets.iter().any(|set| set.borrow().child_component_keys.contains(key))
+    }
+}
+
+impl<D: AreaArg + Into<f64>> Component<D>
+// where f64: From<&'a D>  `From<&f64> for f64` doesn't exist…?
+{
+    pub fn verify_areas(&self, ε: f64) -> Result<()> {
+        let mut shape_region_areas: BTreeMap<usize, f64> = BTreeMap::new();
+        for region in &self.regions {
+            let region_area: f64 = region.total_area.clone().into();
+            for set_idx in &region.container_set_idxs {
+                let shape_region_area = shape_region_areas.entry(*set_idx).or_insert(0.);
+                *shape_region_area += region_area;
+            }
+        }
+        for set_idx in &self.set_idxs {
+            let shape_region_area = *shape_region_areas.get(set_idx).unwrap();
+            let shape = &self.sets[*set_idx].borrow().shape;
+            let shape_area: f64 = shape.area().into();
+            let diff = (shape_region_area / shape_area - 1.).abs();
+            if diff > ε {
+                error!(
+                // return Err(anyhow!(
+                    "shape {} area {} != sum of regions area {}, half-diff {}",
+                    set_idx, shape_area, shape_region_area, (shape_region_area - shape_area) / 2.
+                // ));
+                )
+            }
+        }
+        Ok(())
     }
 }
