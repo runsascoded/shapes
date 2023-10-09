@@ -44,8 +44,8 @@ export function expand_targets(targets: any): any;
 export function xyrr_unit(xyrr: any): any;
 export interface Error {
     key: string;
-    actual_area: Dual | null;
-    actual_frac: Dual;
+    actual_area: number | null;
+    actual_frac: number;
     target_area: number;
     target_frac: number;
     error: Dual;
@@ -91,7 +91,7 @@ export interface Component {
 export interface Region {
     key: string;
     segments: Segment[];
-    area: Dual;
+    area: number;
     container_set_idxs: number[];
     child_component_keys: string[];
 }
@@ -112,7 +112,7 @@ export interface Edge {
 }
 
 export interface Point {
-    p: R2<D>;
+    p: R2<number>;
     edge_idxs: number[];
 }
 
@@ -131,11 +131,6 @@ export interface R2<D> {
 }
 
 export type Key = string;
-
-export interface Dual {
-    v: number;
-    d: number[];
-}
 
 export interface Targets<D> {
     all: TargetsMap<D>;
@@ -159,6 +154,18 @@ export interface Intersection<D> {
     c1idx: number;
     t0: D;
     t1: D;
+}
+
+export type History = Step[];
+
+export interface Step {
+    error: number;
+    shapes: Shape<number>[];
+}
+
+export interface Dual {
+    v: number;
+    d: number[];
 }
 
 export interface XYRRT<D> {
