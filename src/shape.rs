@@ -144,6 +144,19 @@ impl<D: Clone> Shape<D> {
     }
 }
 
+pub trait AreaArg: Clone + Mul<Output = Self> + Mul<f64, Output = Self> {}
+impl<D: Clone + Mul<Output = D> + Mul<f64, Output = D>> AreaArg for D {}
+
+impl<D: AreaArg> Shape<D> {
+    pub fn area(&self) -> D {
+        match self {
+            Shape::Circle(c) => c.area(),
+            Shape::XYRR(e) => e.area(),
+            Shape::XYRRT(e) => e.area(),
+        }
+    }
+}
+
 impl From<Shape<Dual>> for Shape<f64> {
     fn from(s: Shape<Dual>) -> Self {
         match s {

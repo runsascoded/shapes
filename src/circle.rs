@@ -1,4 +1,4 @@
-use std::{fmt::{Display, self}, ops::{Mul, Add, Neg, Div, Sub}};
+use std::{fmt::{Display, self}, ops::{Mul, Add, Neg, Div, Sub}, f64::consts::PI};
 
 use derive_more::From;
 use log::debug;
@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 use crate::{
     dual::{D, Dual},
-    r2::R2, rotate::{Rotate as _Rotate, RotateArg}, shape::{Duals, Shape, Shapes}, transform::{Projection, CanTransform}, transform::Transform::{Rotate, Scale, ScaleXY, Translate, self}, ellipses::xyrr::{XYRR, UnitCircleGap}, sqrt::Sqrt, math::{is_normal::IsNormal, recip::Recip}, to::To, intersect::Intersect, coord_getter::{CoordGetter, coord_getter}
+    r2::R2, rotate::{Rotate as _Rotate, RotateArg}, shape::{Duals, Shape, Shapes, AreaArg}, transform::{Projection, CanTransform}, transform::Transform::{Rotate, Scale, ScaleXY, Translate, self}, ellipses::xyrr::{XYRR, UnitCircleGap}, sqrt::Sqrt, math::{is_normal::IsNormal, recip::Recip}, to::To, intersect::Intersect, coord_getter::{CoordGetter, coord_getter}
 };
 
 #[derive(Debug, Clone, Copy, From, PartialEq, Tsify, Serialize, Deserialize)]
@@ -205,6 +205,12 @@ where R2<D>: TransformR2<D>,
                 Circle { c, r, }.into()
             },
         }
+    }
+}
+
+impl<D: AreaArg> Circle<D> {
+    pub fn area(&self) -> D {
+        self.r.clone() * self.r.clone() * PI
     }
 }
 

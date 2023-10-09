@@ -1,4 +1,4 @@
-use std::{ops::{Neg, Sub, Mul, Div}, fmt::Display};
+use std::{ops::{Neg, Sub, Mul, Div}, fmt::Display, f64::consts::PI};
 
 use approx::{RelativeEq, AbsDiffEq};
 use derive_more::From;
@@ -6,7 +6,7 @@ use log::debug;
 use serde::{Serialize, Deserialize};
 use tsify::Tsify;
 
-use crate::{r2::R2, rotate::{Rotate as _Rotate, RotateArg}, dual::{D, Dual}, shape::{Duals, Shape}, transform::{Transform::{Rotate, Scale, ScaleXY, Translate, self}, Projection, CanTransform, CanProject}, math::{recip::Recip, deg::Deg}, coord_getter::{CoordGetter, coord_getter}};
+use crate::{r2::R2, rotate::{Rotate as _Rotate, RotateArg}, dual::{D, Dual}, shape::{Duals, Shape, AreaArg}, transform::{Transform::{Rotate, Scale, ScaleXY, Translate, self}, Projection, CanTransform, CanProject}, math::{recip::Recip, deg::Deg}, coord_getter::{CoordGetter, coord_getter}};
 
 use super::{xyrr::{XYRR, TransformD, TransformR2, UnitCircleGap, CdefArg}, cdef, bcdef::{BCDEF, self}};
 
@@ -62,6 +62,12 @@ impl<D: LevelArg> XYRRT<D> {
             c: self.c.clone().rotate(&-self.t.clone()),
             r: self.r.clone(),
         }
+    }
+}
+
+impl<D: AreaArg> XYRRT<D> {
+    pub fn area(&self) -> D {
+        self.r.x.clone() * self.r.y.clone() * PI
     }
 }
 
