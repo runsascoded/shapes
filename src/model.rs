@@ -75,7 +75,7 @@ impl Model {
 mod tests {
     use std::{env, f64::consts::PI};
 
-    use crate::{duals::{D, Z}, scene::tests::ellipses4, shape::{circle, InputSpec, xyrr, xyrrt}, to::To, transform::{CanTransform, Transform::Rotate}, coord_getter::CoordGetters, history::{History, self}};
+    use crate::{duals::{D, Z}, scene::tests::ellipses4, shape::{circle, InputSpec, xyrr, xyrrt}, to::To, transform::{CanTransform, Transform::Rotate}, coord_getter::CoordGetters, history::{History, HistoryStep}};
 
     use super::*;
     use test_log::test;
@@ -166,7 +166,7 @@ mod tests {
                 let steps = model.steps;
                 assert_eq!(steps.len(), expecteds.len());
                 for (idx, (step, expected)) in steps.into_iter().zip(expecteds.into_iter()).enumerate() {
-                    let actual: history::Step = step.into();
+                    let actual: HistoryStep = step.into();
                     assert_eq!(actual, expected, "Step {}", idx);
                 }
             }

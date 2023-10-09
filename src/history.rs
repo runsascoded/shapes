@@ -3,25 +3,27 @@ use std::{path::Path, collections::BTreeMap};
 use polars::{prelude::*, series::SeriesIter};
 use serde::{Serialize, Deserialize};
 use tsify::Tsify;
+use wasm_bindgen::prelude::wasm_bindgen;
 
-use crate::{shape::Shape, step, model::Model};
+use crate::{shape::Shape, step::Step, model::Model};
 
+/// Namespacing apparently necessary to avoid colliding with step::Step in apvd.d.ts: https://github.com/madonoharu/tsify/issues/36
 #[derive(Debug, Clone, PartialEq, Tsify, Serialize, Deserialize)]
-pub struct Step {
+pub struct HistoryStep {
     pub error: f64,
     pub shapes: Vec<Shape<f64>>,
 }
 
-impl From<step::Step> for Step {
-    fn from(s: step::Step) -> Self {
-        Step {
+impl From<Step> for HistoryStep {
+    fn from(s: Step) -> Self {
+        HistoryStep {
             error: s.error.v(),
             shapes: s.shapes.into_iter().map(|s| s.into()).collect(),
         }
     }
 }
 
-impl Step {
+impl HistoryStep {
     pub fn names(&self) -> Vec<String> {
         self
         .shapes
@@ -42,7 +44,7 @@ impl Step {
 }
 
 #[derive(Debug, Clone, derive_more::Deref, Tsify, Serialize, Deserialize)]
-pub struct History(pub Vec<Step>);
+pub struct History(pub Vec<HistoryStep>);
 
 impl From<Model> for History {
     fn from(m: Model) -> Self {
@@ -89,7 +91,7 @@ impl History {
         }
 
         let num_rows = df.height();
-        let mut steps: Vec<Step> = Vec::new();
+        let mut steps: Vec<HistoryStep> = Vec::new();
         let next = |row_idx: usize, col_idx: usize, iter: &mut SeriesIter| -> Result<f64, LoadErr> {
             match iter.next().expect(&format!("col {} should have at least {} rows, found {}", col_idx, num_rows, row_idx)) {
                 Float64(f) => Ok(f),
@@ -112,7 +114,7 @@ impl History {
                 }).collect();
                 Shape::from_coords(coords)
             }).collect();
-            steps.push(Step { error, shapes });
+            steps.push(HistoryStep { error, shapes });
         }
         Ok(Self(steps))
     }
