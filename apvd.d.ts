@@ -62,20 +62,67 @@ export interface Step {
 
 export type Errors = Record<string, Error>;
 
+export interface Circle<D> {
+    c: R2<D>;
+    r: D;
+}
+
+export interface Dual {
+    v: number;
+    d: number[];
+}
+
 export type Shape<D> = { Circle: Circle<D> } | { XYRR: XYRR<D> } | { XYRRT: XYRRT<D> };
 
 export type Input = [Shape<number>, Duals];
 
 export type Duals = number[][];
 
-export interface XYRR<D> {
-    c: R2<D>;
-    r: R2<D>;
+export interface Model {
+    steps: Step[];
+    repeat_idx: number | null;
+    min_idx: number;
+    min_error: number;
 }
 
-export interface Circle<D> {
-    c: R2<D>;
-    r: D;
+export type D = Dual;
+
+export interface HistoryStep {
+    error: number;
+    shapes: Shape<number>[];
+}
+
+export type History = HistoryStep[];
+
+export interface Intersection<D> {
+    x: D;
+    y: D;
+    c0idx: number;
+    c1idx: number;
+    t0: D;
+    t1: D;
+}
+
+export type Key = string;
+
+export interface Targets<D> {
+    all: TargetsMap<D>;
+    given: string[];
+    n: number;
+    total_area: D;
+}
+
+export type TargetsMap<D> = Record<string, D>;
+
+export interface Set<D> {
+    idx: number;
+    child_component_keys: Key[];
+    shape: Shape<D>;
+}
+
+export interface R2<D> {
+    x: D;
+    y: D;
 }
 
 export interface Component {
@@ -85,7 +132,7 @@ export interface Component {
     edges: Edge[];
     regions: Region[];
     container_idxs: number[];
-    hull: Region;
+    hull: Segment[];
 }
 
 export interface Region {
@@ -116,62 +163,15 @@ export interface Point {
     edge_idxs: number[];
 }
 
-export interface Model {
-    steps: Step[];
-    repeat_idx: number | null;
-    min_idx: number;
-    min_error: number;
-}
-
-export type D = Dual;
-
-export interface R2<D> {
-    x: D;
-    y: D;
-}
-
-export type Key = string;
-
-export interface Targets<D> {
-    all: TargetsMap<D>;
-    given: string[];
-    n: number;
-    total_area: D;
-}
-
-export type TargetsMap<D> = Record<string, D>;
-
-export interface Set<D> {
-    idx: number;
-    child_component_keys: Key[];
-    shape: Shape<D>;
-}
-
-export interface Intersection<D> {
-    x: D;
-    y: D;
-    c0idx: number;
-    c1idx: number;
-    t0: D;
-    t1: D;
-}
-
-export type History = Step[];
-
-export interface Step {
-    error: number;
-    shapes: Shape<number>[];
-}
-
-export interface Dual {
-    v: number;
-    d: number[];
-}
-
 export interface XYRRT<D> {
     c: R2<D>;
     r: R2<D>;
     t: D;
+}
+
+export interface XYRR<D> {
+    c: R2<D>;
+    r: R2<D>;
 }
 
 
