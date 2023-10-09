@@ -17,7 +17,7 @@ nalgebra = { version = "0.32.3" }
 num-dual = { version = "0.7.1" }
 num-traits = "0.2.16"
 ordered-float = "4.1.0"
-polars = { version = "0.33.2", features = [ "csv" ] }
+polars = { version = "*", default_features = false, features = ["csv"] }
 roots = "0.0.8"
 serde = { version = "1.0.183", features = ["derive"] }
 serde-wasm-bindgen = "0.6.0"
