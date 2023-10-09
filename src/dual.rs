@@ -1,7 +1,7 @@
 use std::{fmt::{Debug, Display}, iter::{Sum, repeat}, ops::{Add, AddAssign, Deref, Div, Mul, Neg, Sub, SubAssign}};
 
 use approx::{AbsDiffEq, RelativeEq};
-use crate::{fmt::Fmt, to::To, shape::{InputSpec, Shape, Duals}};
+use crate::{fmt::Fmt, to::To};
 use nalgebra::{ComplexField, Dyn, Matrix, RealField, U1};
 use num_dual::{Derivative, DualDVec64};
 use num_traits::Zero;

@@ -1,11 +1,11 @@
-use std::{collections::{BTreeSet, BTreeMap}, cell::RefCell, rc::Rc, f64::consts::TAU, fmt, ops::Sub};
-use anyhow::{Result, anyhow};
+use std::{collections::{BTreeSet, BTreeMap}, cell::RefCell, rc::Rc, f64::consts::TAU, fmt};
+use anyhow::Result;
 
 use log::{debug, error};
 use serde::{Serialize, Deserialize};
 use tsify::Tsify;
 
-use crate::{node::{N, Node}, math::deg::Deg, edge::{E, self, EdgeArg, Edge}, contains::{Contains, ShapeContainsPoint}, region::{Region, RegionArg, R}, segment::Segment, set::S, theta_points::{ThetaPoints, ThetaPointsArg}, r2::R2, to::To, zero::Zero, fmt::Fmt, hull::Hull, shape::AreaArg};
+use crate::{node::{N, Node}, math::deg::Deg, edge::{E, self, EdgeArg, Edge}, contains::{Contains, ShapeContainsPoint}, region::{Region, RegionArg}, segment::Segment, set::S, theta_points::{ThetaPoints, ThetaPointsArg}, r2::R2, to::To, zero::Zero, fmt::Fmt, hull::Hull, shape::AreaArg};
 
 pub type C<D> = Rc<RefCell<Component<D>>>;
 
