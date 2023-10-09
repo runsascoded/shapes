@@ -437,16 +437,16 @@ impl<D: AreaArg + Into<f64>> Component<D>
                 *shape_region_area += region_area;
             }
         }
-        for set_idx in &self.set_idxs {
-            let shape_region_area = *shape_region_areas.get(set_idx).unwrap();
-            let shape = &self.sets[*set_idx].borrow().shape;
-            let shape_area: f64 = shape.area().into();
+        for set in &self.sets {
+            let set = set.borrow();
+            let shape_region_area = *shape_region_areas.get(&set.idx).unwrap();
+            let shape_area: f64 = set.shape.area().into();
             let diff = (shape_region_area / shape_area - 1.).abs();
             if diff > ε {
                 error!(
                 // return Err(anyhow!(
                     "shape {} area {} != sum of regions area {}, half-diff {}",
-                    set_idx, shape_area, shape_region_area, (shape_region_area - shape_area) / 2.
+                    set.idx, shape_area, shape_region_area, (shape_region_area - shape_area) / 2.
                 // ));
                 )
             }
