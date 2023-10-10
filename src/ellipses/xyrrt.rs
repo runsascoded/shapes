@@ -1,4 +1,4 @@
-use std::{ops::{Neg, Sub, Mul, Div}, fmt::Display};
+use std::{ops::{Neg, Sub, Mul, Div}, fmt::Display, f64::consts::PI};
 
 use approx::{RelativeEq, AbsDiffEq};
 use derive_more::From;
@@ -6,7 +6,7 @@ use log::debug;
 use serde::{Serialize, Deserialize};
 use tsify::Tsify;
 
-use crate::{r2::R2, rotate::{Rotate as _Rotate, RotateArg}, dual::{D, Dual}, shape::{Duals, Shape}, transform::{Transform::{Rotate, Scale, ScaleXY, Translate, self}, Projection, CanTransform, CanProject}, math::{recip::Recip, deg::Deg}};
+use crate::{r2::R2, rotate::{Rotate as _Rotate, RotateArg}, dual::{D, Dual}, shape::{Duals, Shape, AreaArg}, transform::{Transform::{Rotate, Scale, ScaleXY, Translate, self}, Projection, CanTransform, CanProject}, math::{recip::Recip, deg::Deg}, coord_getter::{CoordGetter, coord_getter}};
 
 use super::{xyrr::{XYRR, TransformD, TransformR2, UnitCircleGap, CdefArg}, cdef, bcdef::{BCDEF, self}};
 
@@ -28,18 +28,18 @@ impl XYRRT<f64> {
         let r = R2 { x: rx, y: ry };
         XYRRT::from((c, r, t))
     }
-    pub fn getters() -> [ Box<dyn Fn(XYRRT<f64>) -> f64>; 5 ] {
-        [
-            Box::new(move |e: XYRRT<f64>| e.c.x),
-            Box::new(move |e: XYRRT<f64>| e.c.y),
-            Box::new(move |e: XYRRT<f64>| e.r.x),
-            Box::new(move |e: XYRRT<f64>| e.r.y),
-            Box::new(move |e: XYRRT<f64>| e.t),
-        ]
-    }
+    pub fn getters() -> [ CoordGetter<Self>; 5 ] {[
+        coord_getter("cx", |e: Self| e.c.x),
+        coord_getter("cy", |e: Self| e.c.y),
+        coord_getter("rx", |e: Self| e.r.x),
+        coord_getter("ry", |e: Self| e.r.y),
+        coord_getter( "t", |e: Self| e.t  ),
+    ]}
     pub fn at_y(&self, y: f64) -> Vec<f64> {
         self.bcdef().at_y(y)
     }
+    pub fn names(&self) -> [String; 5] { Self::getters().map(|g| g.name).into() }
+    pub fn vals(&self) -> [f64; 5] { [ self.c.x, self.c.y, self.r.x, self.r.y, self.t ] }
 }
 
 impl<D: RotateArg> XYRRT<D> {
@@ -62,6 +62,12 @@ impl<D: LevelArg> XYRRT<D> {
             c: self.c.clone().rotate(&-self.t.clone()),
             r: self.r.clone(),
         }
+    }
+}
+
+impl<D: AreaArg> XYRRT<D> {
+    pub fn area(&self) -> D {
+        self.r.x.clone() * self.r.y.clone() * PI
     }
 }
 

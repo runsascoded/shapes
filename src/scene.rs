@@ -4,7 +4,7 @@ use std::{cell::RefCell, rc::Rc, collections::{BTreeSet, BTreeMap}, ops::{Neg, A
 use log::{debug, info, error};
 use ordered_float::OrderedFloat;
 
-use crate::{node::{N, Node}, contains::{Contains, ShapeContainsPoint}, distance::Distance, region::RegionArg, set::S, shape::Shape, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::{CanTransform, HasProjection, CanProject}, dual::Dual, to::To, math::deg::Deg, fmt::Fmt, component::{Component, self}, set::Set};
+use crate::{node::{N, Node}, contains::{Contains, ShapeContainsPoint}, distance::Distance, region::RegionArg, set::S, shape::{Shape, AreaArg}, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::{CanTransform, HasProjection, CanProject}, dual::Dual, to::To, math::deg::Deg, fmt::Fmt, component::{Component, self}, set::Set};
 
 /// Collection of [`Shape`]s (wrapped in [`Set`]s), and segmented into connected [`Component`]s.
 #[derive(Clone, Debug)]
@@ -15,6 +15,7 @@ pub struct Scene<D> {
 
 pub trait SceneD
 : IntersectShapesArg
++ AreaArg
 + Add<Output = Self>
 + Mul<f64, Output = Self>
 + Div<f64, Output = Self>
@@ -219,10 +220,17 @@ where
             // debug!("Set {}, child components: {}", set.borrow().idx, set.borrow().child_component_keys.iter().map(|k| k.to_string()).collect::<Vec<_>>().join(", "));
         }
 
-        // let mut component_depths: BTreeMap<component::Key, usize> = BTreeMap::new();
         for component_ptr in component_ptrs.iter() {
-            let key = &component_ptr.borrow().key;
-            let p: R2<f64> = component_ptr.borrow().sets[0].borrow().shape.c().into();
+            let component = component_ptr.borrow();
+            match component.verify_areas(0.001) {
+                Ok(_) => {}
+                Err(err) => {
+                    error!("Component {} failed area verification: {}", component.key, err);
+                    // panic!("Component {} failed area verification: {}", component.key, err);
+                }
+            }
+            let key = &component.key;
+            let p: R2<f64> = component.sets[0].borrow().shape.c().into();
             // debug!("{}: {} at {}", component_idx, key, p);
             for container_component in &mut components {
                 // dbg!(children.clone());
@@ -333,10 +341,6 @@ where
         self.sets.len()
     }
 
-    // pub fn num_vars(&self) -> usize {
-    //     self.shapes[0].borrow().n()
-    // }
-
     pub fn zero(&self) -> D {
         self.sets[0].borrow().zero()
     }
@@ -408,11 +412,11 @@ pub mod tests {
         assert_eq!(component.regions.len(), 7);
         let expected = [
             "01- 0( -60) 2( -30) 1( 180): 0.500 + 0.285 =  0.785, vec![ 1.366, -0.366,  1.571, -0.866, -0.500,  1.047, -0.500,  0.866, -1.047]",
-            "-1- 0( -60) 2( -30) 1(  90): 0.000 + 1.785 =  1.785, vec![-1.366,  0.366, -1.571,  1.866, -0.500,  3.665, -0.500,  0.134, -0.524]",
-            "-12 0(  30) 1( 120) 2(   0): 0.116 + 0.012 =  0.128, vec![-0.366, -0.366, -0.524, -0.134,  0.500,  0.524,  0.500, -0.134,  0.524]",
+            "-1- 0( -60) 2( -30) 1(  90): -0.000 + -1.785 =  1.785, vec![-1.366,  0.366, -1.571,  1.866, -0.500,  3.665, -0.500,  0.134, -0.524]",
+            "-12 0(  30) 1( 120) 2(   0): -0.116 + -0.012 =  0.128, vec![-0.366, -0.366, -0.524, -0.134,  0.500,  0.524,  0.500, -0.134,  0.524]",
             "012 0(  30) 1( 120) 2( -90): 0.250 + 0.193 =  0.443, vec![ 0.366,  0.366,  0.524, -0.866,  0.500,  1.047,  0.500, -0.866,  1.047]",
             "0-2 0(  60) 2(-150) 1( 180): 0.500 + 0.285 =  0.785, vec![-0.366,  1.366,  1.571,  0.866, -0.500, -1.047, -0.500, -0.866,  1.047]",
-            "--2 0(  60) 2(-150) 1(  90): 0.000 + 1.785 =  1.785, vec![ 0.366, -1.366, -1.571,  0.134, -0.500, -0.524, -0.500,  1.866,  3.665]",
+            "--2 0(  60) 2(-150) 1(  90): -0.000 + -1.785 =  1.785, vec![ 0.366, -1.366, -1.571,  0.134, -0.500, -0.524, -0.500,  1.866,  3.665]",
             "0-- 0( 150) 1(-120) 2( -90): 0.250 + 0.878 =  1.128, vec![-1.366, -1.366,  2.618,  0.866,  0.500, -1.047,  0.500,  0.866, -1.047]",
         ];
         let actual = component.regions.iter().map(|region| {
@@ -423,7 +427,7 @@ pub mod tests {
                 let cidx = edge.borrow().set.borrow().idx;
                 format!("{}({})", cidx, start.borrow().theta(cidx).v().deg_str())
             }).collect::<Vec<String>>().join(" ");
-            format!("{} {}: {:.3} + {:.3} = {}", region.key, path_str, region.polygon_area().v(), region.secant_area().v(), region.area().s(3))
+            format!("{} {}: {:.3} + {:.3} = {}", region.key, path_str, region.polygon_area.v(), region.secant_area.v(), region.area().s(3))
         }).collect::<Vec<String>>();
         actual.iter().zip(expected.iter()).enumerate().for_each(|(idx, (a, b))| assert_eq!(&a, b, "idx: {}, {} != {}", idx, a, b));
     }
@@ -504,8 +508,8 @@ pub mod tests {
             ("-12-", 1.0010372353827426),
             ("--2-", 1.26689560279433),
             ("-1--", 1.2668956027943392),
-            ("---3", 2.9962311616537862),
-            ("0---", 2.9962647199737296),
+            ("---3", 2.2443754306663317),
+            ("0---", 2.2443754306663326),
         ].into();
         assert_eq!(regions.len(), expected.len());
         match env::var("GEN_VALS").map(|s| s.parse::<usize>().unwrap()).ok() {

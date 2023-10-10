@@ -1,11 +1,11 @@
 use std::{ops::{Neg, Add, Sub, Mul, Div}, fmt};
 
-use derive_more::{From, Deref, Display};
+use derive_more::{From, Display};
 use log::debug;
 use serde::{Deserialize, Serialize};
 use tsify::{declare, Tsify};
 
-use crate::{dual::{D, Dual}, circle::{self, Circle}, ellipses::{xyrr::{self, XYRR, UnitCircleGap}, xyrrt::{self, XYRRT, LevelArg}}, zero::Zero, transform::{Transform, CanProject, CanTransform, HasProjection, Projection}, r2::R2, math::recip::Recip, intersect::{IntersectShapesArg, UnitCircleIntersections}, duals::InitDuals};
+use crate::{dual::{D, Dual}, circle::{self, Circle}, ellipses::{xyrr::{self, XYRR, UnitCircleGap}, xyrrt::{self, XYRRT, LevelArg}}, zero::Zero, transform::{Transform, CanProject, CanTransform, HasProjection, Projection}, r2::R2, math::recip::Recip, intersect::{IntersectShapesArg, UnitCircleIntersections}, duals::InitDuals, coord_getter::CoordGetter};
 
 #[declare]
 pub type Duals = Vec<Vec<f64>>;
@@ -30,9 +30,6 @@ impl Shapes {
     }
 }
 
-#[derive(Deref)]
-pub struct CoordGetter(pub Box<dyn Fn(Shape<f64>) -> f64>);
-
 pub fn circle<D>(cx: D, cy: D, r: D) -> Shape<D> {
     Shape::Circle(Circle { c: R2 { x: cx, y: cy }, r })
 }
@@ -44,31 +41,53 @@ pub fn xyrrt<D>(cx: D, cy: D, rx: D, ry: D, t: D) -> Shape<D> {
 }
 
 impl<D> Shape<D> {
-    pub fn getters(&self, shape_idx: usize) -> Vec<CoordGetter> {
+    pub fn getters(&self, shape_idx: usize) -> Vec<CoordGetter<Shape<f64>>> {
         match self {
-            Shape::Circle(_) => Circle::getters().map(|f| {
-                CoordGetter(Box::new(move |s: Shape<f64>| match s {
-                    Shape::Circle(c) => f(c),
-                    _ => panic!("Expected Circle at idx {}", shape_idx),
-                }))
+            Shape::Circle(_) => Circle::getters().map(|CoordGetter { name, get }| {
+                // TODO: `CoordGetter.map`; "`getter` does not live long enough"
+                // getter.map(Box::new(move |s: Shape<f64>| match s {
+                //     Shape::Circle(c) => c,
+                //     _ => panic!("Expected Circle at idx {}", shape_idx),
+                // }))
+                CoordGetter {
+                    name,
+                    get: Box::new(move |s: Shape<f64>| match s {
+                        Shape::Circle(c) => get(c),
+                        _ => panic!("Expected Circle at idx {}", shape_idx),
+                    })
+                }
             }).into_iter().collect(),
-            Shape::XYRR(_) => XYRR::getters().map(|f| {
-                CoordGetter(Box::new(move |s: Shape<f64>| match s {
-                    Shape::XYRR(e) => f(e),
-                    _ => panic!("Expected XYRR at idx {}", shape_idx),
-                }))
+            Shape::XYRR(_) => XYRR::getters().map(|CoordGetter { name, get }| {
+                CoordGetter {
+                    name,
+                    get: Box::new(move |s: Shape<f64>| match s {
+                        Shape::XYRR(e) => get(e),
+                        _ => panic!("Expected XYRR at idx {}", shape_idx),
+                    })
+                }
             }).into_iter().collect(),
-            Shape::XYRRT(_) => XYRRT::getters().map(|f| {
-                CoordGetter(Box::new(move |s: Shape<f64>| match s {
-                    Shape::XYRRT(e) => f(e),
-                    _ => panic!("Expected XYRRT at idx {}", shape_idx),
-                }))
+            Shape::XYRRT(_) => XYRRT::getters().map(|CoordGetter { name, get }| {
+                CoordGetter {
+                    name,
+                    get: Box::new(move |s: Shape<f64>| match s {
+                        Shape::XYRRT(e) => get(e),
+                        _ => panic!("Expected XYRRT at idx {}", shape_idx),
+                    })
+                }
             }).into_iter().collect(),
         }
     }
 }
 
 impl Shape<f64> {
+    pub fn from_coords(coords: Vec<(&str, f64)>) -> Shape<f64> {
+        match coords.as_slice() {
+            [ ("cx", cx), ("cy", cy), ("r", r) ] => circle(*cx, *cy, *r),
+            [ ("cx", cx), ("cy", cy), ("rx", rx), ("ry", ry) ] => xyrr(*cx, *cy, *rx, *ry),
+            [ ("cx", cx), ("cy", cy), ("rx", rx), ("ry", ry), ("t", t) ] => xyrrt(*cx, *cy, *rx, *ry, *t),
+            _ => panic!("Unrecognized coord keys: {:?}", coords),
+        }
+    }
     pub fn dual(&self, duals: &Duals) -> Shape<D> {
         match self {
             Shape::Circle(c) => Shape::Circle(c.dual(duals)),
@@ -89,6 +108,20 @@ impl Shape<f64> {
             xs
         }
     }
+    pub fn names(&self) -> Vec<String> {
+        match self {
+            Shape::Circle(c) => c.names().to_vec(),
+            Shape::XYRR(e) => e.names().to_vec(),
+            Shape::XYRRT(e) => e.names().to_vec(),
+        }
+    }
+    pub fn vals(&self) -> Vec<f64> {
+        match self {
+            Shape::Circle(c) => c.vals().to_vec(),
+            Shape::XYRR(e) => e.vals().to_vec(),
+            Shape::XYRRT(e) => e.vals().to_vec(),
+        }
+    }
 }
 
 impl<D: Clone> Shape<D> {
@@ -107,6 +140,19 @@ impl<D: Clone> Shape<D> {
             Shape::Circle(c) => c.c.clone(),
             Shape::XYRR(e) => e.c.clone(),
             Shape::XYRRT(e) => e.c.clone(),
+        }
+    }
+}
+
+pub trait AreaArg: Clone + Mul<Output = Self> + Mul<f64, Output = Self> {}
+impl<D: Clone + Mul<Output = D> + Mul<f64, Output = D>> AreaArg for D {}
+
+impl<D: AreaArg> Shape<D> {
+    pub fn area(&self) -> D {
+        match self {
+            Shape::Circle(c) => c.area(),
+            Shape::XYRR(e) => e.area(),
+            Shape::XYRRT(e) => e.area(),
         }
     }
 }

@@ -1,24 +1,35 @@
-use std::{fmt::{Display, self}, ops::{Mul, Add, Neg, Div, Sub}};
+use std::{
+    f64::consts::PI,
+    fmt::{self, Display},
+    ops::{Add, Div, Mul, Neg, Sub},
+};
 
+use crate::{
+    coord_getter::{coord_getter, CoordGetter},
+    dual::{Dual, D},
+    ellipses::xyrr::{UnitCircleGap, XYRR},
+    intersect::Intersect,
+    math::{is_normal::IsNormal, recip::Recip},
+    r2::R2,
+    rotate::{Rotate as _Rotate, RotateArg},
+    shape::{AreaArg, Duals, Shape, Shapes},
+    sqrt::Sqrt,
+    to::To,
+    transform::Transform::{self, Rotate, Scale, ScaleXY, Translate},
+    transform::{CanTransform, Projection},
+};
 use derive_more::From;
 use log::debug;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
-use crate::{
-    dual::{D, Dual},
-    r2::R2, rotate::{Rotate as _Rotate, RotateArg}, shape::{Duals, Shape, Shapes}, transform::{Projection, CanTransform}, transform::Transform::{Rotate, Scale, ScaleXY, Translate, self}, ellipses::xyrr::{XYRR, UnitCircleGap}, sqrt::Sqrt, math::{is_normal::IsNormal, recip::Recip}, to::To, intersect::Intersect
-};
 
 #[derive(Debug, Clone, Copy, From, PartialEq, Tsify, Serialize, Deserialize)]
 pub struct Circle<D> {
-    // pub idx: usize,
     pub c: R2<D>,
     pub r: D,
 }
 
 impl<D: Eq> Eq for Circle<D> {}
-
-// static getters: [ Box<dyn Fn(Circle<f64>) -> f64>; 3 ] = ;
 
 impl Circle<f64> {
     pub fn dual(&self, duals: &Duals) -> Circle<D> {
@@ -28,18 +39,17 @@ impl Circle<f64> {
         let c = R2 { x, y };
         Circle::from((c, r))
     }
-    pub fn getters() -> [ Box<dyn Fn(Circle<f64>) -> f64>; 3 ] {
-        [
-            Box::new(move |c: Circle<f64>| c.c.x),
-            Box::new(move |c: Circle<f64>| c.c.y),
-            Box::new(move |c: Circle<f64>| c.r),
-        ]
-    }
+
+    pub fn getters() -> [ CoordGetter<Self>; 3 ] {[
+        coord_getter("cx", |c: Self| c.c.x),
+        coord_getter("cy", |c: Self| c.c.y),
+        coord_getter( "r", |c: Self| c.r  ),
+    ]}
     pub fn at_y(&self, y: f64) -> Vec<f64> {
         let uy = (y - self.c.y) / self.r;
         let uy2 = uy * uy;
         if uy2 > 1. {
-            return vec![]
+            return vec![];
         }
         let ux1 = (1. - uy2).sqrt();
         let ux0 = -ux1;
@@ -51,11 +61,16 @@ impl Circle<f64> {
             vec![ x0 ]
         }
     }
+    pub fn names(&self) -> [String; 3] { Self::getters().map(|g| g.name).into() }
+    pub fn vals(&self) -> [f64; 3] { [ self.c.x, self.c.y, self.r ] }
 }
 
 impl Circle<D> {
     pub fn v(&self) -> Circle<f64> {
-        Circle { c: self.c.v(), r: self.r.v() }
+        Circle {
+            c: self.c.v(),
+            r: self.r.v(),
+        }
     }
     pub fn n(&self) -> usize {
         self.c.x.d().len()
@@ -81,14 +96,15 @@ pub trait UnitIntersectionsArg
     + Mul<f64, Output = Self>
     + Div<Output = Self>
     + Div<f64, Output = Self>
-{}
+{
+}
 
 impl UnitIntersectionsArg for f64 {}
 impl UnitIntersectionsArg for Dual {}
 
 impl<D: UnitIntersectionsArg> Circle<D>
 where
-    f64: Add<D, Output = D>
+    f64: Add<D, Output = D>,
 {
     pub fn unit_intersections(&self) -> Vec<R2<D>> {
         let cx = self.c.x.clone();
@@ -124,19 +140,33 @@ where
         };
         let mut intersections: Vec<R2<D>> = Vec::new();
         if x0.is_normal() && y0.is_normal() {
-            intersections.push(R2 { x: x0.clone(), y: y0.clone() });
+            intersections.push(R2 {
+                x: x0.clone(),
+                y: y0.clone(),
+            });
         }
         if x1.is_normal() && y1.is_normal() {
-            intersections.push(R2 { x: x1.clone(), y: y1.clone() });
+            intersections.push(R2 {
+                x: x1.clone(),
+                y: y1.clone(),
+            });
         }
-        debug!("Circle::unit_intserctions: {}, {} intersections: {:?}", self, intersections.len(), intersections);
+        debug!(
+            "Circle::unit_intserctions: {}, {} intersections: {:?}",
+            self,
+            intersections.len(),
+            intersections
+        );
         intersections
     }
 }
 
 impl<O, I: To<O>> To<Circle<O>> for Circle<I> {
     fn to(self) -> Circle<O> {
-        Circle { c: self.c.to(), r: self.r.to() }
+        Circle {
+            c: self.c.to(),
+            r: self.r.to(),
+        }
     }
 }
 
@@ -147,7 +177,7 @@ impl<D: Clone> To<XYRR<D>> for Circle<D> {
             r: R2 {
                 x: self.r.clone(),
                 y: self.r.clone(),
-            }
+            },
         }
     }
 }
@@ -155,7 +185,10 @@ impl<D: Clone> To<XYRR<D>> for Circle<D> {
 impl Mul<R2<f64>> for R2<Dual> {
     type Output = R2<Dual>;
     fn mul(self, rhs: R2<f64>) -> Self::Output {
-        R2 { x: self.x * rhs.x, y: self.y * rhs.y }
+        R2 {
+            x: self.x * rhs.x,
+            y: self.y * rhs.y,
+        }
     }
 }
 pub trait TransformD
@@ -176,37 +209,46 @@ impl TransformR2<f64> for R2<f64> {}
 impl TransformR2<Dual> for R2<Dual> {}
 
 impl<D: TransformD> CanTransform<D> for Circle<D>
-where R2<D>: TransformR2<D>,
+where
+    R2<D>: TransformR2<D>,
 {
     type Output = Shape<D>;
     fn transform(&self, transform: &Transform<D>) -> Shape<D> {
         match transform {
-            Translate(v) =>
-                Circle {
-                    c: self.c.clone() + v.clone(),
-                    r: self.r.clone()
-                }.into(),
+            Translate(v) => Circle {
+                c: self.c.clone() + v.clone(),
+                r: self.r.clone(),
+            }
+            .into(),
             Scale(s) => {
                 let r = &self.r;
                 Circle {
                     c: self.c.clone() * s.clone(),
                     r: r.clone() * s.clone(),
-                }.into()
+                }
+                .into()
             }
             ScaleXY(s) => {
                 let r = &self.r;
                 XYRR {
                     c: self.c.clone() * s.clone(),
                     r: s * r.clone(),
-                }.into()
-            },
+                }
+                .into()
+            }
             Rotate(a) => {
                 // let c = rotate::Rotate::rotate(&self.c.clone(), a);
                 let c = self.c.clone().rotate(a);
                 let r = self.r.clone();
-                Circle { c, r, }.into()
-            },
+                Circle { c, r }.into()
+            }
         }
+    }
+}
+
+impl<D: AreaArg> Circle<D> {
+    pub fn area(&self) -> D {
+        self.r.clone() * self.r.clone() * PI
     }
 }
 
@@ -228,7 +270,10 @@ impl<D: Clone> Circle<D> {
     pub fn xyrr(&self) -> XYRR<D> {
         XYRR {
             c: self.c.clone(),
-            r: R2 { x: self.r.clone(), y: self.r.clone() },
+            r: R2 {
+                x: self.r.clone(),
+                y: self.r.clone(),
+            },
         }
     }
 }
@@ -294,17 +339,26 @@ mod tests {
 
     use super::*;
 
-    use crate::{intersect::Intersect, duals::{D, Z}};
+    use crate::{
+        duals::{D, Z},
+        intersect::Intersect,
+    };
 
     pub fn r2(x: f64, dx: Vec<f64>, y: f64, dy: Vec<f64>) -> R2<D> {
-        R2 { x: Dual::new(x, dx), y: Dual::new(y, dy) }
+        R2 {
+            x: Dual::new(x, dx),
+            y: Dual::new(y, dy),
+        }
     }
 
     fn swap_v(v: Vec<f64>) -> Vec<f64> {
         [&v[3..], &v[..3]].concat()
     }
     fn swap(p: R2<Dual>) -> R2<Dual> {
-        R2 { x: Dual::new(p.x.v(), swap_v(p.x.d())), y: Dual::new(p.y.v(), swap_v(p.y.d())) }
+        R2 {
+            x: Dual::new(p.x.v(), swap_v(p.x.d())),
+            y: Dual::new(p.y.v(), swap_v(p.y.d())),
+        }
     }
 
     fn check(c0: Circle<f64>, c1: Circle<f64>, expected0: R2<D>, expected1: R2<D>) {
@@ -333,9 +387,17 @@ mod tests {
                     let c1 = c1 * scale + R2 { x: dx, y: dy };
                     let R2 { x: e0x, y: e0y } = expected0.clone();
                     let R2 { x: e1x, y: e1y } = expected1.clone();
-                    let transform = |d: Dual, o: i64| Dual::new(d.v() * (scale as f64) + (o as f64), d.d().clone());
-                    let e0 = R2 { x: transform(e0x, dx), y: transform(e0y, dy) };
-                    let e1 = R2 { x: transform(e1x, dx), y: transform(e1y, dy) };
+                    let transform = |d: Dual, o: i64| {
+                        Dual::new(d.v() * (scale as f64) + (o as f64), d.d().clone())
+                    };
+                    let e0 = R2 {
+                        x: transform(e0x, dx),
+                        y: transform(e0y, dy),
+                    };
+                    let e1 = R2 {
+                        x: transform(e1x, dx),
+                        y: transform(e1y, dy),
+                    };
                     check(c0, c1, e0.clone(), e1.clone());
                     // The "dual" circles were created in the opposite order, swap the first and last 3 derivative components.
                     check(c1, c0, swap(e0), swap(e1));

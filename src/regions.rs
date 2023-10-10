@@ -3,12 +3,11 @@ use std::collections::BTreeSet;
 use serde::{Serialize, Deserialize};
 use tsify::Tsify;
 
-use crate::{dual::{Dual, D}, r2::R2, component, set::Set, region};
-
+use crate::{dual::Dual, r2::R2, component, set::Set, region, segment};
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
 pub struct Point {
-    pub p: R2<D>,
+    pub p: R2<f64>,
     pub edge_idxs: Vec<usize>,
 }
 
@@ -29,24 +28,30 @@ pub struct Segment {
     pub fwd: bool,
 }
 
+impl From<&segment::Segment<Dual>> for Segment {
+    fn from(s: &segment::Segment<Dual>) -> Self {
+        Segment {
+            edge_idx: s.edge.borrow().idx,
+            fwd: s.fwd,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
 pub struct Region {
     pub key: String,
     pub segments: Vec<Segment>,
-    pub area: Dual,
+    pub area: f64,
     pub container_set_idxs: Vec<usize>,
     pub child_component_keys: Vec<String>,
 }
 
-impl From<&region::Region<D>> for Region {
-    fn from(region: &region::Region<D>) -> Self {
+impl From<&region::Region<Dual>> for Region {
+    fn from(region: &region::Region<Dual>) -> Self {
         Region {
             key: region.key.clone(),
-            segments: region.segments.iter().map(|s| Segment {
-                edge_idx: s.edge.borrow().idx,
-                fwd: s.fwd,
-            }).collect(),
-            area: region.area(),
+            segments: region.segments.iter().map(|s| s.into()).collect(),
+            area: region.area().v(),
             container_set_idxs: region.container_set_idxs.clone().into_iter().collect(),
             child_component_keys: region.child_components.iter().map(|c| c.borrow().key.0.clone()).collect(),
         }
@@ -61,14 +66,14 @@ pub struct Component {
     pub edges: Vec<Edge>,
     pub regions: Vec<Region>,
     pub container_idxs: Vec<usize>,
-    pub hull: Region,
+    pub hull: Vec<Segment>,
 }
 
 impl Component {
-    pub fn new(component: &component::Component<D>) -> Self {
+    pub fn new(component: &component::Component<Dual>) -> Self {
         let sets: Vec<Set<f64>> = component.sets.iter().map(|set| set.borrow().v()).collect();
         let points = component.nodes.iter().map(|n| Point {
-            p: n.borrow().p.clone(),
+            p: n.borrow().p.v(),
             edge_idxs: n.borrow().edges.iter().map(|e| e.borrow().idx).collect(),
         }).collect();
         let edges = component.edges.iter().map(|e| Edge {
@@ -84,7 +89,7 @@ impl Component {
             let region: Region = r.into();
             region
         }).collect();
-        let hull: Region = (&component.hull).into();
+        let hull: Vec<Segment> = component.hull.0.iter().map(|s| s.into()).collect();
         Component {
             key: component.key.0.clone(),
             sets,

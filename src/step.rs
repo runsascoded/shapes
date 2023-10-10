@@ -26,8 +26,8 @@ pub struct Step {
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
 pub struct Error {
     pub key: String,
-    pub actual_area: Option<Dual>,
-    pub actual_frac: Dual,
+    pub actual_area: Option<f64>,
+    pub actual_frac: f64,
     pub target_area: f64,
     pub target_frac: f64,
     pub error: Dual,
@@ -39,8 +39,8 @@ impl Display for Error {
             "{}: err {:.3}, target {:.3} ({:.3}), actual {} → {:.3}",
             self.key, self.error.v(),
             self.target_area, self.target_frac,
-            self.actual_area.clone().map(|a| format!("{:.3}", a.v())).unwrap_or_else(|| "-".to_string()),
-            self.actual_frac.v(),
+            self.actual_area.clone().map(|a| format!("{:.3}", a)).unwrap_or_else(|| "-".to_string()),
+            self.actual_frac,
         )
     }
 }
@@ -188,9 +188,9 @@ impl Step {
                     key.clone(),
                     Error {
                         key: key.clone(),
-                        actual_area,
+                        actual_area: actual_area.map(|a| a.v()),
                         target_area: target_area.clone(),
-                        actual_frac,
+                        actual_frac: actual_frac.v(),
                         target_frac,
                         error,
                     }
