@@ -109,14 +109,22 @@ where R2<D>: CanProject<D, Output = R2<D>>
             let err0 = self.points_err(points0.clone(), xyrr);
             let points1 = self._unit_intersections(xyrr, false);
             let err1 = self.points_err(points1.clone(), xyrr);
-            // debug!("points errs: {} vs. {}", err0, err1);
-            if points0.len() == 0 {
-                points1
-            } else if points1.len() == 0 {
+            if points0.is_empty() {
+                if points1.is_empty() {
+                    debug!("solved for neither x nor y: no points found for either!");
+                    vec![]
+                } else {
+                    debug!("solved for y: (no x points) vs. {}", err1);
+                    points1
+                }
+            } else if points1.is_empty() {
+                debug!("solved for x: {} vs. (no y points)", err0);
                 points0
             } else if err0 < err1 {
+                debug!("solved for x: {} vs. {}", err0, err1);
                 points0
             } else {
+                debug!("solved for y: {} vs. {}", err0, err1);
                 points1
             }
         }
@@ -156,8 +164,8 @@ where R2<D>: CanProject<D, Output = R2<D>>
         let f_3: f64 = a_3.clone().into();
         let f_2: f64 = a_2.clone().into();
         // Very small a_4/a_3 coefficients can lead to significant numeric errors attempting to solve as quartic/cubic, just treat these as cubic/quadratic.
-        if f_2 != 0. && (f_4 / f_2).abs() < 1e-8 && (f_3 / f_2).abs() < 1e-8 {
-            // debug!("Setting a_4 and a_3 to 0.");
+        if f_2 != 0. && (f_4 / f_2).abs() < 5e-7 && (f_3 / f_2).abs() < 5e-7 {
+            debug!("Setting a_4 and a_3 to 0.");
             let f: f64 = a_4.clone().into();
             a_4 = a_4 - f;
             let f: f64 = a_3.clone().into();

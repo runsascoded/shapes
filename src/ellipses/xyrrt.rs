@@ -199,7 +199,7 @@ mod tests {
 
     use super::*;
     use test_log::test;
-    use crate::{intersect::Intersect, shape::xyrrt};
+    use crate::{intersect::Intersect, shape::{xyrrt, Shapes}};
 
     #[test]
     fn test_level() {
@@ -295,6 +295,32 @@ mod tests {
         assert_eq!(points, vec![
             R2 { x: 0.15577412155986992, y: 0.8417865414329363  },
             R2 { x: 0.15577412155987014, y: -0.8060879942065515 },
+        ]);
+    }
+
+    #[test]
+    fn fizz_buzz_bazz_bug3_duals() {
+        let e0 = xyrrt(-0.5118633896059136, 0.0023373864621165025, 1.011817738029651 , 1.019908011421653 , -1.8964352352497277e-7);
+        let e1 = xyrrt( 0.5118918087149057, 0.0022888997458754188, 0.9795291606986883, 0.9874706103381551, -1.4214548856335963e-8);
+        let shapes = Shapes::from_vec(&vec![
+            ( e0.clone(), vec![ true; 5 ] ),
+            ( e1.clone(), vec![ true; 5 ] ),
+        ]);
+        let points = shapes[0].intersect(&shapes[1]);
+        assert_eq!(points.iter().map(|p| p.v()).collect::<Vec<_>>(), vec![
+            R2 { x: 0.031378395739017906, y:  0.8627806164034751 },
+            R2 { x: 0.031298182677567565, y: -0.8581572999987103 },
+        ]);
+    }
+
+    #[test]
+    fn fizz_buzz_bazz_bug3_floats() {
+        let e0 = xyrrt(-0.5118633896059136, 0.0023373864621165025, 1.011817738029651 , 1.019908011421653 , -1.8964352352497277e-7);
+        let e1 = xyrrt( 0.5118918087149057, 0.0022888997458754188, 0.9795291606986883, 0.9874706103381551, -1.4214548856335963e-8);
+        let points = e0.intersect(&e1);
+        assert_eq!(points, vec![
+            R2 { x: 0.031378395739017906, y:  0.8627806164034753 },
+            R2 { x: 0.031298182677567565, y: -0.8581572999987104 },
         ]);
     }
 }

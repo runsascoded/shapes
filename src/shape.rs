@@ -34,7 +34,7 @@ pub fn circle<D>(cx: D, cy: D, r: D) -> Shape<D> {
     Shape::Circle(Circle { c: R2 { x: cx, y: cy }, r })
 }
 pub fn xyrr<D>(cx: D, cy: D, rx: D, ry: D) -> Shape<D> {
-    Shape::XYRR(XYRR { c: R2 { x: cx, y: cy }, r: R2 { x: rx, y: ry } })
+    Shape::XYRR(XYRR::new(cx, cy, rx, ry))
 }
 pub fn xyrrt<D>(cx: D, cy: D, rx: D, ry: D, t: D) -> Shape<D> {
     Shape::XYRRT(XYRRT { c: R2 { x: cx, y: cy }, r: R2 { x: rx, y: ry }, t })

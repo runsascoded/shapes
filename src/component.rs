@@ -1,5 +1,5 @@
 use std::{collections::{BTreeSet, BTreeMap}, cell::RefCell, rc::Rc, f64::consts::TAU, fmt};
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 
 use log::{debug, error};
 use serde::{Serialize, Deserialize};
@@ -442,7 +442,13 @@ impl<D: AreaArg + Into<f64>> Component<D>
         }
         for set in &self.sets {
             let set = set.borrow();
-            let shape_region_area = *shape_region_areas.get(&set.idx).unwrap();
+            let shape_region_area = match shape_region_areas.get(&set.idx) {
+                Some(shape_region_area) => shape_region_area,
+                None => {
+                    error!("shape {} not found in shape_region_areas: {:?}", set.idx, shape_region_areas);
+                    return Err(anyhow!("shape {} not found in shape_region_areas: {:?}", set.idx, shape_region_areas));
+                },
+            };
             let shape_area: f64 = set.shape.area().into();
             let diff = (shape_region_area / shape_area - 1.).abs();
             if diff > ε {
