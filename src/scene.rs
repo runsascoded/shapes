@@ -353,7 +353,7 @@ pub mod tests {
     use itertools::Itertools;
     use log::debug;
 
-    use crate::{math::{deg::Deg, round::round}, dual::Dual, fmt::Fmt, shape::{xyrr, circle, Shapes}, to::To, duals::D};
+    use crate::{math::{deg::Deg, round::round}, dual::Dual, fmt::Fmt, shape::{xyrr, circle, Shapes, xyrrt}, to::To, duals::D};
 
     use super::*;
     use test_log::test;
@@ -797,5 +797,20 @@ pub mod tests {
                 assert_eq!(r.child_components.len(), 0);
             }
         });
+    }
+
+    #[test]
+    fn webapp_bug2() {
+        let shapes = vec![
+            xyrrt(-0.5732201984921728   , 0.017849273613185838, 1.0718496789749037, 1.1239177026091387, -2.2393818587498726e-17 ),
+            xyrrt(-6.497191209429278e-17, 0.8303292848048783  , 0.9719623398875452, 0.9719624265723679, -5.780703446323498e-17  ),
+            xyrrt( 0.5732201984921729   , 0.01784927361318584 , 0.8829677826453782, 0.9350358062796132,  0.0                    ),
+        ];
+        let scene = Scene::new(shapes);
+        assert_eq!(scene.components.len(), 1);
+        let component = &scene.components[0];
+        assert_eq!(component.nodes.len(), 6);
+        assert_eq!(component.edges.len(), 12);
+        assert_eq!(component.regions.len(), 7);
     }
 }

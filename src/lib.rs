@@ -105,7 +105,6 @@ pub fn make_model(inputs: JsValue, targets: JsValue) -> JsValue {
 pub fn train(model: JsValue, max_step_error_ratio: f64, max_steps: usize) -> JsValue {
     let mut model: Model = serde_wasm_bindgen::from_value(model).unwrap();
     model.train(max_step_error_ratio, max_steps);
-    println!("log level: {}", log::max_level());
     serde_wasm_bindgen::to_value(&model).unwrap()
 }
 

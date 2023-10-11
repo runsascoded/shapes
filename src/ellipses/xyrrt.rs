@@ -199,7 +199,7 @@ mod tests {
 
     use super::*;
     use test_log::test;
-    use crate::intersect::Intersect;
+    use crate::{intersect::Intersect, shape::xyrrt};
 
     #[test]
     fn test_level() {
@@ -285,5 +285,16 @@ mod tests {
         assert_relative_eq!(e0.c, e1.c, max_relative = 1e-15);
         assert_relative_eq!(e0.r, e1.r, max_relative = 1e-15);
         assert_relative_eq!(e0.t, e1.t, max_relative = 1e-15);
+    }
+
+    #[test]
+    fn webapp_bug2() {
+        let e0 = xyrrt(-0.5732201984921728   , 0.017849273613185838, 1.0718496789749037, 1.1239177026091387, -2.2393818587498726e-17 );
+        let e1 = xyrrt( 0.5732201984921729   , 0.01784927361318584 , 0.8829677826453782, 0.9350358062796132,  0.0                    );
+        let points = e0.intersect(&e1);
+        assert_eq!(points, vec![
+            R2 { x: 0.15577412155986992, y: 0.8417865414329363  },
+            R2 { x: 0.15577412155987014, y: -0.8060879942065515 },
+        ]);
     }
 }

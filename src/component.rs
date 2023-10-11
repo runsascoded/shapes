@@ -149,10 +149,13 @@ where R2<D>: To<R2<f64>>,
             let num_successors = all_successors.len();
             let successors = all_successors.clone().into_iter().filter(|s| s.edge.borrow().is_component_boundary).collect::<Vec<_>>();
             if successors.len() != 1 {
-                panic!("Expected 1 boundary successor among {} for hull segment {}, found {}, all: {}", num_successors, last_hull_segment, successors.len(), all_successors.iter().map(|s| format!("{}", s)).collect::<Vec<_>>().join(", "));
+                error!("Expected 1 boundary successor among {} for hull segment {}, found {}, all: {}", num_successors, last_hull_segment, successors.len(), all_successors.iter().map(|s| format!("{}", s)).collect::<Vec<_>>().join(", "));
+                hull_segments = vec![];
+                break;
+            } else {
+                let successor = successors[0].clone();
+                hull_segments.push(successor);
             }
-            let successor = successors[0].clone();
-            hull_segments.push(successor);
         }
         let hull = Hull(hull_segments);
 

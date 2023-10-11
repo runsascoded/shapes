@@ -213,9 +213,11 @@ where
             },
         }
     } else {
-        let d64: f64 = d.clone().into();
+        let d64: f64 = d.clone().into().abs();
         let c64: f64 = c.clone().into().abs();
-        let roots = if d64.abs() / f64::max(1., c64) < 1e-14 {
+        let d_zero = d64 / f64::max(1., c64) < 1e-12;
+        // debug!("d_zero: {:?}, d64: {:?}, c64: {:?}", d_zero, d64, c64);
+        let roots = if d_zero {
             // Roots: -0.1, -0.1, -0.1 ± -0.1i:
             //   x⁴ - 0.4x³ + 0.07x² + 0.006x + 0.0002
             // f64 math turns this into:
