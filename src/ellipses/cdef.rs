@@ -2,7 +2,7 @@
 use std::{fmt::Display, ops::{Add, Mul, Sub, Div, Neg}};
 
 use approx::{AbsDiffEq, RelativeEq};
-use log::debug;
+use log::{debug, info};
 use ordered_float::OrderedFloat;
 
 use crate::{math::{abs::AbsArg, is_zero::IsZero, recip::Recip}, r2::R2, transform::CanProject, ellipses::quartic::{Root, Quartic}, circle, dual::Dual, sqrt::Sqrt, trig::Trig};
@@ -60,8 +60,20 @@ where R2<D>: CanProject<D, Output = R2<D>>
         debug!("D: {}", d);
         debug!("E: {}", e);
         debug!("F: {}", f);
-        let d_zero = d.clone().is_zero();
-        let e_zero = e.clone().is_zero();
+        let df: f64 = d.clone().into();
+        let ef: f64 = e.clone().into();
+        let mut d_zero = df == 0.;
+        // debug!("df: {}, {}", df, df.abs() < 1e-12);
+        if !d_zero && df.abs() < 1e-12 {
+            debug!("Setting D to 0.: {}", df);
+            d_zero = true;
+        }
+        let mut e_zero = ef == 0.;
+        // debug!("ef: {}, {}", ef, ef.abs() < 1e-12);
+        if !e_zero && ef.abs() < 1e-12 {
+            debug!("Setting E to 0.: {}", ef);
+            e_zero = true;
+        }
         if d_zero {
             if e_zero {
                 let fc = (-f.clone() - 1.) / (c.clone() - 1.);

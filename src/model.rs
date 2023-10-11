@@ -289,6 +289,16 @@ mod tests {
     }
 
     #[test]
+    fn fizz_buzz_bazz_ellipses() {
+        let inputs = vec![
+            ( xyrrt(-0.5, 0.              , 1., 1., 0. ), vec![ D; 5 ]),
+            ( xyrrt( 0. , 0.86602783203125, 1., 1., 0. ), vec![ D; 5 ]),
+            ( xyrrt( 0.5, 0.              , 1., 1., 0. ), vec![ D; 5 ]),
+        ];
+        check(inputs, FIZZ_BUZZ_BAZZ, "fizz_buzz_bazz_ellipses", 0.5, 100);
+    }
+
+    #[test]
     fn variant_callers() {
         let ellipses = ellipses4(2.);
         let [ e0, e1, e2, e3 ] = ellipses;
