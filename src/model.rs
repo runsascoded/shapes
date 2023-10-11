@@ -299,6 +299,16 @@ mod tests {
     }
 
     #[test]
+    fn fizz_buzz_bazz_ellipses_001() {
+        let inputs = vec![
+            ( xyrrt(-0.5, 0.              , 1., 1., 0. ), vec![ D; 5 ]),
+            ( xyrrt( 0. , 0.86602783203125, 1., 1., 0. ), vec![ D; 5 ]),
+            ( xyrrt( 0.5, 0.              , 1., 1., 0. ), vec![ D; 5 ]),
+        ];
+        check(inputs, FIZZ_BUZZ_BAZZ, "fizz_buzz_bazz_ellipses_001", 0.01, 100);
+    }
+
+    #[test]
     fn variant_callers() {
         let ellipses = ellipses4(2.);
         let [ e0, e1, e2, e3 ] = ellipses;
@@ -359,5 +369,14 @@ mod tests {
             ( xyrrt( 0.9594177207338993 , 1.5988440867036033, 2.417618150694609 , 1.4130685330891937, 0.8644165147959761 ), vec![ D; 5 ] ),
         ];
         check(inputs, MPOWER, "mpower_spike", 0.1, 100);
+    }
+
+    #[test]
+    fn fizz_buzz_bazz_bug3() {
+        let inputs = vec![
+            ( xyrrt(-0.5118633896059136, 0.0023373864621165025, 1.011817738029651 , 1.019908011421653 , -1.8964352352497277e-7), vec![ D; 5 ] ),
+            ( xyrrt( 0.5118918087149057, 0.0022888997458754188, 0.9795291606986883, 0.9874706103381551, -1.4214548856335963e-8), vec![ D; 5 ] ),
+        ];
+        check(inputs, FIZZ_BUZZ, "fizz_buzz_bazz_bug3", 0.01, 1);
     }
 }

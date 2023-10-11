@@ -126,6 +126,14 @@ where R2<D>: CanProject<D, Output = R2<D>>,
     }
 }
 
+impl<D> XYRR<D> {
+    pub fn new(cx: D, cy: D, rx: D, ry: D) -> Self {
+        XYRR {
+            c: R2 { x: cx, y: cy },
+            r: R2 { x: rx, y: ry },
+        }
+    }
+}
 impl XYRR<D> {
     pub fn v(&self) -> XYRR<f64> {
         XYRR { c: self.c.v(), r: self.r.v() }
@@ -339,8 +347,8 @@ mod tests {
         let points = e.unit_intersections();
         check(points, [
             // TODO: these are not super accurate, tiny x⁴ and x³ coefficients introduce numerical error, some semblance of accuracy is recovered with some kludgy checks in CDEF::unit_intersections, but better root-refinement / -finding algos would be good.
-            R2 { x: -0.5500509220473759, y:  0.835131117343158  },
-            R2 { x: -0.5499993628836819, y: -0.8351650739988736 },
+            R2 { x: -0.550033873194555 , y:  0.8351423563859207 },
+            R2 { x: -0.5500164117413399, y: -0.8351538538709787 },
         ], 1e-15);
     }
 
@@ -354,8 +362,8 @@ mod tests {
         let points = e.unit_intersections();
         check(points, [
             // TODO: these are not super accurate, tiny x⁴ and x³ coefficients introduce numerical error, some semblance of accuracy is recovered with some kludgy checks in CDEF::unit_intersections, but better root-refinement / -finding algos would be good.
-            R2 { x: -0.5499644615556463, y: 0.835188057281597 },
-            R2 { x: -0.5498367543659697, y: -0.8352721374188752 },
+            R2 { x: -0.5499082019508151, y: 0.8352251058705242  },
+            R2 { x: -0.549893013974342 , y: -0.8352351038642329 },
         ], 1e-15);
     }
 
@@ -465,6 +473,27 @@ mod tests {
         assert_eq!(points, vec![
             R2 { x:  1.1130898341623663 , y: 1.188629816680542   },
             R2 { x: -0.05613854711079602, y: 0.07769290045110776 }
+        ]);
+    }
+
+    #[test]
+    fn fizz_bazz_buzz_bug3_floats() {
+        let e = XYRR::new(1.0117980335341863, -0.00006029231257685567, 0.9680885438973856, 0.9681957581269851);
+        let points = e.unit_intersections();
+        assert_eq!(points, vec![
+            R2 { x: 0.5369075088689154, y:  0.8436411115856354 },
+            R2 { x: 0.536806971581383 , y: -0.843705096086285  },
+        ]);
+    }
+
+    #[test]
+    fn fizz_bazz_buzz_bug3_duals() {
+        // r.x / r.y is slightly different here with duals than with floats above (`rr`` in `XYRR::cdef`)
+        let e = XYRR::new(1.0117980335341863, -0.00006029231257686846, 0.9680885438973856, 0.9681957581269849);
+        let points = e.unit_intersections();
+        assert_eq!(points, vec![
+            R2 { x: 0.5369075088689155, y:  0.8436411115856353 },
+            R2 { x: 0.5368069715813831, y: -0.8437050960862849 },
         ]);
     }
 }
