@@ -67,11 +67,6 @@ export interface Circle<D> {
     r: D;
 }
 
-export interface Dual {
-    v: number;
-    d: number[];
-}
-
 export type Shape<D> = { Circle: Circle<D> } | { XYRR: XYRR<D> } | { XYRRT: XYRRT<D> };
 
 export type Input = [Shape<number>, Duals];
@@ -93,6 +88,11 @@ export interface HistoryStep {
 }
 
 export type History = HistoryStep[];
+
+export interface Dual {
+    v: number;
+    d: number[];
+}
 
 export interface Intersection<D> {
     x: D;
