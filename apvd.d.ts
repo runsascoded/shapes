@@ -80,6 +80,11 @@ export interface Model {
     min_error: number;
 }
 
+export interface XYRR<D> {
+    c: R2<D>;
+    r: R2<D>;
+}
+
 export type D = Dual;
 
 export interface HistoryStep {
@@ -167,11 +172,6 @@ export interface XYRRT<D> {
     c: R2<D>;
     r: R2<D>;
     t: D;
-}
-
-export interface XYRR<D> {
-    c: R2<D>;
-    r: R2<D>;
 }
 
 
