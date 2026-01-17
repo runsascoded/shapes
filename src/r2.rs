@@ -315,4 +315,110 @@ mod tests {
         assert_relative_eq!(r.x,  1.);
         assert_relative_eq!(r.y, -1.);
     }
+
+    #[test]
+    fn test_norm2() {
+        let p = R2 { x: 3., y: 4. };
+        assert_relative_eq!(p.norm2(), 25.); // 3² + 4² = 25
+
+        let origin = R2 { x: 0., y: 0. };
+        assert_relative_eq!(origin.norm2(), 0.);
+
+        let unit = R2 { x: 1., y: 0. };
+        assert_relative_eq!(unit.norm2(), 1.);
+    }
+
+    #[test]
+    fn test_norm() {
+        let p = R2 { x: 3., y: 4. };
+        assert_relative_eq!(p.norm(), 5.); // √25 = 5
+
+        let origin = R2 { x: 0., y: 0. };
+        assert_relative_eq!(origin.norm(), 0.);
+    }
+
+    #[test]
+    fn test_r() {
+        let p = R2 { x: 3., y: 4. };
+        assert_relative_eq!(p.r(), 5.);
+
+        // Should give same result as norm
+        let p2 = R2 { x: 1., y: 1. };
+        assert_relative_eq!(p2.r(), 2_f64.sqrt());
+    }
+
+    #[test]
+    fn test_add() {
+        let a = R2 { x: 1., y: 2. };
+        let b = R2 { x: 3., y: 4. };
+        let c = a + b;
+        assert_relative_eq!(c.x, 4.);
+        assert_relative_eq!(c.y, 6.);
+    }
+
+    #[test]
+    fn test_sub() {
+        let a = R2 { x: 5., y: 7. };
+        let b = R2 { x: 2., y: 3. };
+        let c = a - b;
+        assert_relative_eq!(c.x, 3.);
+        assert_relative_eq!(c.y, 4.);
+    }
+
+    #[test]
+    fn test_mul() {
+        let a = R2 { x: 2., y: 3. };
+        let b = R2 { x: 4., y: 5. };
+        let c = a * b;
+        assert_relative_eq!(c.x, 8.);
+        assert_relative_eq!(c.y, 15.);
+    }
+
+    #[test]
+    fn test_mul_scalar() {
+        let a = R2 { x: 2., y: 3. };
+        let c = a * 2.;
+        assert_relative_eq!(c.x, 4.);
+        assert_relative_eq!(c.y, 6.);
+    }
+
+    #[test]
+    fn test_div() {
+        let a = R2 { x: 8., y: 12. };
+        let b = R2 { x: 2., y: 3. };
+        let c = a / b;
+        assert_relative_eq!(c.x, 4.);
+        assert_relative_eq!(c.y, 4.);
+    }
+
+    #[test]
+    fn test_div_scalar() {
+        let a = R2 { x: 6., y: 9. };
+        let c = a / 3.;
+        assert_relative_eq!(c.x, 2.);
+        assert_relative_eq!(c.y, 3.);
+    }
+
+    #[test]
+    fn test_neg() {
+        let a = R2 { x: 3., y: -4. };
+        let b = -a;
+        assert_relative_eq!(b.x, -3.);
+        assert_relative_eq!(b.y, 4.);
+    }
+
+    #[test]
+    fn test_atan2() {
+        let p = R2 { x: 1., y: 0. };
+        assert_relative_eq!(p.atan2(), 0.);
+
+        let p = R2 { x: 0., y: 1. };
+        assert_relative_eq!(p.atan2(), PI / 2.);
+
+        let p = R2 { x: -1., y: 0. };
+        assert_relative_eq!(p.atan2(), PI);
+
+        let p = R2 { x: 1., y: 1. };
+        assert_relative_eq!(p.atan2(), PI / 4.);
+    }
 }
