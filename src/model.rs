@@ -264,7 +264,6 @@ mod tests {
             ( xyrr(1., 0., 1., 1.), vec![ D, Z, D, D, ] ),
             ( xyrr(0., 1., 1., 1.), vec![ D, D, D, D, ] ),
         ];
-        // TODO: some nondeterminism sets in on the "error" field, from step 15! Debug.
         check(inputs, FIZZ_BUZZ, "fizz_buzz_ellipses_diag", 0.7, 100)
     }
 

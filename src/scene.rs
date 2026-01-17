@@ -29,12 +29,10 @@ impl SceneD for f64 {}
 impl SceneD for Dual {}
 pub trait SceneR2<D>
 : Neg<Output = Self>
-// TODO: can't get this to derive for R2<Dual>
-// + Mul<f64, Output = Self>
-// + Div<f64, Output = Self>
++ Mul<f64, Output = Self>
++ Div<f64, Output = Self>
 + CanTransform<D, Output = Self>
 + To<R2<f64>>
-// ShapeContainsPoint
 + CanProject<D, Output = R2<D>>
 {}
 impl SceneR2<f64> for R2<f64> {}

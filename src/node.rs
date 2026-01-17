@@ -38,26 +38,15 @@ impl Node<D> {
     }
 }
 
-impl<
-    D
-    : Clone
-    + Add<Output = D>
-    + Mul<f64, Output = D>
-    + Div<f64, Output = D>,
-> Node<D>
-where R2<D>: Add<Output = R2<D>>,
-    // TODO: can't get these to derive for R2<Dual>
-    // + Mul<f64, Output = R2<D>>
-    // + Div<f64, Output = R2<D>>,
+impl<D> Node<D>
+where
+    D: Clone + Add<Output = D> + Mul<f64, Output = D> + Div<f64, Output = D>,
+    R2<D>: Add<Output = R2<D>> + Mul<f64, Output = R2<D>> + Div<f64, Output = R2<D>>,
 {
     pub fn merge(&mut self, o: R2<D>, set0_idx: usize, set0_theta: &D, set1_idx: usize, set1_theta: &D) {
         let p = self.p.clone();
         let n: f64 = self.n as f64;
-        self.p = R2 {
-            x: p.x * n / (n + 1.) + o.x / (n + 1.),
-            y: p.y * n / (n + 1.) + o.y / (n + 1.),
-        };
-        // self.p = p * n / (n + 1.) + o / (n + 1.);
+        self.p = p * n / (n + 1.) + o / (n + 1.);
         self.n += 1;
         self.shape_thetas.entry(set0_idx).or_insert_with(|| set0_theta.clone());
         self.shape_thetas.entry(set1_idx).or_insert_with(|| set1_theta.clone());

@@ -93,6 +93,20 @@ impl R2<Dual> {
     }
 }
 
+impl Mul<f64> for R2<Dual> {
+    type Output = R2<Dual>;
+    fn mul(self, rhs: f64) -> Self::Output {
+        R2 { x: self.x * rhs, y: self.y * rhs }
+    }
+}
+
+impl Div<f64> for R2<Dual> {
+    type Output = R2<Dual>;
+    fn div(self, rhs: f64) -> Self::Output {
+        R2 { x: self.x / rhs, y: self.y / rhs }
+    }
+}
+
 impl<O, D: To<O>> To<R2<O>> for R2<D> {
     fn to(self) -> R2<O> {
         R2 { x: self.x.to(), y: self.y.to() }
