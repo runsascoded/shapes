@@ -1,9 +1,8 @@
 use std::ops::Mul;
 
 use log::{warn, debug};
-use roots::{find_roots_quartic, find_roots_sturm, find_roots_eigen};
 
-use crate::{dual::{D, Dual}, fmt::Fmt, zero::Zero, math::quartic::quartic};
+use crate::{dual::{D, Dual}, zero::Zero, math::quartic::quartic};
 
 #[derive(Debug, Clone)]
 pub struct Root<D>(pub D, pub bool);  // (root, is_double_root?)

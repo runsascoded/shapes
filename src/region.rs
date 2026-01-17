@@ -3,7 +3,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::{self, Display, Formatter},
     iter::Sum,
-    ops::{Add, Sub},
+    ops::{Add, Sub, SubAssign},
     rc::Rc,
 };
 
@@ -36,7 +36,7 @@ pub struct Region<D> {
 
 pub type R<D> = Rc<RefCell<Region<D>>>;
 
-pub trait RegionArg: EdgeArg + AbsArg + Sum + Add<Output = Self> + Sub<Output = Self> {}
+pub trait RegionArg: EdgeArg + AbsArg + Sum + Add<Output = Self> + Sub<Output = Self> + SubAssign {}
 impl RegionArg for f64 {}
 impl RegionArg for Dual {}
 
@@ -93,8 +93,7 @@ where
     pub fn area(&self) -> D {
         let mut area = self.total_area.clone();
         for child_component in &self.child_components {
-            // TODO: implement SubAssign
-            area = area - child_component.borrow().area();
+            area -= child_component.borrow().area();
         }
         area
     }

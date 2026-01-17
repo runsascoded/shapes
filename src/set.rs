@@ -1,6 +1,5 @@
 use std::{rc::Rc, cell::RefCell, collections::{BTreeSet, BTreeMap}};
 
-use log::debug;
 use serde::{Serialize, Deserialize};
 use tsify::Tsify;
 

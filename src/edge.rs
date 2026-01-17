@@ -1,6 +1,5 @@
 use std::{fmt::Display, rc::Rc, cell::RefCell, collections::BTreeSet, ops::{Mul, Div, Sub}, f64::consts::TAU};
 
-use log::debug;
 
 use crate::{math::deg::Deg, node::N, set::S, shape::Shape::{Circle, XYRR, XYRRT}, trig::Trig, dual::Dual};
 

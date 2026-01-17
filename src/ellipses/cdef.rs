@@ -2,7 +2,7 @@
 use std::{fmt::Display, ops::{Add, Mul, Sub, Div, Neg}};
 
 use approx::{AbsDiffEq, RelativeEq};
-use log::{debug, info};
+use log::debug;
 use ordered_float::OrderedFloat;
 
 use crate::{math::{abs::AbsArg, is_zero::IsZero, recip::Recip}, r2::R2, transform::CanProject, ellipses::quartic::{Root, Quartic}, circle, dual::Dual, sqrt::Sqrt, trig::Trig};

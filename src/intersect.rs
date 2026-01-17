@@ -1,8 +1,7 @@
 use std::{ops::{Div, Neg, Add, Mul, Sub}, fmt::Display};
 
-use log::debug;
 
-use crate::{circle, dual::Dual, ellipses::{cdef, xyrrt}, r2::R2, transform::{CanProject, CanTransform, HasProjection}, shape::Shape, trig::Trig, theta_points::ThetaPointsArg, rotate::RotateArg};
+use crate::{circle, dual::Dual, ellipses::{cdef, xyrrt}, r2::R2, transform::{CanProject, CanTransform}, shape::Shape, trig::Trig, theta_points::ThetaPointsArg, rotate::RotateArg};
 
 pub trait Intersect<In, Out> {
     fn intersect(&self, other: &In) -> Vec<R2<Out>>;

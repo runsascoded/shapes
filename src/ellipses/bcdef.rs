@@ -2,7 +2,6 @@ use core::f64;
 use std::{ops::{Div, Sub, Mul, Add, Neg}, fmt::{Display, Debug}};
 
 use approx::{RelativeEq, AbsDiffEq};
-use log::debug;
 
 use crate::{r2::R2, rotate::RotateArg, trig::Trig, math::{recip::Recip, deg::Deg, is_zero::IsZero}, zero::Zero};
 

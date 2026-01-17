@@ -47,7 +47,7 @@ pub enum Roots<D> {
 
 use Roots::{Quadratic, Reals, Mixed};
 use approx::{AbsDiffEq, RelativeEq};
-use log::{debug, error};
+use log::debug;
 use ordered_float::OrderedFloat;
 
 impl<D: Clone> Roots<D> {

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Display;
 
-use log::{info, debug, warn};
+use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use tsify::{declare, Tsify};
 
