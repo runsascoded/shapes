@@ -404,6 +404,8 @@ impl Sum for Dual {
 
 #[cfg(test)]
 mod tests {
+    use std::f64::consts::PI;
+    use approx::assert_relative_eq;
     use super::*;
     use test_log::test;
 
@@ -413,5 +415,276 @@ mod tests {
         let cos = x.cos();
         assert_eq!(cos.v(), 1.);
         assert_eq!(cos.d(), vec![0.]);
+    }
+
+    #[test]
+    fn test_new_and_accessors() {
+        let d = Dual::new(3.5, vec![1., 2., 3.]);
+        assert_eq!(d.v(), 3.5);
+        assert_eq!(d.d(), vec![1., 2., 3.]);
+    }
+
+    #[test]
+    fn test_scalar() {
+        let d = Dual::scalar(5., 3);
+        assert_eq!(d.v(), 5.);
+        assert_eq!(d.d(), vec![0., 0., 0.]);
+    }
+
+    #[test]
+    fn test_zero() {
+        let d = Dual::zero(4);
+        assert_eq!(d.v(), 0.);
+        assert_eq!(d.d(), vec![0., 0., 0., 0.]);
+    }
+
+    #[test]
+    fn test_add() {
+        let a = Dual::new(2., vec![1., 0.]);
+        let b = Dual::new(3., vec![0., 1.]);
+        let c = a + b;
+        assert_eq!(c.v(), 5.);
+        assert_eq!(c.d(), vec![1., 1.]);
+    }
+
+    #[test]
+    fn test_add_f64() {
+        let a = Dual::new(2., vec![1., 2.]);
+        let c = a + 3.;
+        assert_eq!(c.v(), 5.);
+        assert_eq!(c.d(), vec![1., 2.]);
+
+        let d = Dual::new(2., vec![1., 2.]);
+        let e = 3. + d;
+        assert_eq!(e.v(), 5.);
+        assert_eq!(e.d(), vec![1., 2.]);
+    }
+
+    #[test]
+    fn test_sub() {
+        let a = Dual::new(5., vec![1., 0.]);
+        let b = Dual::new(3., vec![0., 1.]);
+        let c = a - b;
+        assert_eq!(c.v(), 2.);
+        assert_eq!(c.d(), vec![1., -1.]);
+    }
+
+    #[test]
+    fn test_sub_f64() {
+        let a = Dual::new(5., vec![1., 2.]);
+        let c = a - 3.;
+        assert_eq!(c.v(), 2.);
+        assert_eq!(c.d(), vec![1., 2.]);
+
+        let d = Dual::new(3., vec![1., 2.]);
+        let e = 5. - d;
+        assert_eq!(e.v(), 2.);
+        assert_eq!(e.d(), vec![-1., -2.]);
+    }
+
+    #[test]
+    fn test_mul() {
+        // d/dx (x * y) = y, d/dy (x * y) = x
+        let a = Dual::new(2., vec![1., 0.]);
+        let b = Dual::new(3., vec![0., 1.]);
+        let c = a * b;
+        assert_eq!(c.v(), 6.);
+        assert_eq!(c.d(), vec![3., 2.]);
+    }
+
+    #[test]
+    fn test_mul_f64() {
+        let a = Dual::new(2., vec![1., 2.]);
+        let c = a * 3.;
+        assert_eq!(c.v(), 6.);
+        assert_eq!(c.d(), vec![3., 6.]);
+
+        let d = Dual::new(2., vec![1., 2.]);
+        let e = 3. * d;
+        assert_eq!(e.v(), 6.);
+        assert_eq!(e.d(), vec![3., 6.]);
+    }
+
+    #[test]
+    fn test_div() {
+        // d/dx (x / y) = 1/y, d/dy (x / y) = -x/y²
+        let a = Dual::new(6., vec![1., 0.]);
+        let b = Dual::new(2., vec![0., 1.]);
+        let c = a / b;
+        assert_eq!(c.v(), 3.);
+        assert_eq!(c.d(), vec![0.5, -1.5]);
+    }
+
+    #[test]
+    fn test_div_f64() {
+        let a = Dual::new(6., vec![2., 4.]);
+        let c = a / 2.;
+        assert_eq!(c.v(), 3.);
+        assert_eq!(c.d(), vec![1., 2.]);
+
+        let d = Dual::new(2., vec![1., 0.]);
+        let e = 6. / d;
+        assert_eq!(e.v(), 3.);
+        assert_eq!(e.d(), vec![-1.5, 0.]);
+    }
+
+    #[test]
+    fn test_neg() {
+        let a = Dual::new(3., vec![1., 2.]);
+        let b = -a;
+        assert_eq!(b.v(), -3.);
+        assert_eq!(b.d(), vec![-1., -2.]);
+    }
+
+    #[test]
+    fn test_sqrt() {
+        // d/dx √x = 1/(2√x)
+        let a = Dual::new(4., vec![1., 0.]);
+        let b = a.sqrt();
+        assert_eq!(b.v(), 2.);
+        assert_eq!(b.d(), vec![0.25, 0.]);
+    }
+
+    #[test]
+    fn test_sin_cos() {
+        // d/dx sin(x) = cos(x)
+        let a = Dual::new(0., vec![1.]);
+        let sin_a = a.clone().sin();
+        assert_relative_eq!(sin_a.v(), 0.);
+        assert_relative_eq!(sin_a.d()[0], 1.); // cos(0) = 1
+
+        let cos_a = a.cos();
+        assert_relative_eq!(cos_a.v(), 1.);
+        assert_relative_eq!(cos_a.d()[0], 0.); // -sin(0) = 0
+
+        // sin(π/2) = 1, cos(π/2) = 0
+        let b = Dual::new(PI / 2., vec![1.]);
+        let sin_b = b.clone().sin();
+        assert_relative_eq!(sin_b.v(), 1.);
+        assert_relative_eq!(sin_b.d()[0], 0., epsilon = 1e-15); // cos(π/2) ≈ 0
+
+        let cos_b = b.cos();
+        assert_relative_eq!(cos_b.v(), 0., epsilon = 1e-15);
+        assert_relative_eq!(cos_b.d()[0], -1.); // -sin(π/2) = -1
+    }
+
+    #[test]
+    fn test_atan() {
+        // d/dx atan(x) = 1/(1+x²)
+        let a = Dual::new(0., vec![1.]);
+        let atan_a = a.atan();
+        assert_relative_eq!(atan_a.v(), 0.);
+        assert_relative_eq!(atan_a.d()[0], 1.); // 1/(1+0) = 1
+
+        let b = Dual::new(1., vec![1.]);
+        let atan_b = b.atan();
+        assert_relative_eq!(atan_b.v(), PI / 4.);
+        assert_relative_eq!(atan_b.d()[0], 0.5); // 1/(1+1) = 0.5
+    }
+
+    #[test]
+    fn test_atan2() {
+        let y = Dual::new(1., vec![1., 0.]);
+        let x = Dual::new(1., vec![0., 1.]);
+        let theta = y.atan2(x);
+        assert_relative_eq!(theta.v(), PI / 4.);
+        // d/dy atan2(y,x) = x/(x²+y²), d/dx atan2(y,x) = -y/(x²+y²)
+        assert_relative_eq!(theta.d()[0], 0.5); // 1/(1+1) = 0.5
+        assert_relative_eq!(theta.d()[1], -0.5); // -1/(1+1) = -0.5
+    }
+
+    #[test]
+    fn test_abs() {
+        let a = Dual::new(-3., vec![1., 2.]);
+        let b = a.abs();
+        assert_eq!(b.v(), 3.);
+        assert_eq!(b.d(), vec![-1., -2.]);
+
+        let c = Dual::new(3., vec![1., 2.]);
+        let d = c.abs();
+        assert_eq!(d.v(), 3.);
+        assert_eq!(d.d(), vec![1., 2.]);
+    }
+
+    #[test]
+    fn test_is_normal() {
+        let a = Dual::new(1., vec![2., 3.]);
+        assert!(a.is_normal());
+
+        let b = Dual::new(0., vec![0., 0.]);
+        assert!(b.is_normal()); // zero is considered "normal" for this purpose
+
+        let c = Dual::new(f64::NAN, vec![1.]);
+        assert!(!c.is_normal());
+
+        let d = Dual::new(1., vec![f64::NAN]);
+        assert!(!d.is_normal());
+
+        let e = Dual::new(f64::INFINITY, vec![1.]);
+        assert!(!e.is_normal());
+    }
+
+    #[test]
+    fn test_ordering() {
+        let a = Dual::new(1., vec![1.]);
+        let b = Dual::new(2., vec![1.]);
+        let c = Dual::new(1., vec![2.]); // same value, different derivative
+        assert!(a < b);
+        assert!(b > a);
+        assert!(a <= c);
+        assert!(a >= c);
+        assert!(a == c); // equality is by value only
+    }
+
+    #[test]
+    fn test_sum() {
+        let duals = vec![
+            Dual::new(1., vec![1., 0.]),
+            Dual::new(2., vec![0., 1.]),
+            Dual::new(3., vec![1., 1.]),
+        ];
+        let sum: Dual = duals.into_iter().sum();
+        assert_eq!(sum.v(), 6.);
+        assert_eq!(sum.d(), vec![2., 2.]);
+    }
+
+    #[test]
+    fn test_display_debug() {
+        let d = Dual::new(1.5, vec![2., 3.]);
+        let display = format!("{}", d);
+        assert!(display.contains("1.5"));
+
+        let debug = format!("{:?}", d);
+        assert!(debug.contains("Dual::new"));
+        assert!(debug.contains("1.5"));
+    }
+
+    #[test]
+    fn test_add_assign() {
+        let mut a = Dual::new(2., vec![1., 0.]);
+        let b = Dual::new(3., vec![0., 1.]);
+        a += b;
+        assert_eq!(a.v(), 5.);
+        assert_eq!(a.d(), vec![1., 1.]);
+    }
+
+    #[test]
+    fn test_sub_assign() {
+        let mut a = Dual::new(5., vec![1., 0.]);
+        let b = Dual::new(3., vec![0., 1.]);
+        a -= b;
+        assert_eq!(a.v(), 2.);
+        assert_eq!(a.d(), vec![1., -1.]);
+    }
+
+    #[test]
+    fn test_from_dual_to_f64() {
+        let d = Dual::new(3.5, vec![1., 2.]);
+        let f: f64 = d.into();
+        assert_eq!(f, 3.5);
+
+        let d2 = Dual::new(4.5, vec![1., 2.]);
+        let f2: f64 = (&d2).into();
+        assert_eq!(f2, 4.5);
     }
 }
