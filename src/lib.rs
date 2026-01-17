@@ -40,21 +40,23 @@ pub use analysis::segment;
 pub use analysis::set;
 pub use analysis::theta_points;
 
+// Re-export math utilities for backwards compatibility
+pub use math::d5;
+pub use math::float_arr;
+pub use math::float_wrap;
+pub use math::roots;
+pub use math::sqrt;
+pub use math::trig;
+pub use math::zero;
+
 // Utility modules
 pub mod coord_getter;
-pub mod d5;
 pub mod dual;
 pub mod duals;
 pub mod error;
-pub mod float_arr;
-pub mod float_wrap;
 pub mod fmt;
 pub mod js_dual;
-pub mod roots;
-pub mod sqrt;
 pub mod to;
-pub mod trig;
-pub mod zero;
 
 use targets::Targets;
 use shape::InputSpec;
