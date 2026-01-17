@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 
 use serde::{Serialize, Deserialize};
 use tsify::Tsify;
@@ -54,6 +53,7 @@ impl From<Model> for History {
 // CSV load/save functionality - only available in tests (polars is a dev-dependency)
 #[cfg(test)]
 mod csv_io {
+    use std::collections::BTreeMap;
     use std::path::Path;
     use super::*;
     use polars::{prelude::*, io::SerReader, series::SeriesIter};

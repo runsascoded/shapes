@@ -4,7 +4,7 @@ use std::{cell::RefCell, rc::Rc, collections::{BTreeSet, BTreeMap}, ops::{Neg, A
 use log::{debug, info, error};
 use ordered_float::OrderedFloat;
 
-use crate::{node::{N, Node}, contains::{Contains, ShapeContainsPoint}, distance::Distance, region::RegionArg, set::S, shape::{Shape, AreaArg}, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::{CanTransform, HasProjection, CanProject}, dual::Dual, to::To, math::deg::Deg, fmt::{Fmt, DisplayNum}, component::{Component, self}, set::Set};
+use crate::{node::{N, Node}, contains::{Contains, ShapeContainsPoint}, distance::Distance, region::RegionArg, set::S, shape::{Shape, AreaArg}, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::{CanTransform, HasProjection, CanProject}, dual::Dual, to::To, math::deg::Deg, fmt::Fmt, component::{Component, self}, set::Set};
 
 /// Collection of [`Shape`]s (wrapped in [`Set`]s), and segmented into connected [`Component`]s.
 #[derive(Clone, Debug)]
@@ -346,12 +346,12 @@ where
 
 #[cfg(test)]
 pub mod tests {
-    use std::{collections::BTreeMap, env, fmt::Display, f64::consts::PI};
+    use std::{collections::BTreeMap, env, f64::consts::PI};
 
     use itertools::Itertools;
     use log::debug;
 
-    use crate::{math::{deg::Deg, round::round}, dual::Dual, fmt::Fmt, shape::{xyrr, circle, Shapes, xyrrt}, to::To, duals::D};
+    use crate::{math::{deg::Deg, round::round}, dual::Dual, fmt::{DisplayNum, Fmt}, shape::{xyrr, circle, Shapes, xyrrt}, to::To, duals::D};
 
     use super::*;
     use test_log::test;

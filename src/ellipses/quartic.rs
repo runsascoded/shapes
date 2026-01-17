@@ -50,7 +50,7 @@ impl Quartic for f64 {
             d_3 * x2 * x + d_2 * x2 + d_1 * x + d_0
         };
         let mut roots: Vec<Root<f64>> = vec![];
-        let f = |x: f64| {
+        let _f = |x: f64| {
             let x2 = x * x;
             (a_4 * x2 * x2) + (a_3 * x2 * x) + (a_2 * x2) + (a_1 * x) + a_0
         };

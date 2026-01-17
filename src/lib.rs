@@ -1,5 +1,6 @@
 #![allow(mixed_script_confusables)]
 
+#[cfg_attr(not(test), allow(unused_imports))]
 #[macro_use]
 extern crate approx;
 extern crate console_error_panic_hook;

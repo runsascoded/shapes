@@ -5,7 +5,7 @@ use tsify::Tsify;
 use crate::{
     dual::D,
     r2::R2,
-    fmt::{Fmt, DisplayNum},
+    fmt::DisplayNum,
 };
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]

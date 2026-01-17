@@ -4,7 +4,7 @@ use std::fmt::Display;
 use std::ops::{Div, Mul, Add};
 use std::rc::Rc;
 
-use crate::fmt::{Fmt, DisplayNum};
+use crate::fmt::DisplayNum;
 use crate::intersection::Intersection;
 use crate::dual::Dual;
 use crate::edge::E;
