@@ -331,6 +331,7 @@ impl Div<f64> for Dual {
 
 impl Div<Dual> for f64 {
     type Output = Dual;
+    #[allow(clippy::suspicious_arithmetic_impl)]
     fn div(self, rhs: Dual) -> Self::Output {
         Dual(rhs.0.recip() * self, rhs.1)
     }

@@ -16,8 +16,7 @@ impl Model {
     pub fn new(input_specs: Vec<InputSpec>, targets: TargetsMap<f64>) -> Model {
         let step = Step::new(input_specs, targets.into());
         let min_error = step.error.re;
-        let mut steps = Vec::<Step>::new();
-        steps.push(step);
+        let steps = vec![step];
         let repeat_idx: Option<usize> = None;
         Model { steps, min_idx: 0, repeat_idx, min_error }
     }

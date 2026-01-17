@@ -287,14 +287,14 @@ impl<D: Display> Display for Circle<D> {
 impl Mul<f64> for Circle<f64> {
     type Output = Circle<f64>;
     fn mul(self, rhs: f64) -> Self::Output {
-        Circle { c: self.c * &rhs, r: self.r * rhs }
+        Circle { c: self.c * rhs, r: self.r * rhs }
     }
 }
 
 impl Mul<i64> for Circle<f64> {
     type Output = Circle<f64>;
     fn mul(self, rhs: i64) -> Self::Output {
-        Circle { c: self.c * &(rhs as f64), r: self.r * (rhs as f64) }
+        Circle { c: self.c * (rhs as f64), r: self.r * (rhs as f64) }
     }
 }
 

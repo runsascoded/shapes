@@ -7,7 +7,7 @@ pub struct CoordGetter<In> {
     pub get: Box<dyn Fn(In) -> f64>,
 }
 
-impl<'a, In: 'a> Deref for CoordGetter<In> {
+impl<In> Deref for CoordGetter<In> {
     type Target = Box<dyn Fn(In) -> f64>;
     fn deref(&self) -> &Self::Target {
         &self.get
