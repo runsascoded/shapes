@@ -5,46 +5,56 @@
 extern crate approx;
 extern crate console_error_panic_hook;
 
-pub mod circle;
-pub mod component;
-pub mod contains;
+// Organized modules
+pub mod analysis;
+pub mod geometry;
+pub mod math;
+pub mod optimization;
+
+// Re-exports for backwards compatibility
+pub use geometry::circle;
+pub use geometry::ellipses;
+pub use geometry::r2;
+pub use geometry::rotate;
+pub use geometry::shape;
+pub use geometry::transform;
+
+pub use optimization::history;
+pub use optimization::model;
+pub use optimization::step;
+pub use optimization::targets;
+
+pub use analysis::component;
+pub use analysis::contains;
+pub use analysis::distance;
+pub use analysis::edge;
+pub use analysis::gap;
+pub use analysis::hull;
+pub use analysis::intersect;
+pub use analysis::intersection;
+pub use analysis::node;
+pub use analysis::region;
+pub use analysis::regions;
+pub use analysis::scene;
+pub use analysis::segment;
+pub use analysis::set;
+pub use analysis::theta_points;
+
+// Utility modules
 pub mod coord_getter;
 pub mod d5;
-pub mod distance;
 pub mod dual;
 pub mod duals;
-pub mod edge;
-pub mod ellipses;
 pub mod error;
 pub mod float_arr;
 pub mod float_wrap;
 pub mod fmt;
-pub mod gap;
-pub mod history;
-pub mod hull;
-pub mod intersect;
-pub mod intersection;
-pub mod node;
-pub mod math;
-pub mod model;
-pub mod r2;
-pub mod region;
-pub mod regions;
+pub mod js_dual;
 pub mod roots;
-pub mod rotate;
-pub mod scene;
-pub mod segment;
-pub mod set;
-pub mod shape;
 pub mod sqrt;
-pub mod step;
-pub mod targets;
-pub mod theta_points;
 pub mod to;
-pub mod transform;
 pub mod trig;
 pub mod zero;
-pub mod js_dual;
 
 use targets::Targets;
 use shape::InputSpec;

@@ -2,7 +2,7 @@ use std::{ops::{Neg, Div, Add, Sub, Mul}, fmt};
 
 use crate::{sqrt::Sqrt, dual::Dual, zero::Zero};
 
-use super::{complex::{self, Complex as C, ComplexPair}, is_zero::IsZero, abs::AbsArg};
+use crate::math::{complex::{self, Complex as C, ComplexPair}, is_zero::IsZero, abs::AbsArg};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Roots<D> {

@@ -2,7 +2,8 @@ use std::{f64::consts::TAU, ops::{Div, Mul, Add, Sub, Neg}, fmt};
 
 use crate::{trig::Trig, dual::Dual, zero::Zero};
 
-use super::{complex::{ComplexPair, Complex, self}, quadratic, abs::{Abs, AbsArg}, is_zero::IsZero, cbrt::Cbrt, recip::Recip, deg::Deg};
+use crate::math::{complex::{ComplexPair, Complex, self}, abs::{Abs, AbsArg}, is_zero::IsZero, cbrt::Cbrt, recip::Recip, deg::Deg};
+use super::quadratic;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DepressedRoots<D> {

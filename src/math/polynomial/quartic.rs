@@ -1,10 +1,9 @@
 use std::{ops::{Div, Mul, Add, Sub, Neg}, fmt};
 
-use crate::{dual::Dual, sqrt::Sqrt, zero::Zero, math::cubic::cubic_depressed};
+use crate::{dual::Dual, sqrt::Sqrt, zero::Zero};
 
-use super::{complex::{ComplexPair, Complex, self, SqrtArg, Numeric}, quadratic, is_zero::IsZero, recip::Recip};
-
-use super::cubic;
+use crate::math::{complex::{ComplexPair, Complex, self, SqrtArg, Numeric}, is_zero::IsZero, recip::Recip};
+use super::{cubic, cubic::cubic_depressed, quadratic};
 
 #[derive(Debug, Clone)]
 pub enum Roots<D> {
