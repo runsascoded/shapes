@@ -117,3 +117,120 @@ pub fn quadratic_scaled<D: Arg>(a1: D, a0: D) -> Roots<D> {
         Reals([ b2.clone() + d.clone(), b2 - d ])
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Verify roots satisfy the quadratic equation ax² + bx + c = 0
+    fn verify_roots(a: f64, b: f64, c: f64, roots: &Roots<f64>, epsilon: f64) {
+        let f = |x: f64| a * x * x + b * x + c;
+        for root in roots.reals() {
+            let val = f(root);
+            assert!(
+                val.abs() < epsilon,
+                "Root {} doesn't satisfy equation (f(x) = {})",
+                root, val
+            );
+        }
+        if let Complex(pair) = roots {
+            let fc = |x: C<f64>| x.clone() * x.clone() * a + x.clone() * b + c;
+            let val = fc(pair.clone());
+            assert!(
+                val.norm() < epsilon,
+                "Complex root {} doesn't satisfy equation (f(x) = {})",
+                pair, val.norm()
+            );
+        }
+    }
+
+    #[test]
+    fn two_distinct_real_roots() {
+        // x² - 5x + 6 = 0 → (x-2)(x-3) = 0 → roots: 2, 3
+        let roots = quadratic(1., -5., 6.);
+        assert!(matches!(roots, Reals(_)));
+        if let Reals([r0, r1]) = roots {
+            assert!((r0 - 3.).abs() < 1e-10 || (r0 - 2.).abs() < 1e-10);
+            assert!((r1 - 3.).abs() < 1e-10 || (r1 - 2.).abs() < 1e-10);
+            assert!((r0 - r1).abs() > 0.5); // distinct
+        }
+        verify_roots(1., -5., 6., &roots, 1e-10);
+    }
+
+    #[test]
+    fn repeated_root() {
+        // x² - 4x + 4 = 0 → (x-2)² = 0 → root: 2 (double)
+        let roots = quadratic(1., -4., 4.);
+        assert!(matches!(roots, Double(_)));
+        if let Double(r) = roots {
+            assert!((r - 2.).abs() < 1e-10);
+        }
+        verify_roots(1., -4., 4., &roots, 1e-10);
+    }
+
+    #[test]
+    fn complex_roots() {
+        // x² + 1 = 0 → roots: ±i
+        let roots = quadratic(1., 0., 1.);
+        assert!(matches!(roots, Complex(_)));
+        if let Complex(c) = &roots {
+            assert!(c.re.abs() < 1e-10);
+            assert!((c.im.abs() - 1.).abs() < 1e-10);
+        }
+        verify_roots(1., 0., 1., &roots, 1e-10);
+    }
+
+    #[test]
+    fn complex_roots_general() {
+        // x² - 2x + 5 = 0 → roots: 1 ± 2i
+        let roots = quadratic(1., -2., 5.);
+        assert!(matches!(roots, Complex(_)));
+        if let Complex(c) = &roots {
+            assert!((c.re - 1.).abs() < 1e-10);
+            assert!((c.im.abs() - 2.).abs() < 1e-10);
+        }
+        verify_roots(1., -2., 5., &roots, 1e-10);
+    }
+
+    #[test]
+    fn linear_equation() {
+        // 0x² + 2x + 4 = 0 → x = -2
+        let roots = quadratic(0., 2., 4.);
+        assert!(matches!(roots, Single(_)));
+        if let Single(r) = roots {
+            assert!((r - (-2.)).abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn scaled_coefficients() {
+        // 2x² - 10x + 12 = 0 → same as x² - 5x + 6 = 0 → roots: 2, 3
+        let roots = quadratic(2., -10., 12.);
+        assert!(matches!(roots, Reals(_)));
+        verify_roots(2., -10., 12., &roots, 1e-10);
+    }
+
+    #[test]
+    fn roots_at_zero() {
+        // x² - x = 0 → x(x-1) = 0 → roots: 0, 1
+        let roots = quadratic(1., -1., 0.);
+        assert!(matches!(roots, Reals(_)));
+        if let Reals([r0, r1]) = roots {
+            assert!((r0 * r1).abs() < 1e-10); // one root is 0
+            assert!((r0 + r1 - 1.).abs() < 1e-10); // sum is 1
+        }
+        verify_roots(1., -1., 0., &roots, 1e-10);
+    }
+
+    #[test]
+    fn negative_roots() {
+        // x² + 5x + 6 = 0 → (x+2)(x+3) = 0 → roots: -2, -3
+        let roots = quadratic(1., 5., 6.);
+        assert!(matches!(roots, Reals(_)));
+        if let Reals([r0, r1]) = roots {
+            assert!((r0 + 2.).abs() < 1e-10 || (r0 + 3.).abs() < 1e-10);
+            assert!((r1 + 2.).abs() < 1e-10 || (r1 + 3.).abs() < 1e-10);
+        }
+        verify_roots(1., 5., 6., &roots, 1e-10);
+    }
+}
