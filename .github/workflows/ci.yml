@@ -11,19 +11,23 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: Swatinem/rust-cache@v2
       - uses: jetli/wasm-pack-action@v0.4.0
-      - run: wasm-pack build --target web
-      - run: rm pkg/.gitignore
-      - name: Push pkg/
-        uses: s0/git-publish-subdir-action@develop
-        env:
-          REPO: self
-          BRANCH: dist
-          FOLDER: pkg
-          MESSAGE: "{sha}: {msg}"
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build WASM
+        run: wasm-pack build --target web
+
+      - name: Push dist branch
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: runsascoded/npm-dist@v1.1
+        with:
+          prebuilt_dir: pkg
+
       - run: cargo build
       - run: cargo test -- --nocapture
