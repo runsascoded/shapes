@@ -80,12 +80,14 @@ impl<D> Shape<D> {
 }
 
 impl Shape<f64> {
-    pub fn from_coords(coords: Vec<(&str, f64)>) -> Shape<f64> {
+    pub fn from_coords(coords: Vec<(&str, f64)>) -> Result<Shape<f64>, crate::error::ShapeError> {
         match coords.as_slice() {
-            [ ("cx", cx), ("cy", cy), ("r", r) ] => circle(*cx, *cy, *r),
-            [ ("cx", cx), ("cy", cy), ("rx", rx), ("ry", ry) ] => xyrr(*cx, *cy, *rx, *ry),
-            [ ("cx", cx), ("cy", cy), ("rx", rx), ("ry", ry), ("t", t) ] => xyrrt(*cx, *cy, *rx, *ry, *t),
-            _ => panic!("Unrecognized coord keys: {:?}", coords),
+            [ ("cx", cx), ("cy", cy), ("r", r) ] => Ok(circle(*cx, *cy, *r)),
+            [ ("cx", cx), ("cy", cy), ("rx", rx), ("ry", ry) ] => Ok(xyrr(*cx, *cy, *rx, *ry)),
+            [ ("cx", cx), ("cy", cy), ("rx", rx), ("ry", ry), ("t", t) ] => Ok(xyrrt(*cx, *cy, *rx, *ry, *t)),
+            _ => Err(crate::error::ShapeError::UnrecognizedCoordKeys(
+                coords.iter().map(|(k, _)| k.to_string()).collect()
+            )),
         }
     }
     pub fn dual(&self, duals: &Duals) -> Shape<D> {
