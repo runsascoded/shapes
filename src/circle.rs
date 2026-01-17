@@ -449,4 +449,175 @@ mod tests {
             r2( 1., vec![ 1., 0., 1., 0., 0.,  0. ], 0., vec![ 0., 0., 0., 0., 1., -1. ]),
         );
     }
+
+    #[test]
+    fn test_area() {
+        let c = Circle { c: R2 { x: 0., y: 0. }, r: 1. };
+        assert_relative_eq!(c.area(), PI);
+
+        let c = Circle { c: R2 { x: 2., y: 3. }, r: 2. };
+        assert_relative_eq!(c.area(), 4. * PI);
+
+        let c = Circle { c: R2 { x: 0., y: 0. }, r: 0.5 };
+        assert_relative_eq!(c.area(), 0.25 * PI);
+    }
+
+    #[test]
+    fn test_at_y() {
+        let c = Circle { c: R2 { x: 0., y: 0. }, r: 1. };
+
+        // At center y, full diameter
+        let xs = c.at_y(0.);
+        assert_eq!(xs.len(), 2);
+        assert_relative_eq!(xs[0], -1.);
+        assert_relative_eq!(xs[1], 1.);
+
+        // At top of circle, single point
+        let xs = c.at_y(1.);
+        assert_eq!(xs.len(), 1);
+        assert_relative_eq!(xs[0], 0.);
+
+        // At bottom of circle, single point
+        let xs = c.at_y(-1.);
+        assert_eq!(xs.len(), 1);
+        assert_relative_eq!(xs[0], 0.);
+
+        // Above circle, no intersection
+        let xs = c.at_y(1.5);
+        assert_eq!(xs.len(), 0);
+
+        // Below circle, no intersection
+        let xs = c.at_y(-1.5);
+        assert_eq!(xs.len(), 0);
+
+        // Offset circle
+        let c = Circle { c: R2 { x: 2., y: 3. }, r: 1. };
+        let xs = c.at_y(3.);
+        assert_eq!(xs.len(), 2);
+        assert_relative_eq!(xs[0], 1.);
+        assert_relative_eq!(xs[1], 3.);
+    }
+
+    #[test]
+    fn test_xyrr_conversion() {
+        let c = Circle { c: R2 { x: 1., y: 2. }, r: 3. };
+        let xyrr = c.xyrr();
+        assert_relative_eq!(xyrr.c.x, 1.);
+        assert_relative_eq!(xyrr.c.y, 2.);
+        assert_relative_eq!(xyrr.r.x, 3.);
+        assert_relative_eq!(xyrr.r.y, 3.);
+    }
+
+    #[test]
+    fn test_unit_circle_gap() {
+        // Circle far from unit circle
+        let c = Circle { c: R2 { x: 5., y: 0. }, r: 1. };
+        let gap = c.unit_circle_gap();
+        assert!(gap.is_some());
+        assert_relative_eq!(gap.unwrap(), 3.); // distance 5, minus unit circle radius 1, minus circle radius 1 = 3
+
+        // Circle touching unit circle (no gap)
+        let c = Circle { c: R2 { x: 2., y: 0. }, r: 1. };
+        let gap = c.unit_circle_gap();
+        assert!(gap.is_none()); // touching, no gap
+
+        // Circle overlapping unit circle
+        let c = Circle { c: R2 { x: 1., y: 0. }, r: 1. };
+        let gap = c.unit_circle_gap();
+        assert!(gap.is_none()); // overlapping
+    }
+
+    #[test]
+    fn test_transform_translate() {
+        let c = Circle { c: R2 { x: 0., y: 0. }, r: 1. };
+        let translated = c.transform(&Translate(R2 { x: 2., y: 3. }));
+        match translated {
+            Shape::Circle(tc) => {
+                assert_relative_eq!(tc.c.x, 2.);
+                assert_relative_eq!(tc.c.y, 3.);
+                assert_relative_eq!(tc.r, 1.);
+            }
+            _ => panic!("Expected Circle"),
+        }
+    }
+
+    #[test]
+    fn test_transform_scale() {
+        let c = Circle { c: R2 { x: 1., y: 2. }, r: 1. };
+        let scaled = c.transform(&Scale(2.));
+        match scaled {
+            Shape::Circle(sc) => {
+                assert_relative_eq!(sc.c.x, 2.);
+                assert_relative_eq!(sc.c.y, 4.);
+                assert_relative_eq!(sc.r, 2.);
+            }
+            _ => panic!("Expected Circle"),
+        }
+    }
+
+    #[test]
+    fn test_transform_scale_xy() {
+        let c = Circle { c: R2 { x: 1., y: 2. }, r: 1. };
+        let scaled = c.transform(&ScaleXY(R2 { x: 2., y: 3. }));
+        // ScaleXY converts circle to XYRR (ellipse)
+        match scaled {
+            Shape::XYRR(xyrr) => {
+                assert_relative_eq!(xyrr.c.x, 2.);
+                assert_relative_eq!(xyrr.c.y, 6.);
+                assert_relative_eq!(xyrr.r.x, 2.);
+                assert_relative_eq!(xyrr.r.y, 3.);
+            }
+            _ => panic!("Expected XYRR"),
+        }
+    }
+
+    #[test]
+    fn test_transform_rotate() {
+        let c = Circle { c: R2 { x: 1., y: 0. }, r: 1. };
+        let rotated = c.transform(&Rotate(PI / 2.));
+        match rotated {
+            Shape::Circle(rc) => {
+                assert_relative_eq!(rc.c.x, 0., epsilon = 1e-10);
+                assert_relative_eq!(rc.c.y, 1.);
+                assert_relative_eq!(rc.r, 1.);
+            }
+            _ => panic!("Expected Circle"),
+        }
+    }
+
+    #[test]
+    fn test_mul_f64() {
+        let c = Circle { c: R2 { x: 1., y: 2. }, r: 3. };
+        let scaled = c * 2.;
+        assert_relative_eq!(scaled.c.x, 2.);
+        assert_relative_eq!(scaled.c.y, 4.);
+        assert_relative_eq!(scaled.r, 6.);
+    }
+
+    #[test]
+    fn test_add_r2() {
+        let c = Circle { c: R2 { x: 1., y: 2. }, r: 3. };
+        let translated = c + R2 { x: 5., y: 7. };
+        assert_relative_eq!(translated.c.x, 6.);
+        assert_relative_eq!(translated.c.y, 9.);
+        assert_relative_eq!(translated.r, 3.);
+    }
+
+    #[test]
+    fn test_getters_and_vals() {
+        let c = Circle { c: R2 { x: 1., y: 2. }, r: 3. };
+        let names = c.names();
+        assert_eq!(names, ["cx", "cy", "r"]);
+        let vals = c.vals();
+        assert_relative_eq!(vals[0], 1.);
+        assert_relative_eq!(vals[1], 2.);
+        assert_relative_eq!(vals[2], 3.);
+    }
+
+    #[test]
+    fn test_display() {
+        let c = Circle { c: R2 { x: 1.5, y: 2.5 }, r: 3.5 };
+        let s = format!("{}", c);
+        assert_eq!(s, "C(1.500, 2.500, 3.500)");
+    }
 }
