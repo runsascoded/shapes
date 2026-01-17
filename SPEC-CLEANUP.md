@@ -86,7 +86,8 @@ src/
     transform.rs, rotate.rs
   math/               # Numerical algorithms
     polynomial/ (quartic, cubic, quadratic)
-    complex.rs, roots.rs, abs.rs, cbrt.rs, etc.
+    complex.rs, roots.rs, abs.rs, cbrt.rs, deg.rs, is_normal.rs, is_zero.rs,
+    recip.rs, round.rs, d5.rs, float_arr.rs, float_wrap.rs, sqrt.rs, trig.rs, zero.rs
   optimization/       # Gradient descent
     model.rs, step.rs, history.rs, targets.rs
 ```
