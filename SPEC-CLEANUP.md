@@ -156,12 +156,15 @@ src/
 pub fn make_model(...) -> Model { ... }
 ```
 
-### 9. Test Coverage ✅ PARTIAL
+### 9. Test Coverage ✅ EXPANDED
 
-**Added tests**:
+**Added tests** (total: 142 tests):
 - `math/quadratic.rs` - 8 comprehensive tests (real roots, complex roots, edge cases)
 - `distance.rs` - 6 tests for R2 distance calculations
 - `targets.rs` - 6 additional tests (disjoints, neighbors, idx, none_key, total_area)
+- `r2.rs` - 11 tests (norm2, norm, r, arithmetic, neg, atan2)
+- `circle.rs` - 12 new tests (area, at_y, xyrr, unit_circle_gap, transforms, operators)
+- `dual.rs` - 24 tests (constructors, all arithmetic ops, trig functions, is_normal, ordering)
 - `math/cubic.rs`, `math/quartic.rs` - Already had good coverage
 
 **Still missing**:
