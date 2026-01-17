@@ -69,47 +69,29 @@ Comprehensive cleanup plan based on code audit. Organized by priority and effort
 
 ## Lower Priority (Maintainability)
 
-### 6. Module Reorganization
+### 6. Module Reorganization ✅ DONE
 
-**Current structure** (flat, 47 pub mods in lib.rs):
+**New structure**:
 ```
 src/
-  lib.rs
-  shape.rs, scene.rs, circle.rs, ...
-  ellipses/
-  math/
-```
-
-**Proposed structure**:
-```
-src/
-  lib.rs (re-exports only)
-  geometry/
-    mod.rs
-    shape.rs
-    circle.rs
-    ellipses/ (xyrr, xyrrt, cdef, bcdef)
-    r2.rs
-  math/
-    mod.rs
+  lib.rs (re-exports for backwards compatibility)
+  analysis/           # Scene analysis
+    scene.rs, component.rs, region.rs, regions.rs
+    edge.rs, node.rs, segment.rs, hull.rs
+    intersect.rs, intersection.rs, contains.rs, gap.rs, distance.rs
+    set.rs, theta_points.rs
+  geometry/           # Shape types
+    shape.rs, circle.rs, r2.rs
+    ellipses/ (xyrr, xyrrt, cdef, bcdef, quartic)
+    transform.rs, rotate.rs
+  math/               # Numerical algorithms
     polynomial/ (quartic, cubic, quadratic)
-    complex.rs
-    trig.rs
-  analysis/
-    mod.rs
-    scene.rs
-    component.rs
-    region.rs
-    regions.rs
-  optimization/
-    mod.rs
-    model.rs
-    step.rs
-    history.rs
-  wasm/
-    mod.rs
-    bindings.rs (current lib.rs WASM exports)
+    complex.rs, roots.rs, abs.rs, cbrt.rs, etc.
+  optimization/       # Gradient descent
+    model.rs, step.rs, history.rs, targets.rs
 ```
+
+All modules re-exported at crate root - existing imports unchanged.
 
 ### 7. Split Large Files
 
