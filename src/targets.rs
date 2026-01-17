@@ -136,9 +136,8 @@ impl<D: Arg> Targets<D>
                     queue.insert(none_key);
                     remaining += 1;
                     // println!("inserted {} = {}, remaining {}", none_key, v, remaining);
-                } else if num_somes == 3 {
-                    // TODO: fsck
                 }
+                // num_somes == 3: all values already known, nothing to derive
             }
         }
         let m = all.len();

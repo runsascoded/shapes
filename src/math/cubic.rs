@@ -155,10 +155,6 @@ where
     let rv = if p.is_zero() && q.is_zero() {
         let re = -d.cbrt();
         Reals([ re.clone(), re.clone(), re, ])
-        // TODO: factor / make these static
-        //   let sin_tau3: f64 = TAU3.sin();
-        //   let u_1: Complex<f64> = Complex { re: -0.5, im: sin_tau3 };
-        // Mixed(re.clone(), Complex::re(re) * u_1)
     } else {
         match cubic_depressed(p, q) {
             DepressedRoots::Reals(roots) => Reals(roots.map(|r| r - b3.clone())),
@@ -175,6 +171,10 @@ where
 }
 
 static TAU3: f64 = TAU / 3.;
+/// sin(2π/3) = sin(120°) = √3/2
+static SIN_TAU3: f64 = 0.8660254037844387; // √3/2
+/// Primitive cube root of unity: e^(2πi/3) = -1/2 + i√3/2
+static U_1: Complex<f64> = Complex { re: -0.5, im: SIN_TAU3 };
 
 pub fn cubic_depressed<D: Arg>(p: D, q: D) -> DepressedRoots<D>
 where
@@ -185,16 +185,12 @@ where
     + Mul<Complex<D>, Output = Complex<D>>
     + Mul<Complex<f64>, Output = Complex<D>>
 {
-    // TODO: factor / make these static
-    let sin_tau3: f64 = TAU3.sin();
-    let u_1: Complex<f64> = Complex { re: -0.5, im: sin_tau3 };
-    // let u_2: Complex<f64> = Complex { re: -1. / 2., im: -sin_tau3 };
 
     debug!("cubic_depressed: x^3 + {:?}x + {:?}", p, q);
     let rv = if p.is_zero() {
         let re = -q.cbrt();
         let re2 = Complex::re(re.clone());
-        let im = re2.clone() * u_1.clone();
+        let im = re2.clone() * U_1;
         DepressedRoots::Mixed(re, im)
     } else if p.lt_zero() {
         let p3 = p.clone() / 3.;
@@ -219,7 +215,7 @@ where
             let m = w.cbrt();
             let re = (m.clone() + m.recip()) * p3sq.clone();
             // debug!("u {:?}, w {:?}, m {:?}, re {:?}", u, w, m, re);
-            let mu = Complex::re(m) * u_1;
+            let mu = Complex::re(m) * U_1;
             let im = (mu.clone() + mu.recip()) * p3sq;
             DepressedRoots::Mixed(re, im)
         }
@@ -248,7 +244,7 @@ where
             // u is very large, and negative (e.g. -104023284.33940886); p is so close to 0 that we don't have enough precision to complete this path; treat it like the $p = 0$ / $x³ + q = 0$ code path above.
         //     let re = -q.cbrt();
         //     let re2 = Complex::re(re.clone());
-        //     let im = re2.clone() * u_1.clone();
+        //     let im = re2.clone() * U_1;
         //     Mixed(re, im)
         // } else {
             // let m = w.cbrt();
@@ -256,7 +252,7 @@ where
         // };
         // debug!("u {:?}, w {:?}, m {:?}", u, w, m.clone());
         let re = (m.clone() - m.recip()) * p3sq.clone();
-        let mu = Complex::re(m) * u_1;
+        let mu = Complex::re(m) * U_1;
         let im = (mu.clone() - mu.recip()) * p3sq;
         DepressedRoots::Mixed(re, im)
     };
