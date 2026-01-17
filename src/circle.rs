@@ -140,16 +140,10 @@ where
         };
         let mut intersections: Vec<R2<D>> = Vec::new();
         if x0.is_normal() && y0.is_normal() {
-            intersections.push(R2 {
-                x: x0.clone(),
-                y: y0.clone(),
-            });
+            intersections.push(R2 { x: x0, y: y0 });
         }
         if x1.is_normal() && y1.is_normal() {
-            intersections.push(R2 {
-                x: x1.clone(),
-                y: y1.clone(),
-            });
+            intersections.push(R2 { x: x1, y: y1 });
         }
         debug!(
             "Circle::unit_intserctions: {}, {} intersections: {:?}",

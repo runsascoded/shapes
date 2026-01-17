@@ -327,7 +327,7 @@ where R2<D>: To<R2<f64>>,
         }
         let last_segment = segments.last().unwrap();
         let end = last_segment.end();
-        let indent = String::from_utf8(vec![b' '; 4 * (segments.len() - 2)]).unwrap();
+        let indent = " ".repeat(4 * (segments.len() - 2));
         let idxs_str = segments.iter().fold(start.borrow().idx.to_string(), |acc, s| {
             format!("{}→{}", acc, s.end().borrow().idx)
         });

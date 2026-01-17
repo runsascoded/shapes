@@ -53,7 +53,7 @@ impl Step {
     pub fn nxt(shapes: Vec<Shape<D>>, targets: Targets<f64>) -> Result<Step, SceneError> {
         let scene = Scene::new(shapes)?;
         let sets = &scene.sets;
-        let all_key = String::from_utf8(vec![b'*'; scene.len()]).unwrap();
+        let all_key = "*".repeat(scene.len());
         let total_area = scene.area(&all_key).unwrap_or_else(|| scene.zero());
         debug!("scene: {} components, total_area {}, component sizes {}", scene.components.len(), total_area, scene.components.iter().map(|c| c.sets.len().to_string()).collect::<Vec<_>>().join(", "));
         for component in &scene.components {

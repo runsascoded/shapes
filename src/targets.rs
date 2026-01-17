@@ -75,7 +75,7 @@ impl<D: Arg> Targets<D>
         let mut all = given.clone();
         let initial_size = all.len();
         let n = all.keys().next().unwrap().len();
-        let empty_key = String::from_utf8(vec![b'-'; n]).unwrap();
+        let empty_key = "-".repeat(n);
         if !all.contains_key(&empty_key) {
             let first = all.values().next().unwrap();
             all.insert(empty_key, D::zero(first));
@@ -145,7 +145,7 @@ impl<D: Arg> Targets<D>
             panic!("Only expanded from {} to {} keys, expected 3^{} = {}", initial_size, m, n, max);
         }
 
-        let all_key = String::from_utf8(vec![b'*'; n]).unwrap();
+        let all_key = "*".repeat(n);
         let total_area =
             *all
             .get(&all_key)
@@ -177,7 +177,7 @@ impl<D: Arg> Targets<D>
 }
 impl<D> Targets<D> {
     pub fn none_key(&self) -> String {
-        String::from_utf8(vec![b'-'; self.n]).unwrap()
+        "-".repeat(self.n)
     }
     pub fn idx(idx: usize) -> char {
         if idx < 10 {
