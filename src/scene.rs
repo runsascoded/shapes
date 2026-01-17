@@ -1,3 +1,6 @@
+// Index-based loops are intentional in this module for clarity when dealing with adjacency matrices
+#![allow(clippy::needless_range_loop)]
+
 use core::f64;
 use std::{cell::RefCell, rc::Rc, collections::{BTreeSet, BTreeMap}, ops::{Neg, Add, Sub, Mul, Div}};
 
