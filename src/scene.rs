@@ -326,15 +326,11 @@ where
                     .flat_map(|c| c.regions.iter())
                     .filter(|r| &r.key == key)
                     .map(|r| r.area());
-                // TODO: SumOpt trait?
-                let mut sum = None;
-                for area in areas {
-                    match sum {
-                        None => sum = Some(area),
-                        Some(s) => sum = Some(s + area),
-                    }
-                }
-                sum
+                // Manual fold to return None if no matching regions (vs zero)
+                areas.fold(None, |acc, area| Some(match acc {
+                    None => area,
+                    Some(s) => s + area,
+                }))
             }
         }
     }

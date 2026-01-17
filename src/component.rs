@@ -98,7 +98,7 @@ where R2<D>: To<R2<f64>>,
                         key += "-";
                     }
                 }
-                let mut region_container_set_idxs = container_set_idxs.clone();  // TODO: shadow?
+                let mut region_container_set_idxs = container_set_idxs.clone();
                 region_container_set_idxs.insert(set_idx);
                 Region::new(
                     key,
