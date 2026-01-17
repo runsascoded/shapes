@@ -7,7 +7,10 @@ pub trait Distance<O> {
     fn distance(&self, o: &O) -> Self::Output;
 }
 
-impl<D: Clone + Add<Output = D> + Mul<Output = D> + Sqrt> Distance<R2<D>> for R2<D>
+pub trait DistanceArg: Clone + Add<Output = Self> + Mul<Output = Self> + Sqrt {}
+impl<D: Clone + Add<Output = D> + Mul<Output = D> + Sqrt> DistanceArg for D {}
+
+impl<D: DistanceArg> Distance<R2<D>> for R2<D>
 where R2<D>: Sub<Output = R2<D>>
 {
     type Output = D;
@@ -16,7 +19,7 @@ where R2<D>: Sub<Output = R2<D>>
     }
 }
 
-impl<D: Clone + Add<Output = D> + Mul<Output = D> + Sqrt> Distance<Shape<D>> for Shape<D>
+impl<D: DistanceArg> Distance<Shape<D>> for Shape<D>
 where R2<D>: Sub<Output = R2<D>>
 {
     type Output = D;

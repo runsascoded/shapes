@@ -7,6 +7,10 @@ use tsify::Tsify;
 
 use crate::{dual::Dual, rotate::{self, Rotate as _Rotate, RotateArg}, transform::{Transform::{self, Rotate, Translate, Scale, ScaleXY}, CanTransform}, sqrt::Sqrt, trig::Trig, to::To, math::recip::Recip};
 
+/// Trait alias for numeric types supporting norm/radius computation.
+pub trait NormArg: Clone + Add<Output = Self> + Mul<Output = Self> {}
+impl<D: Clone + Add<Output = D> + Mul<Output = D>> NormArg for D {}
+
 #[derive(Debug, Copy, Clone, From, Neg, PartialEq, Tsify, Serialize, Deserialize)]
 pub struct R2<D> {
     pub x: D,
@@ -56,12 +60,7 @@ impl<
     }
 }
 
-impl<
-    D
-    : Clone
-    + Add<Output = D>
-    + Mul<Output = D>
-> R2<D> {
+impl<D: NormArg> R2<D> {
     pub fn norm2(&self) -> D {
         self.x.clone() * self.x.clone() + self.y.clone() * self.y.clone()
     }
@@ -106,10 +105,9 @@ impl<D: Trig> R2<D> {
     }
 }
 
-impl<D: Clone + Add<Output = D> + Mul<Output = D> + Sqrt> R2<D>
-{
+impl<D: NormArg + Sqrt> R2<D> {
     pub fn r(&self) -> D {
-        (self.x.clone() * self.x.clone() + self.y.clone() * self.y.clone()).sqrt()
+        self.norm2().sqrt()
     }
 }
 
