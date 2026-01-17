@@ -271,4 +271,80 @@ mod tests {
             ("012",  1),
         ]);
     }
+
+    #[test]
+    fn disjoints2() {
+        let map: TargetsMap<i64> = [
+            ("0*", 9),
+            ("*1", 3),
+            ("01", 1),
+        ].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+        let targets = Targets::new(map);
+        let disjoints = targets.disjoints();
+        // Disjoint keys are those with no '*' (only '-' and digits)
+        let expected: Vec<(&str, i64)> = vec![
+            ("-1", 2),  // in set 1 only
+            ("0-", 8),  // in set 0 only
+            ("01", 1),  // in both sets
+        ];
+        for (k, v) in &expected {
+            let k = k.to_string();
+            assert_eq!(
+                disjoints.get(&k),
+                Some(v),
+                "key {} should have value {}",
+                k, v
+            );
+        }
+        assert_eq!(disjoints.len(), 3);
+    }
+
+    #[test]
+    fn neighbors_tests() {
+        let neighbors = Targets::<i64>::neighbors("0*");
+        // For key "0*":
+        // Position 0: char is '0', neighbors are '-' and '*'
+        // Position 1: char is '*', neighbors are '-' and '1'
+        assert_eq!(neighbors.len(), 2);
+        assert_eq!(neighbors[0], (('-', "-*".to_string()), ('*', "**".to_string())));
+        assert_eq!(neighbors[1], (('-', "0-".to_string()), ('1', "01".to_string())));
+    }
+
+    #[test]
+    fn idx_single_digit() {
+        assert_eq!(Targets::<i64>::idx(0), '0');
+        assert_eq!(Targets::<i64>::idx(5), '5');
+        assert_eq!(Targets::<i64>::idx(9), '9');
+    }
+
+    #[test]
+    fn idx_letters() {
+        // idx < 10: returns digit character (0-9)
+        // idx 10-35: returns 'a' + (idx - 11)
+        // Note: idx 10 gives 'a' + (-1) which wraps to a non-letter
+        assert_eq!(Targets::<i64>::idx(11), 'a');
+        assert_eq!(Targets::<i64>::idx(12), 'b');
+        assert_eq!(Targets::<i64>::idx(35), 'y'); // 'a' + (35 - 11) = 'a' + 24 = 'y'
+    }
+
+    #[test]
+    fn none_key() {
+        let map: TargetsMap<i64> = [("0*", 9), ("*1", 3), ("01", 1)]
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v))
+            .collect();
+        let targets = Targets::new(map);
+        assert_eq!(targets.none_key(), "--");
+    }
+
+    #[test]
+    fn total_area() {
+        let map: TargetsMap<i64> = [("0*", 9), ("*1", 3), ("01", 1)]
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v))
+            .collect();
+        let targets = Targets::new(map);
+        // total_area is the "**" key value = 11
+        assert_eq!(targets.total_area, 11);
+    }
 }
