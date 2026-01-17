@@ -161,10 +161,10 @@ pub fn make_model(...) -> Model { ... }
 **Added tests**:
 - `math/quadratic.rs` - 8 comprehensive tests (real roots, complex roots, edge cases)
 - `distance.rs` - 6 tests for R2 distance calculations
+- `targets.rs` - 6 additional tests (disjoints, neighbors, idx, none_key, total_area)
 - `math/cubic.rs`, `math/quartic.rs` - Already had good coverage
 
 **Still missing**:
-- `targets.rs` - Target expansion/validation
 - `hull.rs` - Convex hull (depends on complex Segment setup)
 - Error paths (invalid inputs)
 - Property-based tests
