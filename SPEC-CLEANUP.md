@@ -181,15 +181,20 @@ proptest! {
 }
 ```
 
-### 10. Address TODOs
+### 10. Address TODOs ✅ MOSTLY DONE
 
-| Location | TODO | Action |
+| Location | TODO | Status |
 |----------|------|--------|
-| `scene.rs:327` | SumOpt trait | Implement or remove comment |
-| `math/cubic.rs:158,188` | Factor constants | Make static or const |
-| `component.rs:86` | Shadow variable | Rename for clarity |
-| `model.rs:267` | Nondeterminism | Investigate and fix |
-| `targets.rs:140` | "TODO: fsck" | Clarify or remove |
+| `scene.rs:327` | SumOpt trait | ✅ Cleaned up |
+| `math/cubic.rs:158,188` | Factor constants | ✅ Made static |
+| `component.rs:86` | Shadow variable | ✅ Cleaned up |
+| `model.rs:267` | Nondeterminism | ✅ Test passes, TODO removed |
+| `targets.rs:140` | "TODO: fsck" | ✅ Cleaned up |
+
+**Remaining TODOs** (low priority, complex to fix):
+- `shape.rs:47` - CoordGetter lifetime issue (workaround in place)
+- `ellipses/cdef.rs:232` - Type constraint note (explanatory comment)
+- `ellipses/xyrr.rs:349,364` - Numerical stability (needs deeper algorithmic work)
 
 ## Dependency Updates
 
