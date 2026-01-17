@@ -17,7 +17,6 @@ nalgebra = { version = "0.32.3" }
 num-dual = { version = "0.7.1" }
 num-traits = "0.2.16"
 ordered-float = "4.1.0"
-polars = { version = "*", default_features = false, features = ["csv"] }
 roots = "0.0.8"
 serde = { version = "1.0.183", features = ["derive"] }
 serde-wasm-bindgen = "0.6.0"
@@ -29,4 +28,5 @@ web-sys = { version = "0.3.50", features = ["console"] }
 
 [dev-dependencies]
 env_logger = "0.10.0"
+polars = { version = "0.44", default-features = false, features = ["csv"] }
 test-log = "0.2.12"
