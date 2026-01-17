@@ -72,7 +72,10 @@ where
     pub fn len(&self) -> usize {
         self.segments.len()
     }
-    pub fn polygon_area(segments: &Vec<Segment<D>>) -> D {
+    pub fn is_empty(&self) -> bool {
+        self.segments.is_empty()
+    }
+    pub fn polygon_area(segments: &[Segment<D>]) -> D {
         segments
             .iter()
             .map(|s| {
@@ -83,7 +86,7 @@ where
             .sum::<D>()
             / 2.
     }
-    pub fn secant_area(segments: &Vec<Segment<D>>) -> D {
+    pub fn secant_area(segments: &[Segment<D>]) -> D {
         segments
             .iter()
             .map(|s| { s.secant_area() })
@@ -97,8 +100,8 @@ where
         }
         area
     }
-    pub fn matches(&self, key: &String) -> bool {
-        for (idx, ch) in (&key).chars().enumerate() {
+    pub fn matches(&self, key: &str) -> bool {
+        for (idx, ch) in key.chars().enumerate() {
             let is_container = self.container_set_idxs.contains(&idx);
             if ch == '-' && is_container {
                 return false;
@@ -133,7 +136,7 @@ where
     pub fn contains(&self, p: &R2<f64>, all_shapes: &BTreeMap<usize, Shape<f64>>) -> bool {
         let y = p.y;
         let mut points_at_y: Vec<(usize, f64, f64)> = all_shapes
-            .into_iter()
+            .iter()
             .flat_map(|(idx, s)| {
                 s.at_y(y).into_iter().map(|x| {
                     let p = R2 { x, y };
@@ -166,19 +169,15 @@ where
                     return false;
                 }
                 let prv_edges = self.edges_for_set(prv.0);
-                if prv_edges
-                    .iter()
-                    .find(|edge| edge.borrow().contains_theta(prv.2))
-                    .is_none()
+                if !prv_edges
+                    .iter().any(|edge| edge.borrow().contains_theta(prv.2))
                 {
                     // debug!("  breaking between {} and {}: {} does not contain theta {}", prv.1, x, prv_edges.iter().map(|e| format!("{}", e.borrow())).join(","), prv.2);
                     return false;
                 }
                 let cur_edges = self.edges_for_set(cur.0);
-                if cur_edges
-                    .iter()
-                    .find(|edge| edge.borrow().contains_theta(cur.2))
-                    .is_none()
+                if !cur_edges
+                    .iter().any(|edge| edge.borrow().contains_theta(cur.2))
                 {
                     // debug!("  breaking between {} and {}: {} does not contain theta {}", prv.1, x, cur_edges.iter().map(|e| format!("{}", e.borrow())).join(","), cur.2);
                     return false;
@@ -193,7 +192,7 @@ where
                 cur_set_idxs.insert(set_idx);
             }
         }
-        return false;
+        false
     }
 }
 

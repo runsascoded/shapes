@@ -78,7 +78,7 @@ where R2<D>: CanProject<D, Output = R2<D>>
             if e_zero {
                 let fc = (-f.clone() - 1.) / (c.clone() - 1.);
                 let fcf: f64 = fc.clone().into();
-                if fcf >= 0. && fcf <= 1. {
+                if (0. ..=1.).contains(&fcf) {
                     let y0 = fc.sqrt();
                     let y1 = -y0.clone();
                     let x0 = (-y0.clone() * y0.clone() + 1.).sqrt();
@@ -94,16 +94,16 @@ where R2<D>: CanProject<D, Output = R2<D>>
                     vec![]
                 }
             } else {
-                let points = self._unit_intersections(xyrr, true);
+                
                 // let err = self.points_err(points.clone(), xyrr);
                 // debug!("points err: {}", err);
-                points
+                self._unit_intersections(xyrr, true)
             }
         } else if e_zero {
-            let points = self._unit_intersections(xyrr, false);
+            
             // let err = self.points_err(points.clone(), xyrr);
             // debug!("points err: {}", err);
-            points
+            self._unit_intersections(xyrr, false)
         } else {
             let points0 = self._unit_intersections(xyrr, true);
             let err0 = self.points_err(points0.clone(), xyrr);
@@ -224,15 +224,14 @@ where R2<D>: CanProject<D, Output = R2<D>>
                 //     let r1_err = (-1. + r1.clone().norm2().into()).abs();
                     // debug!("  p: {}, r1: {} ({})", p, r1, r1_err);
                 // }
-                let p =
-                    candidates
+                
+                candidates
                     .into_iter()
                     .min_by_key(|p| {
                         let n: f64 = p.apply(&xyrr.projection()).norm2().into();
                         OrderedFloat((-1. + n).abs())  // TODO: `where f64: Sub<D, Output = D>` prevents subtracting f64's from one another?
                     })
-                    .unwrap();
-                p
+                    .unwrap()
             };
 
             let R2 { x, y } = p.clone();
@@ -339,9 +338,9 @@ impl<D: AbsDiffEq<Epsilon = f64> + Clone> AbsDiffEq for CDEF<D> {
         D::default_epsilon()
     }
     fn abs_diff_eq(&self, other: &Self, epsilon: Self::Epsilon) -> bool {
-        self.c.abs_diff_eq(&other.c, epsilon.clone())
-        && self.d.abs_diff_eq(&other.d, epsilon.clone())
-        && self.e.abs_diff_eq(&other.e, epsilon.clone())
+        self.c.abs_diff_eq(&other.c, epsilon)
+        && self.d.abs_diff_eq(&other.d, epsilon)
+        && self.e.abs_diff_eq(&other.e, epsilon)
         && self.f.abs_diff_eq(&other.f, epsilon)
     }
 }
@@ -351,9 +350,9 @@ impl<D: RelativeEq<Epsilon = f64> + Clone> RelativeEq for CDEF<D> {
         D::default_max_relative()
     }
     fn relative_eq(&self, other: &Self, epsilon: Self::Epsilon, max_relative: Self::Epsilon) -> bool {
-        self.c.relative_eq(&other.c, epsilon.clone(), max_relative.clone())
-        && self.d.relative_eq(&other.d, epsilon.clone(), max_relative.clone())
-        && self.e.relative_eq(&other.e, epsilon.clone(), max_relative.clone())
+        self.c.relative_eq(&other.c, epsilon, max_relative)
+        && self.d.relative_eq(&other.d, epsilon, max_relative)
+        && self.e.relative_eq(&other.e, epsilon, max_relative)
         && self.f.relative_eq(&other.f, epsilon, max_relative)
     }
 }

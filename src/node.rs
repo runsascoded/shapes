@@ -59,12 +59,8 @@ where R2<D>: Add<Output = R2<D>>,
         };
         // self.p = p * n / (n + 1.) + o / (n + 1.);
         self.n += 1;
-        if !self.shape_thetas.contains_key(&set0_idx) {
-            self.shape_thetas.insert(set0_idx, set0_theta.clone());
-        }
-        if !self.shape_thetas.contains_key(&set1_idx) {
-            self.shape_thetas.insert(set1_idx, set1_theta.clone());
-        }
+        self.shape_thetas.entry(set0_idx).or_insert_with(|| set0_theta.clone());
+        self.shape_thetas.entry(set1_idx).or_insert_with(|| set1_theta.clone());
     }
 }
 impl<D: DisplayNum> Display for Node<D>

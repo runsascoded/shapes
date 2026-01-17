@@ -15,14 +15,14 @@ pub struct Model {
 impl Model {
     pub fn new(input_specs: Vec<InputSpec>, targets: TargetsMap<f64>) -> Model {
         let step = Step::new(input_specs, targets.into());
-        let min_error = (&step).error.re.clone();
+        let min_error = step.error.re;
         let mut steps = Vec::<Step>::new();
         steps.push(step);
         let repeat_idx: Option<usize> = None;
         Model { steps, min_idx: 0, repeat_idx, min_error }
     }
     pub fn train(&mut self, max_step_error_ratio: f64, max_steps: usize) {
-        let num_steps = self.steps.len().clone();
+        let num_steps = self.steps.len();
         let mut step = self.steps[num_steps - 1].clone();
         for idx in 0..max_steps {
             let step_idx = idx + num_steps;

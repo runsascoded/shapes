@@ -1,4 +1,3 @@
-use std::iter::repeat;
 
 use num_traits;
 
@@ -16,6 +15,6 @@ impl<D: num_traits::Zero> Zero for D {
 
 impl Zero for Dual {
     fn zero(&self) -> Dual {
-        Dual::new(0., repeat(0.).take(self.d().len()).collect())
+        Dual::new(0., std::iter::repeat_n(0., self.d().len()).collect())
     }
 }

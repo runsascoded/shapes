@@ -1,4 +1,4 @@
-use std::{fmt::{Debug, Display}, iter::{Sum, repeat}, ops::{Add, AddAssign, Deref, Div, Mul, Neg, Sub, SubAssign}};
+use std::{fmt::{Debug, Display}, iter::Sum, ops::{Add, AddAssign, Deref, Div, Mul, Neg, Sub, SubAssign}};
 
 use approx::{AbsDiffEq, RelativeEq};
 use crate::{fmt::Fmt, to::To};
@@ -12,11 +12,17 @@ use tsify::declare;
 #[declare]
 pub type D = Dual;
 
-#[derive(Clone, PartialEq, PartialOrd)]
+#[derive(Clone, PartialEq)]
 pub struct Dual(
     pub DualDVec64,
     pub usize
 );
+
+impl PartialOrd for Dual {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
 
 impl Serialize for Dual {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -72,7 +78,7 @@ impl<'de> Deserialize<'de> for Dual {
                 Ok(Dual::new(v, d))
             }
         }
-        const FIELDS: &'static [&'static str] = &["v", "d"];
+        const FIELDS: &[&str] = &["v", "d"];
         deserializer.deserialize_struct("Dual", FIELDS, DualVisitor)
     }
 }
@@ -90,7 +96,7 @@ impl Dual {
         )
     }
     pub fn scalar(v: f64, n: usize) -> Self {
-        Dual::new(v, repeat(0.).take(n).collect())
+        Dual::new(v, std::iter::repeat_n(0., n).collect())
     }
     pub fn v(&self) -> f64 {
         self.0.re
@@ -103,7 +109,7 @@ impl Dual {
         sliced.to_vec()
     }
     pub fn zero(n: usize) -> Self {
-        Dual::new(0., repeat(0.).take(n).collect())
+        Dual::new(0., std::iter::repeat_n(0., n).collect())
     }
     pub fn sqrt(&self) -> Self {
         Dual(self.0.clone().sqrt(), self.1)
@@ -230,7 +236,7 @@ impl Mul<f64> for Dual {
 impl Mul<&f64> for Dual {
     type Output = Self;
     fn mul(self, rhs: &f64) -> Self::Output {
-        Dual(self.0 * rhs.clone(), self.1)
+        Dual(self.0 * *rhs, self.1)
     }
 }
 
@@ -367,7 +373,7 @@ impl Add<&Dual> for Dual {
     }
 }
 
-impl<'a> Add<&Dual> for &'a Dual {
+impl Add<&Dual> for &Dual {
     type Output = Dual;
     fn add(self, rhs: &Dual) -> Self::Output {
         assert_eq!(self.1, rhs.1);

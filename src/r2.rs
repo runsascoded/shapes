@@ -51,7 +51,7 @@ impl<
             Translate(v) => self.clone() + v,
             Scale(v) => self.clone() * v,
             ScaleXY(v) => self.clone() * v,
-            Rotate(a) => self.rotate(&a),
+            Rotate(a) => self.rotate(a),
         }
     }
 }
@@ -119,7 +119,7 @@ impl<D: AbsDiffEq<Epsilon = f64>> AbsDiffEq for R2<D> {
         Dual::default_epsilon()
     }
     fn abs_diff_eq(&self, other: &Self, epsilon: Self::Epsilon) -> bool {
-        self.x.abs_diff_eq(&other.x, epsilon.clone()) && self.y.abs_diff_eq(&other.y, epsilon)
+        self.x.abs_diff_eq(&other.x, epsilon) && self.y.abs_diff_eq(&other.y, epsilon)
     }
 }
 
@@ -128,7 +128,7 @@ impl<D: RelativeEq<Epsilon = f64>> RelativeEq for R2<D> {
         Dual::default_max_relative()
     }
     fn relative_eq(&self, other: &Self, epsilon: Self::Epsilon, max_relative: Self::Epsilon) -> bool {
-        self.x.relative_eq(&other.x, epsilon.clone(), max_relative.clone()) && self.y.relative_eq(&other.y, epsilon, max_relative)
+        self.x.relative_eq(&other.x, epsilon, max_relative) && self.y.relative_eq(&other.y, epsilon, max_relative)
     }
 }
 

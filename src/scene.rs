@@ -56,7 +56,7 @@ where
     f64: SceneFloat<D>,
 {
     pub fn new(shapes: Vec<Shape<D>>) -> Scene<D> {
-        let num_shapes = (&shapes).len();
+        let num_shapes = shapes.len();
         let sets = shapes.into_iter().enumerate().map(|(idx, shape)| Set::new(idx, shape)).collect::<Vec<_>>();
         let mut set_ptrs: Vec<S<D>> = sets.into_iter().map(|s| Rc::new(RefCell::new(s))).collect();
         let mut nodes: Vec<N<D>> = Vec::new();
@@ -127,7 +127,7 @@ where
             is_directly_connected.push(directly_connected);
         }
 
-        debug!("{} nodes", (&nodes).len());
+        debug!("{} nodes", nodes.len());
         for (idx, node) in nodes.iter().enumerate() {
             debug!("  Node {}: {}", idx, node.borrow());
         }
@@ -283,7 +283,7 @@ where
         component_depths_map: &mut BTreeMap<component::Key, i64>,
     ) -> i64 {
         match component_depths_map.get(&component.key) {
-            Some(depth) => depth.clone(),
+            Some(depth) => *depth,
             None => {
                 if component.child_component_keys.is_empty() {
                     component_depths_map.insert(component.key.clone(), 0);
@@ -311,7 +311,7 @@ where
                 let k0 = format!("{}-{}", prefix, suffix);
                 let k1 = format!("{}{}{}", prefix, prefix.len(), suffix);
                 if k0.chars().all(|ch| ch == '-') {
-                    return self.area(&k1)
+                    self.area(&k1)
                 } else {
                     let a0 = self.area(&k0).unwrap_or_else(|| self.zero());
                     let a1 = self.area(&k1).unwrap_or_else(|| self.zero());
@@ -337,6 +337,10 @@ where
 
     pub fn len(&self) -> usize {
         self.sets.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.sets.is_empty()
     }
 
     pub fn zero(&self) -> D {
@@ -375,12 +379,12 @@ pub mod tests {
             let n = component.nodes[idx].borrow();
             assert_relative_eq!(n.p.x, x, epsilon = 1e-3);
             assert_relative_eq!(n.p.y, y, epsilon = 1e-3);
-            let shape_idxs: Vec<usize> = Vec::from_iter(n.shape_thetas.keys().into_iter().map(|i| *i));
+            let shape_idxs: Vec<usize> = Vec::from_iter(n.shape_thetas.keys().copied());
             assert_eq!(
                 shape_idxs,
                 vec![c0idx, c1idx],
             );
-            let thetas: Vec<_> = n.shape_thetas.values().into_iter().map(|t| t.deg()).map(|d| (round(&d.v()), d.d().iter().map(round).collect::<Vec<_>>())).collect();
+            let thetas: Vec<_> = n.shape_thetas.values().map(|t| t.deg()).map(|d| (round(&d.v()), d.d().iter().map(round).collect::<Vec<_>>())).collect();
             assert_eq!(
                 thetas,
                 vec![
@@ -401,8 +405,8 @@ pub mod tests {
         ];
         assert_eq!(component.nodes.len(), expected.len());
         for (idx, (x, dx, y, dy, c0idx, deg0v, deg0d, c1idx, deg1v, deg1d)) in expected.iter().enumerate() {
-            let x = Dual::new(*x, dx.iter().map(|d| *d as f64).collect());
-            let y = Dual::new(*y, dy.iter().map(|d| *d as f64).collect());
+            let x = Dual::new(*x, dx.iter().copied().collect());
+            let y = Dual::new(*y, dy.iter().copied().collect());
             check(idx, x, y, *c0idx, *deg0v, *deg0d, *c1idx, *deg1v, *deg1d);
         }
 

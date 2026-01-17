@@ -157,8 +157,8 @@ pub fn train(model: JsValue, max_step_error_ratio: f64, max_steps: usize) -> JsV
 pub fn step(step: JsValue, max_step_error_ratio: f64) -> JsValue {
     let step: Step = serde_wasm_bindgen::from_value(step).unwrap();
     let step = step.step(max_step_error_ratio);
-    let step = serde_wasm_bindgen::to_value(&step.clone()).unwrap();
-    step
+    
+    serde_wasm_bindgen::to_value(&step.clone()).unwrap()
 }
 
 /// Expands target specifications into fully-qualified region targets.

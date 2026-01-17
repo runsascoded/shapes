@@ -48,7 +48,7 @@ impl XYRR<f64> {
             vec![ x0 ]
         }
     }
-    pub fn names(&self) -> [String; 4] { Self::getters().map(|g| g.name).into() }
+    pub fn names(&self) -> [String; 4] { Self::getters().map(|g| g.name) }
     pub fn vals(&self) -> [f64; 4] { [ self.c.x, self.c.y, self.r.x, self.r.y ] }
 }
 
@@ -105,7 +105,7 @@ where R2<D>: CanProject<D, Output = R2<D>>,
 {
     pub fn unit_intersections(&self) -> Vec<R2<D>> {
         debug!("XYRR.unit_intersections: {}", self);
-        let points = self.cdef().unit_intersections(&self);
+        let points = self.cdef().unit_intersections(self);
         debug!("XYRR.unit_intersections: {}, points {:?}", self, points);
         points.into_iter().filter(|point| {
             let r = point.norm();
@@ -120,7 +120,7 @@ where R2<D>: CanProject<D, Output = R2<D>>,
                     warn!("Bad unit_intersections: {:?}\npoint: {}\nunit.r: {}\nself.r: {}", self, point, r, self_r);
                 }
             }
-            return true
+            true
             // debug!("  point: {}, unit.r: {}, self.r: {}", point, r, self_r);
         }).collect()
     }
@@ -208,7 +208,8 @@ where R2<D>: TransformR2<D>,
 {
     type Output = Shape<D>;
     fn transform(&self, t: &Transform<D>) -> Shape<D> {
-        let rv = match t.clone() {
+        
+        match t.clone() {
             Translate(v) => Shape::XYRR(XYRR {
                 c: self.c.clone() + v,
                 r: self.r.clone(),
@@ -219,8 +220,7 @@ where R2<D>: TransformR2<D>,
             }),
             ScaleXY(xy) => Shape::XYRR(self.scale_xy(xy)),
             Rotate(a) => Shape::XYRRT(self.rotate(&a)),
-        };
-        rv
+        }
     }
 }
 
@@ -266,8 +266,8 @@ impl<D: AbsDiffEq<Epsilon = f64> + Clone> AbsDiffEq for XYRR<D> {
         D::default_epsilon()
     }
     fn abs_diff_eq(&self, other: &Self, epsilon: Self::Epsilon) -> bool {
-        self.c.abs_diff_eq(&other.c, epsilon.clone())
-        && self.r.abs_diff_eq(&other.r, epsilon.clone())
+        self.c.abs_diff_eq(&other.c, epsilon)
+        && self.r.abs_diff_eq(&other.r, epsilon)
     }
 }
 
@@ -276,8 +276,8 @@ impl<D: RelativeEq<Epsilon = f64> + Clone> RelativeEq for XYRR<D> {
         D::default_max_relative()
     }
     fn relative_eq(&self, other: &Self, epsilon: Self::Epsilon, max_relative: Self::Epsilon) -> bool {
-        self.c.relative_eq(&other.c, epsilon.clone(), max_relative.clone())
-        && self.r.relative_eq(&other.r, epsilon.clone(), max_relative.clone())
+        self.c.relative_eq(&other.c, epsilon, max_relative)
+        && self.r.relative_eq(&other.r, epsilon, max_relative)
     }
 }
 
@@ -468,7 +468,7 @@ mod tests {
             XYRR { c: R2 { x: 0.9640795213008657, y: 0.14439141636463643 }, r: R2 { x: 1.022261085060523, y: 1.0555121335932487 } },
             XYRR { c: R2 { x: 0.1445171704183926, y: 0.964205275354622   }, r: R2 { x: 0.9998075759976, y: 0.9049240408142587 } },
         ];
-        let shapes = [ e0, e1 ].map(|e| Shape::XYRR(e));
+        let shapes = [ e0, e1 ].map(Shape::XYRR);
         let points = shapes[0].intersect(&shapes[1]);
         assert_eq!(points, vec![
             R2 { x:  1.1130898341623663 , y: 1.188629816680542   },

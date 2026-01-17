@@ -68,7 +68,7 @@ impl<D: Clone + Into<f64>> Edge<D> {
         let theta0: f64 = self.theta0.clone().into();
         let theta1: f64 = self.theta1.clone().into();
         let theta = if theta < theta0 { theta + TAU } else { theta };
-        return theta0 <= theta && theta <= theta1
+        theta0 <= theta && theta <= theta1
     }
 }
 

@@ -39,7 +39,7 @@ impl Display for Error {
             "{}: err {:.3}, target {:.3} ({:.3}), actual {} → {:.3}",
             self.key, self.error.v(),
             self.target_area, self.target_frac,
-            self.actual_area.clone().map(|a| format!("{:.3}", a)).unwrap_or_else(|| "-".to_string()),
+            self.actual_area.map(|a| format!("{:.3}", a)).unwrap_or_else(|| "-".to_string()),
             self.actual_frac,
         )
     }
@@ -75,7 +75,7 @@ impl Step {
         debug!("step error {:?}", error);
         // Optional/Alternate loss function based on per-region squared errors, weights errors by region size:
         // let error = errors.values().into_iter().map(|e| e.error.clone() * &e.error).sum::<D>().sqrt();
-        let components: Vec<regions::Component> = scene.components.iter().map(|c| regions::Component::new(&c)).collect();
+        let components: Vec<regions::Component> = scene.components.iter().map(regions::Component::new).collect();
         debug!("{} components, num sets {}", components.len(), components.iter().map(|c| c.sets.len().to_string()).collect::<Vec<_>>().join(", "));
 
         // Include penalties for erroneously-disjoint shapes
@@ -85,14 +85,10 @@ impl Step {
 
         debug!("all targets: {}", targets.iter().map(|(k, v)| format!("{}: {}", k, v)).collect::<Vec<String>>().join(", "));
         let missing_regions: BTreeMap<String, f64> = disjoint_targets.into_iter().filter(|(key, target)| {
-            let err = errors.get(key).expect(&format!("No key {} among error keys {}", key, errors.keys().cloned().collect::<Vec<String>>().join(", ")));
+            let err = errors.get(key).unwrap_or_else(|| panic!("No key {} among error keys {}", key, errors.keys().cloned().collect::<Vec<String>>().join(", ")));
             let region_should_exist = target > &0.;
-            let region_exists = err.actual_area.clone().filter(|a| !a.is_zero()).is_some();
-            if region_should_exist && !region_exists {
-                true
-            } else {
-                false
-            }
+            let region_exists = err.actual_area.filter(|a| !a.is_zero()).is_some();
+            region_should_exist && !region_exists
         }).collect();
 
         let mut total_missing_disjoint = 0.;
@@ -104,14 +100,14 @@ impl Step {
             let centroid: R2<Dual> = set_idxs.iter().map(|idx| sets[*idx].borrow().shape.center()).sum::<R2<Dual>>();
             let centroid = R2 { x: centroid.x / nf, y: centroid.y / nf };
             let parents_key = key.replace('-', "*");
-            let parent_regions_exist = errors.get(&parents_key).unwrap().actual_area.clone().filter(|a| !a.is_zero()).is_some();
+            let parent_regions_exist = errors.get(&parents_key).unwrap().actual_area.filter(|a| !a.is_zero()).is_some();
             debug!("missing region {:?}, centroid {:?}, parents {} ({})", set_idxs, centroid, parents_key, parent_regions_exist);
             if parent_regions_exist {
                 let mut parents = Vec::<usize>::new();
                 for (idx, ch) in parents_key.char_indices() {
                     if ch == '*' {
                         let parent_key = format!("{}{}{}", &key[..idx], Targets::<f64>::idx(idx), &key[idx+1..]);
-                        let parent_region_exists = errors.get(&parent_key).unwrap().actual_area.clone().filter(|a| !a.is_zero()).is_some();
+                        let parent_region_exists = errors.get(&parent_key).unwrap().actual_area.filter(|a| !a.is_zero()).is_some();
                         if parent_region_exists {
                             parents.push(idx);
                         }
@@ -160,7 +156,7 @@ impl Step {
         }
 
         // Take shapes back from `scene`
-        let shapes = sets.into_iter().map(|s| s.borrow().to_owned().shape).collect::<Vec<Shape<D>>>();
+        let shapes = sets.iter().map(|s| s.borrow().to_owned().shape).collect::<Vec<Shape<D>>>();
 
         debug!("all-in error: {:?}", error);
         Step { shapes, components, targets, total_area, errors, error }
@@ -189,7 +185,7 @@ impl Step {
                     Error {
                         key: key.clone(),
                         actual_area: actual_area.map(|a| a.v()),
-                        target_area: target_area.clone(),
+                        target_area: *target_area,
                         actual_frac: actual_frac.v(),
                         target_frac,
                         error,

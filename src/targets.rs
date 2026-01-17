@@ -78,7 +78,7 @@ impl<D: Arg> Targets<D>
         let empty_key = String::from_utf8(vec![b'-'; n]).unwrap();
         if !all.contains_key(&empty_key) {
             let first = all.values().next().unwrap();
-            all.insert(empty_key, D::zero(&first));
+            all.insert(empty_key, D::zero(first));
         }
         let mut queue: BTreeSet<String> = all.keys().cloned().collect();
         let max = pow(3, n);
@@ -91,18 +91,18 @@ impl<D: Arg> Targets<D>
             // println!("popped: {}, {} remaining, {} overall", k0, remaining, map.len());
             let neighbors = Targets::<D>::neighbors(&k0);
             // println!("neighbors: {:?}", neighbors);
-            for (_, (((ch1, k1), (ch2, k2)), ch0)) in neighbors.into_iter().zip((&k0).chars()).enumerate() {
+            for (((ch1, k1), (ch2, k2)), ch0) in neighbors.into_iter().zip(k0.chars()) {
                 let (somes, nones) = {
                     let keys = {
                         let v0 = all.get(&k0);
                         let v1 = all.get(&k1);
                         let v2 = all.get(&k2);
-                        let keys = BTreeMap::from([
+                        
+                        BTreeMap::from([
                             (ch0, (k0.clone(), v0)),
                             (ch1, (k1.clone(), v1)),
                             (ch2, (k2.clone(), v2)),
-                        ]);
-                        keys
+                        ])
                     };
                     // println!("keys: {} {} {}", ch0, ch1, ch2);
                     let mut somes: Vec<(char, (String, &D))> = Vec::new();
@@ -122,7 +122,7 @@ impl<D: Arg> Targets<D>
                     let v =
                         if none_ch == '*' {
                             let ((_, (_, some0v)), (_, (_, some1v))) = (some0, some1);
-                            some0v.clone() + some1v.clone()
+                            *some0v + *some1v
                         } else {
                             let ((_, (_, all_val)), (_, (_, other_val))) =
                                 if somes[0].0 == '*' {
@@ -130,7 +130,7 @@ impl<D: Arg> Targets<D>
                                 } else {
                                     (some1, some0)
                                 };
-                            all_val.clone() - other_val.clone()
+                            *all_val - *other_val
                         };
                     all.insert(none_key.clone(), v);
                     queue.insert(none_key);
@@ -147,10 +147,9 @@ impl<D: Arg> Targets<D>
 
         let all_key = String::from_utf8(vec![b'*'; n]).unwrap();
         let total_area =
-            all
+            *all
             .get(&all_key)
-            .expect(&format!("{} not found among {} keys", all_key, all.len()))
-            .clone();
+            .unwrap_or_else(|| panic!("{} not found among {} keys", all_key, all.len()));
 
         Targets {
             all,
@@ -169,7 +168,7 @@ impl<D: Arg> Targets<D>
         let idx = prefix.len();
         if idx == self.n {
             let value = self.all.get(&prefix).unwrap();
-            map.insert(prefix, value.clone());
+            map.insert(prefix, *value);
         } else {
             self.disjoints_rec(format!("{}{}", prefix, '-'), map);
             self.disjoints_rec(format!("{}{}", prefix, Targets::<D>::idx(idx)), map);

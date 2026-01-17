@@ -25,7 +25,7 @@ impl Shapes {
     pub fn from<const N: usize>(input_specs: [InputSpec; N]) -> [ Shape<D>; N ] {
         InitDuals::from(input_specs)
     }
-    pub fn from_vec(input_specs: &Vec<InputSpec>) -> Vec<Shape<D>> {
+    pub fn from_vec(input_specs: &[InputSpec]) -> Vec<Shape<D>> {
         InitDuals::from_vec(input_specs)
     }
 }

@@ -137,9 +137,7 @@ mod tests {
             };
             let sign_prefix = if n == 4 {
                 if f < 0. { "-" } else { "" }
-            } else {
-                if f < 0. { "- " } else { "+ " }
-            };
+            } else if f < 0. { "- " } else { "+ " };
             let x_term = match n {
                 4 => "x⁴",
                 3 => "x³",

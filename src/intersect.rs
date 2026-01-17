@@ -38,9 +38,9 @@ where
     fn intersect(&self, o: &Shape<D>) -> Vec<R2<D>> {
         match (self, o) {
             (Shape::Circle(_), _) => self._intersect(o),
-            (_, Shape::Circle(_)) => o.intersect(&self),
+            (_, Shape::Circle(_)) => o.intersect(self),
             (Shape::XYRR(_), _) => self._intersect(o),
-            (_, Shape::XYRR(_)) => o.intersect(&self),
+            (_, Shape::XYRR(_)) => o.intersect(self),
             (Shape::XYRRT(_), Shape::XYRRT(_)) => self._intersect(o),
         }
     }

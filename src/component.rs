@@ -46,13 +46,13 @@ where R2<D>: To<R2<f64>>,
 {
     pub fn new(
         set_idxs: Vec<usize>,
-        unconnected_containers: &Vec<BTreeSet<usize>>,
-        nodes_by_set: &Vec<Vec<N<D>>>,
-        sets: &Vec<S<D>>,
+        unconnected_containers: &[BTreeSet<usize>],
+        nodes_by_set: &[Vec<N<D>>],
+        sets: &[S<D>],
         num_sets: usize,
     ) -> Component<D> {
         debug!("Making component: {:?}", set_idxs);
-        let component_sets = sets.into_iter().filter(|set| set_idxs.contains(&set.borrow().idx)).cloned().collect();
+        let component_sets = sets.iter().filter(|set| set_idxs.contains(&set.borrow().idx)).cloned().collect();
         let key: Key = set_idxs.iter().map(|i| i.to_string()).collect::<Vec<String>>().join("").into();
         let mut set_idxs_iter = set_idxs.iter().map(|i| unconnected_containers[*i].clone()).enumerate();
         let container_set_idxs = set_idxs_iter.next().unwrap().1;
@@ -139,17 +139,13 @@ where R2<D>: To<R2<f64>>,
             .collect();
         nodes.sort_by_cached_key(|n| n.borrow().idx);
         debug!("Connected component: {}", set_idxs.iter().map(|i| i.to_string()).collect::<Vec<String>>().join(", "));
-        let edges = Component::edges(&set_idxs, &nodes_by_set, &sets, &container_set_idxs);
+        let edges = Component::edges(&set_idxs, nodes_by_set, sets, &container_set_idxs);
 
-        let first_hull_edge = edges.iter().find(|e| e.borrow().is_component_boundary).expect(
-            format!(
-                "Component {} has no boundary edges:\n\t{}\nshapes:\n\t{}\nnodes:\n\t{}",
+        let first_hull_edge = edges.iter().find(|e| e.borrow().is_component_boundary).unwrap_or_else(|| panic!("Component {} has no boundary edges:\n\t{}\nshapes:\n\t{}\nnodes:\n\t{}",
                 set_idxs.iter().map(|i| i.to_string()).collect::<Vec<String>>().join(", "),
                 edges.iter().map(|e| format!("{}", e.borrow())).collect::<Vec<String>>().join(",\n\t"),
                 sets.iter().map(|s| format!("{}", s.borrow().shape)).collect::<Vec<String>>().join(",\n\t"),
-                nodes.iter().map(|n| format!("{}", n.borrow())).collect::<Vec<String>>().join(",\n\t"),
-            ).as_str()
-        );
+                nodes.iter().map(|n| format!("{}", n.borrow())).collect::<Vec<String>>().join(",\n\t")));
         let first_hull_segment = Segment { edge: first_hull_edge.clone(), fwd: true };
         let mut hull_segments: Vec<Segment<D>> = vec![ first_hull_segment.clone() ];
         let start_idx = first_hull_segment.start().borrow().idx;
@@ -192,9 +188,9 @@ where R2<D>: To<R2<f64>>,
         }
     }
     pub fn edges(
-        set_idxs: &Vec<usize>,
-        nodes_by_set: &Vec<Vec<N<D>>>,
-        sets: &Vec<S<D>>,
+        set_idxs: &[usize],
+        nodes_by_set: &[Vec<N<D>>],
+        sets: &[S<D>],
         component_container_idxs: &BTreeSet<usize>,
     ) -> Vec<E<D>> {
         // Construct edges
@@ -210,7 +206,7 @@ where R2<D>: To<R2<f64>>,
                 let nxt_node = nodes[(node_idx + 1) % num_set_nodes].clone();
                 let cur_theta = cur_node.borrow().theta(set_idx);
                 let nxt_theta = nxt_node.borrow().theta(set_idx);
-                let nxt_theta = if &nxt_theta <= &cur_theta { nxt_theta + TAU } else { nxt_theta };
+                let nxt_theta = if nxt_theta <= cur_theta { nxt_theta + TAU } else { nxt_theta };
                 let arc_midpoint = sets[set_idx].borrow().shape.arc_midpoint(cur_theta.clone(), nxt_theta.clone());
                 let mut is_component_boundary = true;
                 let mut container_idxs: BTreeSet<usize> = component_container_idxs.clone();
@@ -242,7 +238,7 @@ where R2<D>: To<R2<f64>>,
             }
         }
 
-        debug!("{} edges", (&edges).len());
+        debug!("{} edges", edges.len());
         for edge in &edges {
             debug!("  {}", edge.borrow());
         }
@@ -252,7 +248,7 @@ where R2<D>: To<R2<f64>>,
     }
 
     pub fn regions(
-        edges: &Vec<E<D>>,
+        edges: &[E<D>],
         num_sets: usize,
         total_expected_visits: usize,
         component_container_idxs: &BTreeSet<usize>,
@@ -263,7 +259,7 @@ where R2<D>: To<R2<f64>>,
         let mut segments: Vec<Segment<D>> = Vec::new();
         let mut visited_nodes: BTreeSet<usize> = BTreeSet::new();
         // The first two Segments for each Region uniquely determine various properties of the Region, so we loop over and construct them explicitly below, before kicking off a recursive `traverse` process to complete each Region.
-        for edge in edges.clone() {
+        for edge in edges {
             if edge.borrow().visits == edge.borrow().expected_visits() {
                 // All of the Regions we expect this Edge to be a part of have already been computed and saved, nothing further to do with this Edge.
                 continue;
@@ -283,10 +279,10 @@ where R2<D>: To<R2<f64>>,
                 let nxt = successor.edge.clone();
                 let nxt_idxs = nxt.borrow().all_idxs();
                 let container_idxs = container_idxs.intersection(&nxt_idxs).cloned().collect::<BTreeSet<usize>>();
-                let component_containers = container_idxs.difference(&component_container_idxs).cloned().collect::<BTreeSet<usize>>();
+                let component_containers = container_idxs.difference(component_container_idxs).cloned().collect::<BTreeSet<usize>>();
                 if !component_containers.is_empty() {
                     // Recursively traverse the graph, trying to add each eligible Segment to the list we've seeded here, accumulating valid Regions in `regions` along the way.
-                    Component::traverse(&start, num_sets, &mut regions, &mut segments, &container_idxs, &mut visited_nodes, edges.len());
+                    Component::traverse(start, num_sets, &mut regions, &mut segments, &container_idxs, &mut visited_nodes, edges.len());
                     assert_eq!(segments.len(), 2);
                 }
                 segments.pop();
@@ -296,7 +292,7 @@ where R2<D>: To<R2<f64>>,
             visited_nodes.remove(&segment_end_idx);
         }
 
-        debug!("{} regions", (&regions).len());
+        debug!("{} regions", regions.len());
         for region in &regions {
             debug!("  {}", region);
         }
@@ -352,7 +348,6 @@ where R2<D>: To<R2<f64>>,
             let cidx_end = last_segment.edge.borrow().set.borrow().idx;
             if cidx0 == cidx_end {
                 // Can't start and end on same set. Adjacent segments are checked for this as each segment is pushed, but "closing the loop" requires this extra check of the first and last segments.
-                return
             } else {
                 // We've found a valid Region; increment each Edge's visit count, and save the Region
                 for segment in segments.clone() {
@@ -402,7 +397,7 @@ where R2<D>: To<R2<f64>>,
                     // This edge candidate isn't contained by (or on the border of) all the sets that the previous segments are.
                     continue;
                 }
-                let extra: BTreeSet<usize> = nxt_idxs.difference(&container_idxs).cloned().collect();
+                let extra: BTreeSet<usize> = nxt_idxs.difference(container_idxs).cloned().collect();
                 // Next, verify that the only additional container, if any, is the Segment's border set:
                 let num_extra = extra.len();
                 if num_extra > 1 {
@@ -421,7 +416,7 @@ where R2<D>: To<R2<f64>>,
                 }
                 visited_nodes.insert(next_node_idx);
                 segments.push(successor.clone());
-                Component::traverse(&start, num_sets, regions, segments, container_idxs, visited_nodes, max_edges);
+                Component::traverse(start, num_sets, regions, segments, container_idxs, visited_nodes, max_edges);
                 segments.pop();
                 visited_nodes.remove(&next_node_idx);
             }

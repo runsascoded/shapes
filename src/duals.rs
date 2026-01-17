@@ -33,7 +33,7 @@ impl InitDuals {
         let mut init = InitDuals::new(n);
         input_specs.map(|spec| init.shape(&spec))
     }
-    pub fn from_vec(input_specs: &Vec<InputSpec>) -> Vec<Shape<Dual>> {
+    pub fn from_vec(input_specs: &[InputSpec]) -> Vec<Shape<Dual>> {
         let n = input_specs.iter().map(|(_, spec)| spec.iter().filter(|v| **v).count()).sum();
         let mut init = InitDuals::new(n);
         input_specs.iter().map(|spec| init.shape(spec)).collect()
@@ -62,7 +62,7 @@ pub fn one_hot(idx: &usize, size: &usize) -> Vec<f64> {
     v
 }
 
-pub fn is_one_hot(v: &Vec<f64>) -> Option<usize> {
+pub fn is_one_hot(v: &[f64]) -> Option<usize> {
     let mut idx = None;
     for (i, x) in v.iter().enumerate() {
         if *x == 1. {

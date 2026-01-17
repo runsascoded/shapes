@@ -38,7 +38,7 @@ impl XYRRT<f64> {
     pub fn at_y(&self, y: f64) -> Vec<f64> {
         self.bcdef().at_y(y)
     }
-    pub fn names(&self) -> [String; 5] { Self::getters().map(|g| g.name).into() }
+    pub fn names(&self) -> [String; 5] { Self::getters().map(|g| g.name) }
     pub fn vals(&self) -> [f64; 5] { [ self.c.x, self.c.y, self.r.x, self.r.y, self.t ] }
 }
 
@@ -176,9 +176,9 @@ impl<D: AbsDiffEq<Epsilon = f64> + Clone> AbsDiffEq for XYRRT<D> {
         D::default_epsilon()
     }
     fn abs_diff_eq(&self, other: &Self, epsilon: Self::Epsilon) -> bool {
-        self.c.abs_diff_eq(&other.c, epsilon.clone())
-        && self.r.abs_diff_eq(&other.r, epsilon.clone())
-        && self.t.abs_diff_eq(&other.t, epsilon.clone())
+        self.c.abs_diff_eq(&other.c, epsilon)
+        && self.r.abs_diff_eq(&other.r, epsilon)
+        && self.t.abs_diff_eq(&other.t, epsilon)
     }
 }
 
@@ -187,9 +187,9 @@ impl<D: RelativeEq<Epsilon = f64> + Clone> RelativeEq for XYRRT<D> {
         D::default_max_relative()
     }
     fn relative_eq(&self, other: &Self, epsilon: Self::Epsilon, max_relative: Self::Epsilon) -> bool {
-        self.c.relative_eq(&other.c, epsilon.clone(), max_relative.clone())
-        && self.r.relative_eq(&other.r, epsilon.clone(), max_relative.clone())
-        && self.t.relative_eq(&other.t, epsilon.clone(), max_relative.clone())
+        self.c.relative_eq(&other.c, epsilon, max_relative)
+        && self.r.relative_eq(&other.r, epsilon, max_relative)
+        && self.t.relative_eq(&other.t, epsilon, max_relative)
     }
 }
 

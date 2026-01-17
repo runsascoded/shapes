@@ -61,7 +61,7 @@ impl Circle<f64> {
             vec![ x0 ]
         }
     }
-    pub fn names(&self) -> [String; 3] { Self::getters().map(|g| g.name).into() }
+    pub fn names(&self) -> [String; 3] { Self::getters().map(|g| g.name) }
     pub fn vals(&self) -> [f64; 3] { [ self.c.x, self.c.y, self.r ] }
 }
 

@@ -148,7 +148,7 @@ impl<
         let Complex { re: a, im: b } = self.clone();
         let Complex { re: c, im: d } = rhs;
         Self {
-            re: a.clone() * c.clone() - b.clone() * d.clone(),
+            re: a.clone() * c - b.clone() * d,
             im: a * d + b * c,
         }
     }

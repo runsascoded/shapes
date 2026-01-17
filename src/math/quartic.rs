@@ -43,13 +43,13 @@ impl<
                 imags.push(root.clone());
             }
         }
-        if imags.len() == 0 {
+        if imags.is_empty() {
             Reals(roots.map(|r| r.re))
-        } else if reals.len() == 0 {
+        } else if reals.is_empty() {
             let c00 = imags[0].clone();
             let c01 = c00.clone().conj();
             let c0 = if c00.im.clone().into() > 0. { c00.clone() } else { c01.clone() };
-            match imags.into_iter().skip(1).filter(|r| (*r) != c00 && (*r) != c01 && r.clone().im.into() > 0.).next() {
+            match imags.into_iter().skip(1).find(|r| (*r) != c00 && (*r) != c01 && r.clone().im.into() > 0.) {
                 Some(c1) => Imags(c0, c1),
                 None => Imags(c0.clone(), c0),
             }
@@ -246,7 +246,7 @@ where
             let cubic_roots = cubic::cubic(a_2.zero() + 1., a_2, a_1, a_0);
             debug!("cubic_roots: {:?}", cubic_roots);
             let cubic_reals = cubic_roots.reals();
-            let u = cubic_reals.iter().rev().next().unwrap();
+            let u = cubic_reals.iter().next_back().unwrap();
             let usq2 = if u.lt_zero() {
                 Complex { re: u.zero(), im: u.zero() + (-u.clone()).sqrt() } / 2.
             } else {
@@ -266,13 +266,13 @@ where
             // debug!("d1 {:?}", d1);
             // debug!("d0sq2 {:?}", d0sq2);
             // debug!("d1sq2 {:?}", d1sq2);
-            let roots = [
+            
+            [
                  usq2.clone() + d0sq2.clone(),
                  usq2.clone() - d0sq2.clone(),
                 -usq2.clone() + d1sq2.clone(),
                 -usq2.clone() - d1sq2.clone(),
-            ];
-            roots
+            ]
         };
         NormalizedRoots::new(roots)
     };
@@ -308,19 +308,19 @@ where
     //     debug!("  x {:?}, y {:?}, r {:?}", x, y, y.norm());
     // }
     let [ sq0, sq1 ] = roots.map(|r| r.sqrt());
-    let roots = [
-         sq0.clone(),
-         sq1.clone(),
-         -sq0.clone(),
-         -sq1.clone(),
-    ];
+    
     // debug!("quartic_biquadratic roots:");
     // for x in &roots {
     //     let x2 = x.clone() * x.clone();
     //     let y = x2.clone() * x2.clone() + x2.clone() * c.clone() + e.clone();
     //     debug!("  x {:?}, y {:?}, r {:?}", x, y, y.norm());
     // }
-    roots
+    [
+         sq0.clone(),
+         sq1.clone(),
+         -sq0.clone(),
+         -sq1.clone(),
+    ]
 }
 
 #[cfg(test)]

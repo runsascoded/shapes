@@ -171,10 +171,10 @@ impl<D: AbsDiffEq<Epsilon = f64> + Clone> AbsDiffEq for BCDEF<D> {
         D::default_epsilon()
     }
     fn abs_diff_eq(&self, other: &Self, epsilon: Self::Epsilon) -> bool {
-        self.b.abs_diff_eq(&other.b, epsilon.clone())
-        && self.c.abs_diff_eq(&other.c, epsilon.clone())
-        && self.d.abs_diff_eq(&other.d, epsilon.clone())
-        && self.e.abs_diff_eq(&other.e, epsilon.clone())
+        self.b.abs_diff_eq(&other.b, epsilon)
+        && self.c.abs_diff_eq(&other.c, epsilon)
+        && self.d.abs_diff_eq(&other.d, epsilon)
+        && self.e.abs_diff_eq(&other.e, epsilon)
         && self.f.abs_diff_eq(&other.f, epsilon)
     }
 }
@@ -184,10 +184,10 @@ impl<D: RelativeEq<Epsilon = f64> + Clone> RelativeEq for BCDEF<D> {
         D::default_max_relative()
     }
     fn relative_eq(&self, other: &Self, epsilon: Self::Epsilon, max_relative: Self::Epsilon) -> bool {
-        self.b.relative_eq(&other.b, epsilon.clone(), max_relative.clone())
-        && self.c.relative_eq(&other.c, epsilon.clone(), max_relative.clone())
-        && self.d.relative_eq(&other.d, epsilon.clone(), max_relative.clone())
-        && self.e.relative_eq(&other.e, epsilon.clone(), max_relative.clone())
+        self.b.relative_eq(&other.b, epsilon, max_relative)
+        && self.c.relative_eq(&other.c, epsilon, max_relative)
+        && self.d.relative_eq(&other.d, epsilon, max_relative)
+        && self.e.relative_eq(&other.e, epsilon, max_relative)
         && self.f.relative_eq(&other.f, epsilon, max_relative)
     }
 }

@@ -58,7 +58,7 @@ pub trait CanProject<D> {
 impl<D, T: Clone + CanTransform<D, Output = T>> CanProject<D> for T {
     type Output = T;
     fn apply(&self, projection: &Projection<D>) -> Self::Output {
-        projection.0.iter().fold(self.clone(), |c, t| c.transform(&t))
+        projection.0.iter().fold(self.clone(), |c, t| c.transform(t))
     }
 }
 

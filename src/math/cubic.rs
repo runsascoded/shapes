@@ -10,9 +10,9 @@ pub enum DepressedRoots<D> {
     Mixed(D, ComplexPair<D>),
 }
 
-impl<D> Into<Roots<D>> for DepressedRoots<D> {
-    fn into(self) -> Roots<D> {
-        match self {
+impl<D> From<DepressedRoots<D>> for Roots<D> {
+    fn from(val: DepressedRoots<D>) -> Self {
+        match val {
             DepressedRoots::Reals(rs) => Roots::Reals(rs),
             DepressedRoots::Mixed(re, ims) => Roots::Mixed(re, ims),
         }
@@ -229,15 +229,15 @@ where
         let m = if use_asinh {
             // More numerically stable in some cases, using asinh(x) = ln(x + sqrt(x² + 1))
             let a = u.asinh();
-            let m = (a.clone() / 3.).exp();
+            
             // debug!("u {:?}, a {:?}, m {:?}", u, a, m.clone());
-            m
+            (a.clone() / 3.).exp()
         } else {
             // Naive impl, $w$ can end up as 0. with large negative $u$
             let w = u.clone() + (u.clone() * u.clone() + 1.).sqrt();
-            let m = w.cbrt();
+            
             // debug!("u {:?}, w {:?}, m {:?}", u, w, m.clone());
-            m
+            w.cbrt()
         };
         // let w = u.clone() + (u.clone() * u.clone() + 1.).sqrt();
         // if w.is_zero() {
@@ -354,7 +354,7 @@ mod tests {
         let expected = Mixed(e_re, e_im);
         debug!("Check expected roots:");
         for x in &expected.all() {
-            let y = f(x.clone());
+            let y = f(*x);
             debug!("  x {:?}, f(x) {:?} ({:?})", x, y, y.norm());
         }
 
@@ -374,7 +374,7 @@ mod tests {
         let expected = Mixed(e_re, e_im);
         debug!("Check expected roots:");
         for x in &expected.all() {
-            let y = f(x.clone());
+            let y = f(*x);
             debug!("  x {:?}, f(x) {:?} ({:?})", x, y, y.norm());
         }
         assert_eq!(roots.len(), 1);
