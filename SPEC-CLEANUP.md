@@ -16,9 +16,9 @@ Comprehensive cleanup plan based on code audit. Organized by priority and effort
 - WASM exports use `.expect()` to convert errors to JS exceptions
 - `SceneError` has `Clone` derive for Result cloning
 
-**Remaining** (lower priority):
-- `step.rs:56`: `String::from_utf8().unwrap()` → Handle invalid UTF-8
-- `shape.rs:88`: `panic!("Unrecognized coord keys")` → Return `Result`
+**Remaining** (lower priority): ✅ DONE
+- `step.rs:56`: ✅ Replaced with `str::repeat()`
+- `shape.rs:88`: ✅ Already returns `Result<_, ShapeError>`
 
 ### 2. Numerical Stability (xyrr.rs TODOs)
 
@@ -42,29 +42,19 @@ Comprehensive cleanup plan based on code audit. Organized by priority and effort
 
 ## Medium Priority (Performance)
 
-### 4. Reduce Clone Overhead
+### 4. Reduce Clone Overhead ✅ PARTIAL
 
-**Current state**: 600+ `.clone()` calls, many in hot paths.
+**Status**: Removed unnecessary clones where straightforward; deeper optimization requires trait bound changes.
 
-**High-impact locations**:
-- `scene.rs:77-78`: Clone on every shape pair intersection
-- `circle.rs:113-115`: `cx.clone() * cx.clone()` → Use references
-- `r2.rs:65-66`: `norm2()` clones coordinates unnecessarily
+**Completed**:
+- `circle.rs`: Removed 4 unnecessary clones in `unit_intersections()` return path
+- Replaced `String::from_utf8(vec![...]).unwrap()` with `str::repeat()` (not clone-related but cleaner)
 
-**Pattern to apply**:
-```rust
-// Before
-let result = self.x.clone() * self.x.clone() + self.y.clone() * self.y.clone();
+**Remaining** (requires `Mul<&D>` trait bounds):
+- `r2.rs:65-66`: `norm2()` still clones for multiplication
+- `circle.rs:113-115`: Intermediate squaring operations
 
-// After (if D: Copy)
-let result = self.x * self.x + self.y * self.y;
-
-// Or (if D: Clone but expensive)
-let x = &self.x;
-let result = x.clone() * x.clone(); // One clone instead of two
-```
-
-**Estimate**: 20-30% perf improvement in hot paths.
+**Note**: Further optimization requires adding `for<'a> &'a D: Mul<D, Output = D>` bounds, which is a larger refactor. Consider adding benchmarks first to measure impact.
 
 ### 5. Simplify Trait Bounds ✅ PARTIAL
 
@@ -199,16 +189,21 @@ proptest! {
 - `ellipses/cdef.rs:232` - Type constraint note (explanatory comment)
 - `ellipses/xyrr.rs:349,364` - Numerical stability (needs deeper algorithmic work)
 
-## Dependency Updates
+## Dependency Updates ✅ AUDITED
 
-### Check versions
-```bash
-cargo outdated
-```
+### Status
+Audited dependencies and updated where safe. Using flexible semver ranges.
 
-### Specific concerns:
-- `roots = "0.0.8"` - Very old, check for updates
-- `polars = "*"` - Pin to specific version, or replace with lighter CSV lib if only used for test data
+### Updated:
+- `itertools` 0.11 → 0.14
+
+### Pinned (breaking changes in newer versions):
+- `roots = "0.0.8"` - Latest version, no updates available
+- `derive_more = "0.99"` - 2.x has breaking API changes
+- `thiserror = "1.0"` - 2.x has breaking changes
+- `num-dual = "0.7"` - 0.13 has breaking API changes
+- `nalgebra = "0.32"` - 0.33+ incompatible with num-dual 0.7
+- `polars = "0.44"` - 0.52 has breaking changes (dev-dependency only)
 
 ## Implementation Order
 
