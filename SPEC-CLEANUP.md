@@ -4,30 +4,21 @@ Comprehensive cleanup plan based on code audit. Organized by priority and effort
 
 ## High Priority (Correctness & Stability)
 
-### 1. Error Handling Overhaul
+### 1. Error Handling Overhaul ✅ DONE
 
-**Current state**: 58 `unwrap()`, 17 `panic!()`, 5 `expect()` calls throughout codebase.
+**Status**: `Scene::new`, `Step::new/nxt/step`, and `Model::new/train` now return `Result` types.
 
-**Goal**: Replace panics with `Result` types where recovery is possible.
+**Completed**:
+- `Scene::new` returns `Result<Scene<D>, SceneError>`
+- `compute_component_depths` and `compute_component_depth` return `Result`
+- `Step::new`, `Step::nxt`, `Step::step` propagate `Result<Step, SceneError>`
+- `Model::new` returns `Result<Model, SceneError>`, `train` returns `Result<(), SceneError>`
+- WASM exports use `.expect()` to convert errors to JS exceptions
+- `SceneError` has `Clone` derive for Result cloning
 
-**Key locations**:
-- `scene.rs:252-258`: Panic on missing container regions → Return `Result<Scene, SceneError>`
-- `scene.rs:265,291,294`: Map lookups with `unwrap()` → Use `get().ok_or()`
+**Remaining** (lower priority):
 - `step.rs:56`: `String::from_utf8().unwrap()` → Handle invalid UTF-8
 - `shape.rs:88`: `panic!("Unrecognized coord keys")` → Return `Result`
-
-**Implementation**:
-```rust
-// Create error types (thiserror already in Cargo.toml)
-#[derive(thiserror::Error, Debug)]
-pub enum ShapeError {
-    #[error("Unrecognized coordinate keys: {0}")]
-    UnrecognizedCoordKeys(String),
-    #[error("Missing container region for key: {0}")]
-    MissingContainerRegion(String),
-    // ...
-}
-```
 
 ### 2. Numerical Stability (xyrr.rs TODOs)
 
@@ -45,10 +36,9 @@ pub enum ShapeError {
 - Highly eccentric ellipses
 - Large/small scale differences
 
-### 3. Delete Dead Code
+### 3. Delete Dead Code ✅ DONE
 
-- **`float_vec.rs`**: 123 lines entirely commented out → Delete file
-- Remove `pub mod float_vec;` from `lib.rs` if present
+- **`float_vec.rs`**: Already deleted (file doesn't exist)
 
 ## Medium Priority (Performance)
 
@@ -76,24 +66,16 @@ let result = x.clone() * x.clone(); // One clone instead of two
 
 **Estimate**: 20-30% perf improvement in hot paths.
 
-### 5. Simplify Trait Bounds
+### 5. Simplify Trait Bounds ✅ PARTIAL
 
-**Current state**: Verbose trait bounds repeated across files (5-6 bounds per impl).
+**Status**: Added initial trait aliases following existing `*Arg` pattern.
 
-**Goal**: Create supertrait aliases.
+**Completed**:
+- `NormArg` in `r2.rs` for `Clone + Add + Mul` (used by `norm2`, `r`)
+- `DistanceArg` in `distance.rs` for `Clone + Add + Mul + Sqrt`
+- Codebase already uses module-local `*Arg` traits extensively (e.g., `AreaArg`, `quartic::Arg`, `cubic::Arg`)
 
-```rust
-// Before (scattered across files)
-impl<D> Component<D>
-where D: Clone + Add<Output=D> + Mul<f64, Output=D> + Deg + Fmt + ...
-
-// After (in traits.rs or prelude.rs)
-pub trait DualNum: Clone + Add<Output=Self> + Mul<f64, Output=Self> + Deg + Fmt {}
-impl<D> DualNum for D where D: Clone + Add<Output=D> + Mul<f64, Output=D> + Deg + Fmt {}
-
-// Usage
-impl<D: DualNum> Component<D>
-```
+**Note**: The existing `*Arg` pattern is preferable to a centralized `DualNum` trait, as it keeps trait definitions close to their usage.
 
 ## Lower Priority (Maintainability)
 
@@ -174,16 +156,20 @@ src/
 pub fn make_model(...) -> Model { ... }
 ```
 
-### 9. Test Coverage
+### 9. Test Coverage ✅ PARTIAL
 
-**Missing tests for**:
+**Added tests**:
+- `math/quadratic.rs` - 8 comprehensive tests (real roots, complex roots, edge cases)
+- `distance.rs` - 6 tests for R2 distance calculations
+- `math/cubic.rs`, `math/quartic.rs` - Already had good coverage
+
+**Still missing**:
 - `targets.rs` - Target expansion/validation
-- `distance.rs` - Distance metrics
-- `hull.rs` - Convex hull
-- `math/cubic.rs`, `math/quartic.rs` - Edge cases
+- `hull.rs` - Convex hull (depends on complex Segment setup)
 - Error paths (invalid inputs)
+- Property-based tests
 
-**Add property-based tests** (proptest crate):
+**Future**: Add property-based tests (proptest crate):
 ```rust
 proptest! {
     #[test]
