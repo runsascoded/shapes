@@ -4,11 +4,10 @@ use std::fmt::Display;
 use std::ops::{Div, Mul, Add};
 use std::rc::Rc;
 
-use crate::fmt::Fmt;
+use crate::fmt::{Fmt, DisplayNum};
 use crate::intersection::Intersection;
 use crate::dual::Dual;
 use crate::edge::E;
-use crate::math::deg::Deg;
 use crate::r2::R2;
 
 type D = Dual;
@@ -68,7 +67,7 @@ where R2<D>: Add<Output = R2<D>>,
         }
     }
 }
-impl<D: Display + Deg + Fmt> Display for Node<D>
+impl<D: DisplayNum> Display for Node<D>
 where
     Intersection<D>: Display,
 {

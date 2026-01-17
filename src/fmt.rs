@@ -1,8 +1,15 @@
-use crate::dual::Dual;
+use std::fmt::Display;
+use crate::{dual::Dual, math::deg::Deg};
 
 pub trait Fmt {
     fn s(&self, n: usize) -> String;
 }
+
+/// Trait alias for types that can be formatted with degree notation.
+/// Used in Display implementations for geometric types.
+pub trait DisplayNum: Deg + Display + Fmt {}
+impl DisplayNum for f64 {}
+impl DisplayNum for Dual {}
 
 impl Fmt for f64 {
     fn s(&self, n: usize) -> String {

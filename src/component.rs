@@ -5,7 +5,22 @@ use log::{debug, error};
 use serde::{Serialize, Deserialize};
 use tsify::Tsify;
 
-use crate::{node::{N, Node}, math::deg::Deg, edge::{E, self, EdgeArg, Edge}, contains::{Contains, ShapeContainsPoint}, region::{Region, RegionArg}, segment::Segment, set::S, theta_points::{ThetaPoints, ThetaPointsArg}, r2::R2, to::To, zero::Zero, fmt::Fmt, hull::Hull, shape::AreaArg};
+use crate::{node::{N, Node}, math::deg::Deg, edge::{E, self, EdgeArg, Edge}, contains::{Contains, ShapeContainsPoint}, region::{Region, RegionArg}, segment::Segment, set::S, theta_points::{ThetaPoints, ThetaPointsArg}, r2::R2, to::To, zero::Zero, fmt::{Fmt, DisplayNum}, hull::Hull, shape::AreaArg, dual::Dual};
+
+/// Trait alias for bounds required by [`Component`] construction and traversal.
+pub trait ComponentArg
+: Deg
++ DisplayNum
++ EdgeArg
++ fmt::Debug
++ Fmt
++ RegionArg
++ ShapeContainsPoint
++ ThetaPointsArg
++ Zero
+{}
+impl ComponentArg for f64 {}
+impl ComponentArg for Dual {}
 
 pub type C<D> = Rc<RefCell<Component<D>>>;
 
@@ -26,7 +41,7 @@ pub struct Component<D> {
     pub hull: Hull<D>,
 }
 
-impl<D: Deg + EdgeArg + fmt::Debug + Fmt + RegionArg + ShapeContainsPoint + ThetaPointsArg + Zero> Component<D>
+impl<D: ComponentArg> Component<D>
 where R2<D>: To<R2<f64>>,
 {
     pub fn new(

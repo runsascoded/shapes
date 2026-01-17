@@ -4,7 +4,7 @@ use std::{cell::RefCell, rc::Rc, collections::{BTreeSet, BTreeMap}, ops::{Neg, A
 use log::{debug, info, error};
 use ordered_float::OrderedFloat;
 
-use crate::{node::{N, Node}, contains::{Contains, ShapeContainsPoint}, distance::Distance, region::RegionArg, set::S, shape::{Shape, AreaArg}, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::{CanTransform, HasProjection, CanProject}, dual::Dual, to::To, math::deg::Deg, fmt::Fmt, component::{Component, self}, set::Set};
+use crate::{node::{N, Node}, contains::{Contains, ShapeContainsPoint}, distance::Distance, region::RegionArg, set::S, shape::{Shape, AreaArg}, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::{CanTransform, HasProjection, CanProject}, dual::Dual, to::To, math::deg::Deg, fmt::{Fmt, DisplayNum}, component::{Component, self}, set::Set};
 
 /// Collection of [`Shape`]s (wrapped in [`Set`]s), and segmented into connected [`Component`]s.
 #[derive(Clone, Debug)]
@@ -23,6 +23,7 @@ pub trait SceneD
 + Fmt
 + RegionArg
 + ShapeContainsPoint
++ component::ComponentArg
 {}
 impl SceneD for f64 {}
 impl SceneD for Dual {}
@@ -593,7 +594,7 @@ pub mod tests {
         assert_eq!(component.regions.len(), 11);
     }
 
-    fn assert_node_strs<D: Display + Deg + Fmt>(scene: &Scene<D>, expected: Vec<Vec<&str>>) {
+    fn assert_node_strs<D: DisplayNum>(scene: &Scene<D>, expected: Vec<Vec<&str>>) {
         let gen_vals = env::var("GEN_VALS").map(|s| s.parse::<usize>().unwrap()).ok();
         match gen_vals {
             Some(_) => {

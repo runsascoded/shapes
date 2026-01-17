@@ -3,9 +3,9 @@ use std::{fmt::Display, collections::BTreeMap};
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 use crate::{
-    math::deg::Deg,
     dual::D,
-    r2::R2, fmt::Fmt,
+    r2::R2,
+    fmt::{Fmt, DisplayNum},
 };
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
@@ -55,7 +55,7 @@ impl<D: Clone> Intersection<D> {
     }
 }
 
-impl<D: Deg + Display + Fmt> Display for Intersection<D> {
+impl<D: DisplayNum> Display for Intersection<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "I({}, {}, C{}({})/C{}({}))", self.x.s(3), self.y.s(3), self.c0idx, self.t0.deg_str(), self.c1idx, self.t1.deg_str())
     }
