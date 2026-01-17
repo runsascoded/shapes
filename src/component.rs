@@ -260,7 +260,7 @@ where R2<D>: To<R2<f64>>,
             let successors = segment.successors();
             segments.push(segment);
             visited_nodes.insert(segment_end_idx);
-            let container_idxs = &mut edge.borrow().all_idxs().clone();  // Set indices that contain the first Edge, will be intersected with the second Edge below to obtain the set of sets for the Region under construction.
+            let container_idxs = edge.borrow().all_idxs();  // Set indices that contain the first Edge, will be intersected with the second Edge below to obtain the set of sets for the Region under construction.
             for successor in successors {
                 let segment_end_idx = successor.end().borrow().idx;
                 visited_nodes.insert(segment_end_idx);

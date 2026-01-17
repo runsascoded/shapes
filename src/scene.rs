@@ -74,8 +74,9 @@ where
             let shape0 = &set_ptr.borrow().shape;
             directly_connected.push(true);
             for jdx in (idx + 1)..num_shapes {
-                let shape1 = set_ptrs[jdx].borrow().shape.clone();
-                let mut intersections = shape0.intersect(&shape1);
+                let set1_ref = set_ptrs[jdx].borrow();
+                let shape1 = &set1_ref.shape;
+                let mut intersections = shape0.intersect(shape1);
                 let mut i = 0;
                 loop {
                     if i >= intersections.len() { break }
