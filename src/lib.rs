@@ -103,11 +103,14 @@ pub fn update_log_level(level: JsValue) {
 ///
 /// # Returns
 /// A [`Step`] containing current shapes, computed areas, and error gradients.
+///
+/// # Panics
+/// If the scene cannot be constructed (e.g., invalid geometry).
 #[wasm_bindgen]
 pub fn make_step(inputs: JsValue, targets: JsValue) -> JsValue {
     let inputs: Vec<InputSpec> = serde_wasm_bindgen::from_value(inputs).unwrap();
     let targets: TargetsMap<f64> = serde_wasm_bindgen::from_value(targets.clone()).unwrap();
-    let step = Step::new(inputs, targets.into());
+    let step = Step::new(inputs, targets.into()).expect("Failed to create step");
     serde_wasm_bindgen::to_value(&step).unwrap()
 }
 
@@ -121,11 +124,14 @@ pub fn make_step(inputs: JsValue, targets: JsValue) -> JsValue {
 ///
 /// # Returns
 /// A [`Model`] ready for training via [`train`].
+///
+/// # Panics
+/// If the scene cannot be constructed (e.g., invalid geometry).
 #[wasm_bindgen]
 pub fn make_model(inputs: JsValue, targets: JsValue) -> JsValue {
     let inputs: Vec<InputSpec> = serde_wasm_bindgen::from_value(inputs).unwrap();
     let targets: TargetsMap<f64> = serde_wasm_bindgen::from_value(targets.clone()).unwrap();
-    let model = Model::new(inputs, targets);
+    let model = Model::new(inputs, targets).expect("Failed to create model");
     serde_wasm_bindgen::to_value(&model).unwrap()
 }
 
@@ -138,10 +144,13 @@ pub fn make_model(inputs: JsValue, targets: JsValue) -> JsValue {
 ///
 /// # Returns
 /// Updated model with training history containing all intermediate steps.
+///
+/// # Panics
+/// If a training step fails due to invalid geometry.
 #[wasm_bindgen]
 pub fn train(model: JsValue, max_step_error_ratio: f64, max_steps: usize) -> JsValue {
     let mut model: Model = serde_wasm_bindgen::from_value(model).unwrap();
-    model.train(max_step_error_ratio, max_steps);
+    model.train(max_step_error_ratio, max_steps).expect("Training failed");
     serde_wasm_bindgen::to_value(&model).unwrap()
 }
 
@@ -153,12 +162,14 @@ pub fn train(model: JsValue, max_step_error_ratio: f64, max_steps: usize) -> JsV
 ///
 /// # Returns
 /// New [`Step`] with updated shape positions.
+///
+/// # Panics
+/// If the step fails due to invalid geometry.
 #[wasm_bindgen]
 pub fn step(step: JsValue, max_step_error_ratio: f64) -> JsValue {
     let step: Step = serde_wasm_bindgen::from_value(step).unwrap();
-    let step = step.step(max_step_error_ratio);
-    
-    serde_wasm_bindgen::to_value(&step.clone()).unwrap()
+    let step = step.step(max_step_error_ratio).expect("Step failed");
+    serde_wasm_bindgen::to_value(&step).unwrap()
 }
 
 /// Expands target specifications into fully-qualified region targets.

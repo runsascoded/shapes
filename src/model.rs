@@ -2,7 +2,7 @@ use log::{info, debug, warn};
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::{step::Step, targets::TargetsMap, shape::InputSpec};
+use crate::{error::SceneError, step::Step, targets::TargetsMap, shape::InputSpec};
 
 #[derive(Debug, Clone, Tsify, Serialize, Deserialize)]
 pub struct Model {
@@ -13,20 +13,20 @@ pub struct Model {
 }
 
 impl Model {
-    pub fn new(input_specs: Vec<InputSpec>, targets: TargetsMap<f64>) -> Model {
-        let step = Step::new(input_specs, targets.into());
+    pub fn new(input_specs: Vec<InputSpec>, targets: TargetsMap<f64>) -> Result<Model, SceneError> {
+        let step = Step::new(input_specs, targets.into())?;
         let min_error = step.error.re;
         let steps = vec![step];
         let repeat_idx: Option<usize> = None;
-        Model { steps, min_idx: 0, repeat_idx, min_error }
+        Ok(Model { steps, min_idx: 0, repeat_idx, min_error })
     }
-    pub fn train(&mut self, max_step_error_ratio: f64, max_steps: usize) {
+    pub fn train(&mut self, max_step_error_ratio: f64, max_steps: usize) -> Result<(), SceneError> {
         let num_steps = self.steps.len();
         let mut step = self.steps[num_steps - 1].clone();
         for idx in 0..max_steps {
             let step_idx = idx + num_steps;
             debug!("Step {}:", step_idx);
-            let nxt = step.step(max_step_error_ratio);
+            let nxt = step.step(max_step_error_ratio)?;
             let nxt_err = nxt.error.re;
             if nxt_err.is_nan() {
                 warn!("NaN err at step {}: {:?}", step_idx, nxt);
@@ -64,6 +64,7 @@ impl Model {
             }
             step = nxt;
         }
+        Ok(())
     }
     pub fn grad_size(&self) -> usize {
         self.steps[0].grad_size()
@@ -140,9 +141,9 @@ mod tests {
         max_steps: usize
     ) {
         let targets: TargetsMap<_> = targets.to();
-        let mut model = Model::new(inputs.clone(), targets);
+        let mut model = Model::new(inputs.clone(), targets).expect("Failed to create model");
         let max_steps = env::var("STEPS").map(|s| s.parse::<usize>().unwrap()).unwrap_or(max_steps);
-        model.train(max_step_error_ratio, max_steps);
+        model.train(max_step_error_ratio, max_steps).expect("Training failed");
 
         let coord_getters: CoordGetters<Step> = inputs.into();
         assert_eq!(model.grad_size(), coord_getters.len());

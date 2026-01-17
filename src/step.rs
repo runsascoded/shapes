@@ -7,7 +7,7 @@ use tsify::{declare, Tsify};
 
 use crate::math::recip::Recip;
 use crate::shape::{Shape, Shapes, InputSpec};
-use crate::{distance::Distance, scene::Scene, math::is_zero::IsZero, r2::R2, targets::Targets, regions};
+use crate::{distance::Distance, error::SceneError, scene::Scene, math::is_zero::IsZero, r2::R2, targets::Targets, regions};
 use crate::dual::{Dual, D};
 
 #[declare]
@@ -46,12 +46,12 @@ impl Display for Error {
 }
 
 impl Step {
-    pub fn new(input_specs: Vec<InputSpec>, targets: Targets<f64>) -> Step {
+    pub fn new(input_specs: Vec<InputSpec>, targets: Targets<f64>) -> Result<Step, SceneError> {
         let shapes = Shapes::from_vec(&input_specs);
         Step::nxt(shapes, targets)
     }
-    pub fn nxt(shapes: Vec<Shape<D>>, targets: Targets<f64>) -> Step {
-        let scene = Scene::new(shapes);
+    pub fn nxt(shapes: Vec<Shape<D>>, targets: Targets<f64>) -> Result<Step, SceneError> {
+        let scene = Scene::new(shapes)?;
         let sets = &scene.sets;
         let all_key = String::from_utf8(vec![b'*'; scene.len()]).unwrap();
         let total_area = scene.area(&all_key).unwrap_or_else(|| scene.zero());
@@ -159,7 +159,7 @@ impl Step {
         let shapes = sets.iter().map(|s| s.borrow().to_owned().shape).collect::<Vec<Shape<D>>>();
 
         debug!("all-in error: {:?}", error);
-        Step { shapes, components, targets, total_area, errors, error }
+        Ok(Step { shapes, components, targets, total_area, errors, error })
     }
 
     pub fn n(&self) -> usize {
@@ -199,7 +199,7 @@ impl Step {
         // self.shapes.iter().map(|(_, duals)| duals.clone()).collect()
     // }
 
-    pub fn step(&self, max_step_error_ratio: f64) -> Step {
+    pub fn step(&self, max_step_error_ratio: f64) -> Result<Step, SceneError> {
         let error = self.error.clone();
         // let error = self.errors.values().into_iter().map(|e| e.error.clone() * &e.error).sum::<D>().sqrt();
         let error_size = &error.v();

@@ -6,7 +6,7 @@ pub enum ShapeError {
     UnrecognizedCoordKeys(Vec<String>),
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Clone, Debug, thiserror::Error)]
 pub enum SceneError {
     #[error("Expected 1 container region within component {component_key:?} containing {child_key:?}, found {count}: {regions:?}")]
     ContainerRegionCount {

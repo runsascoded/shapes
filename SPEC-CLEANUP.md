@@ -238,6 +238,22 @@ cargo outdated
 11. Complete rustdoc coverage
 12. Dependency audit
 
+## Performance Benchmarks (TODO)
+
+Add benchmarks to catch regressions:
+
+**Rust benchmarks** (criterion):
+- Scene construction with various shape counts (2-10 shapes)
+- Gradient computation (single step)
+- Full optimization runs (measure convergence speed)
+
+**WASM/Browser benchmarks** (in `../apvd` app):
+- End-to-end optimization timing
+- Measure as part of browser e2e tests
+- Compare against baseline timings
+
+Priority: Add before major refactors to establish baselines.
+
 ## Notes
 
 - Keep WASM API stable during refactors
