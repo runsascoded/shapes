@@ -160,8 +160,10 @@ mod tests {
             info!("Wrote expecteds to {}", platform_path);
             info!("{}", df);
         } else {
-            // Test mode: compare against merged expected.csv with precision-aware comparison
-            let expected_path = format!("testdata/{}/expected.csv", name);
+            // Test mode: compare against platform-specific expected values
+            let os = env::consts::OS;
+            let os = if os == "macos" { "macos" } else { "linux" };
+            let expected_path = format!("testdata/{}/{}.csv", name, os);
             let expected = ExpectedHistory::load(&expected_path)
                 .unwrap_or_else(|e| panic!("Failed to load {}: {}", expected_path, e));
 

@@ -10,6 +10,18 @@ env:
   RUST_LOG: info
 jobs:
   test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+
+      - run: cargo build
+      - run: cargo test -- --nocapture
+
+  build-wasm:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -22,9 +34,6 @@ jobs:
 
       - name: Build WASM
         run: wasm-pack build --target web
-
-      - run: cargo build
-      - run: cargo test -- --nocapture
 
       - name: Push dist branch
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'

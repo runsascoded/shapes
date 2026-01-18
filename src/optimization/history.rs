@@ -56,25 +56,14 @@ pub use csv_io::*;
 // CSV load/save functionality - only available in tests (polars is a dev-dependency)
 #[cfg(test)]
 mod csv_io {
-    /// Count decimal places in a numeric string (for precision-aware comparison)
-    pub fn decimal_places(s: &str) -> usize {
-        if let Some(dot_pos) = s.find('.') {
-            s.len() - dot_pos - 1
+    /// Compare f64 to expected string with relative tolerance
+    pub fn float_eq(actual: f64, expected_str: &str) -> bool {
+        let expected: f64 = expected_str.parse().expect("Failed to parse expected value");
+        if expected == 0.0 {
+            actual.abs() < 1e-14
         } else {
-            0
+            ((actual - expected) / expected).abs() < 1e-12
         }
-    }
-
-    /// Round f64 to specified decimal places, return as string
-    pub fn round_to_string(val: f64, places: usize) -> String {
-        format!("{:.prec$}", val, prec = places)
-    }
-
-    /// Compare f64 to expected string, rounding actual to same precision as expected
-    pub fn precision_eq(actual: f64, expected_str: &str) -> bool {
-        let places = decimal_places(expected_str);
-        let rounded_actual = round_to_string(actual, places);
-        rounded_actual == expected_str
     }
     use std::collections::BTreeMap;
     use std::path::Path;
@@ -231,18 +220,15 @@ mod csv_io {
             Ok(ExpectedHistory { col_names, steps })
         }
 
-        /// Compare actual HistoryStep against expected, using precision from expected strings
+        /// Compare actual HistoryStep against expected with relative tolerance
         pub fn check_step(&self, step_idx: usize, actual: &HistoryStep) -> Result<(), String> {
             let expected = &self.steps[step_idx];
 
             // Check error
-            if !precision_eq(actual.error, &expected.error) {
+            if !float_eq(actual.error, &expected.error) {
                 return Err(format!(
-                    "Step {} error mismatch:\n  expected: {}\n  actual:   {} (rounded: {})",
-                    step_idx,
-                    expected.error,
-                    actual.error,
-                    round_to_string(actual.error, decimal_places(&expected.error))
+                    "Step {} error mismatch:\n  expected: {}\n  actual:   {}",
+                    step_idx, expected.error, actual.error
                 ));
             }
 
@@ -256,16 +242,11 @@ mod csv_io {
             }
 
             for (i, (actual_val, expected_str)) in actual_vals.iter().zip(expected.shape_vals.iter()).enumerate() {
-                if !precision_eq(*actual_val, expected_str) {
+                if !float_eq(*actual_val, expected_str) {
                     let col_name = self.col_names.get(i + 1).map(|s| s.as_str()).unwrap_or("?");
                     return Err(format!(
-                        "Step {} column {} ({}) mismatch:\n  expected: {}\n  actual:   {} (rounded: {})",
-                        step_idx,
-                        i,
-                        col_name,
-                        expected_str,
-                        actual_val,
-                        round_to_string(*actual_val, decimal_places(expected_str))
+                        "Step {} column {} ({}) mismatch:\n  expected: {}\n  actual:   {}",
+                        step_idx, i, col_name, expected_str, actual_val
                     ));
                 }
             }

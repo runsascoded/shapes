@@ -37,7 +37,7 @@ jobs:
           name: macos-testdata
           path: testdata/*/macos.csv
 
-  merge:
+  commit:
     needs: [gen-ubuntu, gen-macos]
     runs-on: ubuntu-latest
     steps:
@@ -46,50 +46,33 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: ubuntu-testdata
-          path: artifacts/ubuntu
+          path: testdata
 
       - uses: actions/download-artifact@v4
         with:
           name: macos-testdata
-          path: artifacts/macos
+          path: testdata
 
-      - name: Show artifacts
-        run: find artifacts -type f | head -20
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Merge expected values
+      - name: Show generated files
         run: |
-          python scripts/merge_expected.py --batch \
-            artifacts/ubuntu \
-            artifacts/macos \
-            testdata
-
-      - name: Show merged files
-        run: |
-          echo "=== Merged expected.csv files ==="
-          find testdata -name 'expected.csv' | while read f; do
+          echo "=== Generated expected value files ==="
+          find testdata -name '*.csv' -type f | sort | while read f; do
             echo "--- $f ---"
             head -3 "$f"
             echo "..."
           done
 
-      - name: Commit merged testdata
+      - name: Commit testdata
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Remove old platform-specific files
-          git rm -f testdata/*/linux.csv testdata/*/macos.csv 2>/dev/null || true
-
-          git add testdata/*/expected.csv
+          git add testdata/*/linux.csv testdata/*/macos.csv
           git status
 
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "Regenerate merged expected values from Ubuntu + macOS"
+            git commit -m "Regenerate platform-specific expected values"
             git push
           fi
