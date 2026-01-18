@@ -75,7 +75,7 @@ impl Model {
 mod tests {
     use std::{env, f64::consts::PI};
 
-    use crate::{duals::{D, Z}, scene::tests::ellipses4, shape::{circle, InputSpec, xyrr, xyrrt}, to::To, transform::{CanTransform, Transform::Rotate}, coord_getter::CoordGetters, history::{History, HistoryStep}};
+    use crate::{duals::{D, Z}, scene::tests::ellipses4, shape::{circle, InputSpec, xyrr, xyrrt}, to::To, transform::{CanTransform, Transform::Rotate}, coord_getter::CoordGetters, history::{History, HistoryStep, ExpectedHistory}};
 
     use super::*;
     use test_log::test;
@@ -149,25 +149,29 @@ mod tests {
         assert_eq!(model.grad_size(), coord_getters.len());
         // debug!("coord_getters: {:?}", coord_getters.iter().map(|(idx, _)| idx).collect::<Vec<_>>());
 
-        let generate_vals = env::var("GEN_VALS").map(|s| s.parse::<usize>().unwrap()).ok();
-        let os = env::consts::OS;
-        let os = if os == "macos" { "macos" } else { "linux" };
-        let expected_path = format!("testdata/{}/{}.csv", name, os);
-        match generate_vals {
-            Some(_) => {
-                let history: History = model.into();
-                let df = history.save(&expected_path).unwrap();
-                info!("Wrote expecteds to {}", expected_path);
-                info!("{}", df);
-            }
-            None => {
-                let history = History::load(&expected_path).unwrap();
-                let expecteds = history.0;
-                let steps = model.steps;
-                assert_eq!(steps.len(), expecteds.len());
-                for (idx, (step, expected)) in steps.into_iter().zip(expecteds.into_iter()).enumerate() {
-                    let actual: HistoryStep = step.into();
-                    assert_eq!(actual, expected, "Step {}", idx);
+        let generate_vals = env::var("GEN_VALS").is_ok();
+        if generate_vals {
+            // Gen mode: write platform-specific CSV for merge workflow
+            let os = env::consts::OS;
+            let os = if os == "macos" { "macos" } else { "linux" };
+            let platform_path = format!("testdata/{}/{}.csv", name, os);
+            let history: History = model.into();
+            let df = history.save(&platform_path).unwrap();
+            info!("Wrote expecteds to {}", platform_path);
+            info!("{}", df);
+        } else {
+            // Test mode: compare against merged expected.csv with precision-aware comparison
+            let expected_path = format!("testdata/{}/expected.csv", name);
+            let expected = ExpectedHistory::load(&expected_path)
+                .unwrap_or_else(|e| panic!("Failed to load {}: {}", expected_path, e));
+
+            let steps = model.steps;
+            assert_eq!(steps.len(), expected.steps.len(), "Step count mismatch");
+
+            for (idx, step) in steps.into_iter().enumerate() {
+                let actual: HistoryStep = step.into();
+                if let Err(msg) = expected.check_step(idx, &actual) {
+                    panic!("{}", msg);
                 }
             }
         }

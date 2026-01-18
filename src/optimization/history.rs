@@ -56,6 +56,26 @@ pub use csv_io::*;
 // CSV load/save functionality - only available in tests (polars is a dev-dependency)
 #[cfg(test)]
 mod csv_io {
+    /// Count decimal places in a numeric string (for precision-aware comparison)
+    pub fn decimal_places(s: &str) -> usize {
+        if let Some(dot_pos) = s.find('.') {
+            s.len() - dot_pos - 1
+        } else {
+            0
+        }
+    }
+
+    /// Round f64 to specified decimal places, return as string
+    pub fn round_to_string(val: f64, places: usize) -> String {
+        format!("{:.prec$}", val, prec = places)
+    }
+
+    /// Compare f64 to expected string, rounding actual to same precision as expected
+    pub fn precision_eq(actual: f64, expected_str: &str) -> bool {
+        let places = decimal_places(expected_str);
+        let rounded_actual = round_to_string(actual, places);
+        rounded_actual == expected_str
+    }
     use std::collections::BTreeMap;
     use std::path::Path;
     use super::*;
@@ -158,6 +178,99 @@ mod csv_io {
             let mut file = std::fs::File::create(path)?;
             CsvWriter::new(&mut file).include_header(true).finish(&mut df)?;
             Ok(df)
+        }
+    }
+
+    /// Expected values loaded as strings to preserve precision info
+    #[derive(Debug)]
+    pub struct ExpectedStep {
+        pub error: String,
+        pub shape_vals: Vec<String>,
+    }
+
+    #[derive(Debug)]
+    pub struct ExpectedHistory {
+        pub col_names: Vec<String>,
+        pub steps: Vec<ExpectedStep>,
+    }
+
+    impl ExpectedHistory {
+        /// Load expected values from CSV, preserving string representations
+        pub fn load(path: &str) -> Result<ExpectedHistory> {
+            use std::io::{BufRead, BufReader};
+            use std::fs::File;
+
+            let file = File::open(path)?;
+            let reader = BufReader::new(file);
+            let mut lines = reader.lines();
+
+            // Parse header
+            let header = lines.next().ok_or_else(|| anyhow::anyhow!("Empty CSV"))??;
+            let col_names: Vec<String> = header.split(',').map(|s| s.to_string()).collect();
+
+            if col_names.first().map(|s| s.as_str()) != Some(ERROR_COL) {
+                return Err(UnexpectedFirstCol(col_names.first().cloned().unwrap_or_default()).into());
+            }
+
+            // Parse rows
+            let mut steps = Vec::new();
+            for line in lines {
+                let line = line?;
+                let vals: Vec<&str> = line.split(',').collect();
+                if vals.len() != col_names.len() {
+                    return Err(anyhow::anyhow!(
+                        "Row has {} columns, expected {}", vals.len(), col_names.len()
+                    ));
+                }
+                steps.push(ExpectedStep {
+                    error: vals[0].to_string(),
+                    shape_vals: vals[1..].iter().map(|s| s.to_string()).collect(),
+                });
+            }
+
+            Ok(ExpectedHistory { col_names, steps })
+        }
+
+        /// Compare actual HistoryStep against expected, using precision from expected strings
+        pub fn check_step(&self, step_idx: usize, actual: &HistoryStep) -> Result<(), String> {
+            let expected = &self.steps[step_idx];
+
+            // Check error
+            if !precision_eq(actual.error, &expected.error) {
+                return Err(format!(
+                    "Step {} error mismatch:\n  expected: {}\n  actual:   {} (rounded: {})",
+                    step_idx,
+                    expected.error,
+                    actual.error,
+                    round_to_string(actual.error, decimal_places(&expected.error))
+                ));
+            }
+
+            // Check shape values
+            let actual_vals = actual.vals();
+            if actual_vals.len() != expected.shape_vals.len() {
+                return Err(format!(
+                    "Step {} value count mismatch: expected {}, got {}",
+                    step_idx, expected.shape_vals.len(), actual_vals.len()
+                ));
+            }
+
+            for (i, (actual_val, expected_str)) in actual_vals.iter().zip(expected.shape_vals.iter()).enumerate() {
+                if !precision_eq(*actual_val, expected_str) {
+                    let col_name = self.col_names.get(i + 1).map(|s| s.as_str()).unwrap_or("?");
+                    return Err(format!(
+                        "Step {} column {} ({}) mismatch:\n  expected: {}\n  actual:   {} (rounded: {})",
+                        step_idx,
+                        i,
+                        col_name,
+                        expected_str,
+                        actual_val,
+                        round_to_string(*actual_val, decimal_places(expected_str))
+                    ));
+                }
+            }
+
+            Ok(())
         }
     }
 }

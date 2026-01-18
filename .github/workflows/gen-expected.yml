@@ -1,0 +1,95 @@
+name: Generate Expected Values
+on:
+  workflow_dispatch:
+  push:
+    branches: [ gen-expected ]
+
+env:
+  RUST_BACKTRACE: 1
+  RUST_LOG: info
+
+jobs:
+  gen-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Generate expected values
+        run: GEN_VALS=1 cargo test || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ubuntu-testdata
+          path: testdata/*/linux.csv
+
+  gen-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Generate expected values
+        run: GEN_VALS=1 cargo test || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-testdata
+          path: testdata/*/macos.csv
+
+  merge:
+    needs: [gen-ubuntu, gen-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ubuntu-testdata
+          path: artifacts/ubuntu
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-testdata
+          path: artifacts/macos
+
+      - name: Show artifacts
+        run: find artifacts -type f | head -20
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Merge expected values
+        run: |
+          python scripts/merge_expected.py --batch \
+            artifacts/ubuntu \
+            artifacts/macos \
+            testdata
+
+      - name: Show merged files
+        run: |
+          echo "=== Merged expected.csv files ==="
+          find testdata -name 'expected.csv' | while read f; do
+            echo "--- $f ---"
+            head -3 "$f"
+            echo "..."
+          done
+
+      - name: Commit merged testdata
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Remove old platform-specific files
+          git rm -f testdata/*/linux.csv testdata/*/macos.csv 2>/dev/null || true
+
+          git add testdata/*/expected.csv
+          git status
+
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Regenerate merged expected values from Ubuntu + macOS"
+            git push
+          fi
