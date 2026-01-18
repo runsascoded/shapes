@@ -1,7 +1,7 @@
 {
   "name": "apvd",
   "type": "module",
-  "version": "0.1.0-dist.22535f9",
+  "version": "0.1.0-dist.b5ce1de",
   "files": [
     "apvd_bg.wasm",
     "apvd.js",
