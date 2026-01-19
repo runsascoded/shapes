@@ -61,10 +61,12 @@ impl From<&region::Region<Dual>> for Region {
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
 pub struct Component {
     pub key: String,
+    #[serde(skip)]
     pub sets: Vec<Set<f64>>,
     pub points: Vec<Point>,
     pub edges: Vec<Edge>,
     pub regions: Vec<Region>,
+    #[serde(skip)]
     pub container_idxs: Vec<usize>,
     pub hull: Vec<Segment>,
 }
