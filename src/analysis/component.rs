@@ -5,7 +5,7 @@ use log::{debug, error};
 use serde::{Serialize, Deserialize};
 use tsify::Tsify;
 
-use crate::{node::{N, Node}, math::deg::Deg, edge::{E, self, EdgeArg, Edge}, contains::{Contains, ShapeContainsPoint}, region::{Region, RegionArg}, segment::Segment, set::S, theta_points::{ThetaPoints, ThetaPointsArg}, r2::R2, to::To, zero::Zero, fmt::{Fmt, DisplayNum}, hull::Hull, shape::AreaArg, dual::Dual};
+use crate::{node::{N, Node}, math::deg::Deg, edge::{E, self, EdgeArg, Edge}, contains::{Contains, ShapeContainsPoint}, region::{Region, RegionArg}, segment::Segment, set::S, theta_points::{ThetaPoints, ThetaPointsArg}, r2::R2, to::To, zero::Zero, fmt::{Fmt, DisplayNum}, hull::Hull, shape::{AreaArg, Shape}, dual::Dual};
 
 /// Trait alias for bounds required by [`Component`] construction and traversal.
 pub trait ComponentArg
@@ -207,7 +207,20 @@ where R2<D>: To<R2<f64>>,
                 let cur_theta = cur_node.borrow().theta(set_idx);
                 let nxt_theta = nxt_node.borrow().theta(set_idx);
                 let nxt_theta = if nxt_theta <= cur_theta { nxt_theta + TAU } else { nxt_theta };
-                let arc_midpoint = sets[set_idx].borrow().shape.arc_midpoint(cur_theta.clone(), nxt_theta.clone());
+                // For polygons, use line midpoint between nodes (edges are straight lines).
+                // For ellipses/circles, use arc_midpoint (edges are curved arcs).
+                let edge_midpoint = match &sets[set_idx].borrow().shape {
+                    Shape::Polygon(_) => {
+                        // Line midpoint between the two nodes
+                        let p0 = cur_node.borrow().p.clone();
+                        let p1 = nxt_node.borrow().p.clone();
+                        R2 {
+                            x: (p0.x + p1.x) / 2.,
+                            y: (p0.y + p1.y) / 2.,
+                        }
+                    }
+                    _ => sets[set_idx].borrow().shape.arc_midpoint(cur_theta.clone(), nxt_theta.clone()),
+                };
                 let mut is_component_boundary = true;
                 let mut container_idxs: BTreeSet<usize> = component_container_idxs.clone();
                 for cdx in set_idxs {
@@ -216,7 +229,7 @@ where R2<D>: To<R2<f64>>,
                         continue;
                     }
                     let container = sets[cdx].clone();
-                    let contained = container.borrow().shape.contains(&arc_midpoint);
+                    let contained = container.borrow().shape.contains(&edge_midpoint);
                     if contained {
                         // Set cdx contains this edge
                         container_idxs.insert(cdx);

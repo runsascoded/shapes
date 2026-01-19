@@ -290,14 +290,17 @@ where
     }
 }
 
-impl<D: Clone + Display + Recip> Polygon<D>
+impl<D: Clone + Display + Recip + Add<Output = D> + Div<f64, Output = D>> Polygon<D>
 where
     R2<D>: Neg<Output = R2<D>>,
 {
-    /// Projection is not meaningful for polygons - they cannot be "normalized" to a unit circle
-    /// like ellipses can. This method panics to catch incorrect dispatch.
+    /// For polygons, "projection" is just translation to centroid (no scaling/rotation).
+    /// This allows theta() to compute angles from the centroid for edge ordering.
+    /// Note: point() and arc_midpoint() won't give boundary points for polygons;
+    /// special handling is needed in component.rs for containment testing.
     pub fn projection(&self) -> Projection<D> {
-        panic!("Polygon does not support projection - use unit_intersections instead")
+        let c = self.center();
+        Projection(vec![Translate(-c)])
     }
 }
 
@@ -675,5 +678,36 @@ mod tests {
             });
             assert!(found, "Point {:?} not found in reverse intersection", p1);
         }
+    }
+
+    #[test]
+    fn test_polygon_circle_scene() {
+        use crate::model::Model;
+        use crate::to::To;
+
+        // This tests the full scene building with regions - requires theta computation
+        let triangle: Shape<f64> = Shape::Polygon(Polygon::new(vec![
+            R2 { x: -1.5, y: -1. },
+            R2 { x: 1.5, y: -1. },
+            R2 { x: 0., y: 1.5 },
+        ]));
+        let circle: Shape<f64> = crate::shape::circle(0., 0., 1.);
+
+        // InputSpec is (Shape<f64>, Vec<bool>) - bools indicate which coords are trainable
+        let inputs = vec![
+            (triangle, vec![true; 6]),  // 6 coords for triangle (3 vertices × 2)
+            (circle, vec![true; 3]),    // 3 coords for circle (cx, cy, r)
+        ];
+
+        // Target keys using inclusive patterns like existing tests
+        let targets: [(&str, f64); 3] = [
+            ("0*", 1.),  // triangle (inclusive)
+            ("*1", 1.),  // circle (inclusive)
+            ("01", 0.5), // intersection
+        ];
+
+        // This will try to build regions, which requires theta computation on polygons
+        let model = Model::new(inputs, targets.to());
+        assert!(model.is_ok(), "Failed to build model: {:?}", model.err());
     }
 }

@@ -230,7 +230,7 @@ impl<D: Zero> Shape<D> {
     }
 }
 
-impl<D: Clone + fmt::Display + Neg<Output = D> + Recip> HasProjection<D> for Shape<D>
+impl<D: Clone + fmt::Display + Neg<Output = D> + Recip + Add<Output = D> + Div<f64, Output = D>> HasProjection<D> for Shape<D>
 where
     R2<D>: Neg<Output = R2<D>>,
 {
