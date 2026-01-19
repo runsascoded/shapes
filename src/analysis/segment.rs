@@ -32,24 +32,22 @@ where
         let edge = self.edge.clone();
         let shape_idx = edge.borrow().set_idx();
 
-        // First try: edges from other shapes (standard behavior for circle/ellipse intersections)
-        let other_shape_edges: Vec<_> = end.borrow().edges.iter().filter(|e| {
-            e.borrow().set_idx() != shape_idx && e.borrow().visits < e.borrow().expected_visits()
-        }).cloned().collect();
+        // Check if this node is on multiple shapes (intersection) or just one (polygon vertex)
+        let is_intersection = end.borrow().shape_coords.len() > 1;
 
-        // If no edges from other shapes, this might be a polygon vertex (not an intersection point).
-        // In that case, continue along the same polygon's perimeter.
-        let edges_to_use = if other_shape_edges.is_empty() {
-            // Allow continuing on same shape, but only forward (not backtracking)
-            // The "forward" edge is the one that starts at this node (node0 == end)
+        let edges_to_use: Vec<_> = if is_intersection {
+            // Intersection node: switch to edges from OTHER shapes
+            end.borrow().edges.iter().filter(|e| {
+                e.borrow().set_idx() != shape_idx && e.borrow().visits < e.borrow().expected_visits()
+            }).cloned().collect()
+        } else {
+            // Polygon vertex (not an intersection): continue along SAME shape
             end.borrow().edges.iter().filter(|e| {
                 let e_ref = e.borrow();
                 e_ref.set_idx() == shape_idx &&
                 e_ref.idx != edge.borrow().idx &&  // not the edge we came from
                 e_ref.visits < e_ref.expected_visits()
             }).cloned().collect()
-        } else {
-            other_shape_edges
         };
 
         edges_to_use.iter().map(|e| {

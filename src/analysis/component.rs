@@ -333,10 +333,8 @@ where R2<D>: To<R2<f64>>,
                 let nxt_coord = nxt_node.borrow().coord(set_idx);
                 let nxt_coord = if nxt_coord <= cur_coord { nxt_coord + coord_period } else { nxt_coord };
                 // Use midpoint to get a test point for containment checking.
-                // For circles/ellipses, this gives a point on the boundary arc.
-                // For polygons, this gives a point on a unit circle centered at the centroid,
-                // which isn't on the polygon boundary but gives different points for edges
-                // going in different directions (enabling correct containment classification).
+                // This gives a point on the actual boundary (arc midpoint for circles/ellipses,
+                // perimeter midpoint for polygons).
                 let edge_midpoint = sets[set_idx].borrow().shape.midpoint(cur_coord, nxt_coord);
                 let mut is_component_boundary = true;
                 let mut container_idxs: BTreeSet<usize> = component_container_idxs.clone();
