@@ -639,4 +639,41 @@ mod tests {
         let s = format!("{}", t);
         assert!(s.starts_with("Polygon["));
     }
+
+    #[test]
+    fn test_polygon_xyrrt_intersect() {
+        use crate::ellipses::xyrrt::XYRRT;
+        use crate::intersect::Intersect;
+
+        // Triangle that intersects a rotated ellipse
+        let polygon = Polygon::new(vec![
+            R2 { x: -2., y: 0. },
+            R2 { x: 2., y: 0. },
+            R2 { x: 0., y: 2. },
+        ]);
+
+        // Rotated ellipse at origin
+        let xyrrt: Shape<f64> = Shape::XYRRT(XYRRT {
+            c: R2 { x: 0., y: 0.5 },
+            r: R2 { x: 1.5, y: 0.8 },
+            t: 0.3,
+        });
+
+        let polygon_shape: Shape<f64> = Shape::Polygon(polygon);
+
+        // Test both orderings work and give same results
+        let points1 = polygon_shape.intersect(&xyrrt);
+        let points2 = xyrrt.intersect(&polygon_shape);
+
+        assert!(!points1.is_empty(), "Expected intersections, got none");
+        assert_eq!(points1.len(), points2.len(), "Both orderings should give same number of points");
+
+        // Verify points are approximately the same (order may differ)
+        for p1 in &points1 {
+            let found = points2.iter().any(|p2| {
+                (p1.x - p2.x).abs() < 1e-10 && (p1.y - p2.y).abs() < 1e-10
+            });
+            assert!(found, "Point {:?} not found in reverse intersection", p1);
+        }
+    }
 }

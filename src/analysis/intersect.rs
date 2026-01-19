@@ -51,9 +51,7 @@ where
             // XYRRT has third priority
             (Shape::XYRRT(_), Shape::XYRRT(_)) => self._intersect(o),
             (Shape::XYRRT(_), Shape::Polygon(_)) => self._intersect(o),
-            (Shape::Polygon(_), Shape::XYRRT(_)) => {
-                panic!("Polygon-XYRRT intersection not implemented: Polygon cannot provide projection. Use XYRRT-Polygon order instead.")
-            },
+            (Shape::Polygon(_), Shape::XYRRT(_)) => o.intersect(self),
 
             // Polygon-Polygon: use line-line intersection
             (Shape::Polygon(p1), Shape::Polygon(p2)) => polygon_polygon_intersect(p1, p2),
