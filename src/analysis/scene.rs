@@ -171,9 +171,16 @@ where
             let shape = &set_ptr.borrow().shape;
             let mut containers: BTreeSet<usize> = BTreeSet::new();
             for (jdx, container) in set_ptrs.iter().enumerate() {
+                // Get a boundary point: for polygons use first vertex, for others use point(0).
+                // Polygon's point(theta) doesn't give a boundary point (it uses projection-based
+                // parameterization intended for ellipses), so we must use an actual vertex.
+                let boundary_point = match shape {
+                    Shape::Polygon(p) => p.vertices[0].clone(),
+                    _ => shape.point(zero.clone()),
+                };
                 if !is_connected[idx][jdx] &&
                     // This check can false-positive if the shapes are tangent at theta == 0, so we check center-containment below as well
-                    container.borrow().shape.contains(&shape.point(zero.clone())) &&
+                    container.borrow().shape.contains(&boundary_point) &&
                     // Concentric shapes contain each others' centers, so this check alone is insufficient (needs the above check as well)
                     container.borrow().shape.contains(&shape.center()) {
                     containers.insert(jdx);
