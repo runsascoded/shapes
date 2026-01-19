@@ -1,7 +1,7 @@
 use std::{fmt::Display, rc::Rc, cell::RefCell, collections::BTreeSet, ops::{Mul, Div, Sub}, f64::consts::TAU};
 
 
-use crate::{math::deg::Deg, node::N, set::S, shape::Shape::{Circle, XYRR, XYRRT}, trig::Trig, dual::Dual};
+use crate::{math::deg::Deg, node::N, set::S, shape::Shape::{Circle, XYRR, XYRRT, Polygon}, trig::Trig, dual::Dual, zero::Zero};
 
 pub type E<D> = Rc<RefCell<Edge<D>>>;
 
@@ -36,16 +36,29 @@ impl<D> Edge<D> {
         self.set.borrow().idx
     }
 }
-impl<D: EdgeArg> Edge<D> {
+impl<D: EdgeArg + Zero> Edge<D> {
     pub fn secant_area(&self) -> D {
-        let r2 = match &self.set.borrow().shape {
-            Circle(c) => c.clone().r * c.clone().r,
-            XYRR(e) => e.r.clone().x * e.clone().r.y,
-            XYRRT(e) => e.r.clone().x * e.clone().r.y,
-        };
-        let theta = self.theta();
-        // debug!("Edge {}: r2: {}, theta: {}", self, r2, theta);
-        r2 / 2. * (theta.clone() - theta.sin())
+        match &self.set.borrow().shape {
+            Circle(c) => {
+                let r2 = c.clone().r * c.clone().r;
+                let theta = self.theta();
+                r2 / 2. * (theta.clone() - theta.sin())
+            },
+            XYRR(e) => {
+                let r2 = e.r.clone().x * e.clone().r.y;
+                let theta = self.theta();
+                r2 / 2. * (theta.clone() - theta.sin())
+            },
+            XYRRT(e) => {
+                let r2 = e.r.clone().x * e.clone().r.y;
+                let theta = self.theta();
+                r2 / 2. * (theta.clone() - theta.sin())
+            },
+            Polygon(p) => {
+                // Polygon edges are straight lines, no secant area
+                p.zero()
+            },
+        }
     }
     /// Angle span of this Edge, in terms of the shape whose border it is part of
     pub fn theta(&self) -> D {

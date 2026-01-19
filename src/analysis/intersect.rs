@@ -1,7 +1,7 @@
 use std::{ops::{Div, Neg, Add, Mul, Sub}, fmt::Display};
 
 
-use crate::{circle, dual::Dual, ellipses::{cdef, xyrrt}, r2::R2, transform::{CanProject, CanTransform}, shape::Shape, trig::Trig, theta_points::ThetaPointsArg, rotate::RotateArg};
+use crate::{circle, dual::Dual, ellipses::{cdef, xyrrt}, r2::R2, transform::{CanProject, CanTransform}, shape::Shape, trig::Trig, theta_points::ThetaPointsArg, rotate::RotateArg, geometry::polygon::{self, polygon_polygon_intersect}};
 
 pub trait Intersect<In, Out> {
     fn intersect(&self, other: &In) -> Vec<R2<Out>>;
@@ -17,6 +17,7 @@ pub trait IntersectShapesArg
 + cdef::UnitIntersectionsArg
 + circle::UnitIntersectionsArg
 + xyrrt::UnitIntersectionsArg
++ polygon::UnitIntersectionsArg
 + ThetaPointsArg
 {}
 
@@ -36,12 +37,26 @@ where
     + Div<D, Output = D>,
 {
     fn intersect(&self, o: &Shape<D>) -> Vec<R2<D>> {
+        // Dispatch order: Circle > XYRR > XYRRT > Polygon
+        // Higher-priority shapes provide projection(), Polygon provides unit_intersections()
         match (self, o) {
+            // Circle has highest priority - always projects
             (Shape::Circle(_), _) => self._intersect(o),
             (_, Shape::Circle(_)) => o.intersect(self),
+
+            // XYRR has second priority
             (Shape::XYRR(_), _) => self._intersect(o),
             (_, Shape::XYRR(_)) => o.intersect(self),
+
+            // XYRRT has third priority
             (Shape::XYRRT(_), Shape::XYRRT(_)) => self._intersect(o),
+            (Shape::XYRRT(_), Shape::Polygon(_)) => self._intersect(o),
+            (Shape::Polygon(_), Shape::XYRRT(_)) => {
+                panic!("Polygon-XYRRT intersection not implemented: Polygon cannot provide projection. Use XYRRT-Polygon order instead.")
+            },
+
+            // Polygon-Polygon: use line-line intersection
+            (Shape::Polygon(p1), Shape::Polygon(p2)) => polygon_polygon_intersect(p1, p2),
         }
     }
 }
@@ -55,6 +70,7 @@ impl<
     : cdef::UnitIntersectionsArg
     + circle::UnitIntersectionsArg
     + xyrrt::UnitIntersectionsArg
+    + polygon::UnitIntersectionsArg
     + RotateArg
     + Neg<Output = D>
 > UnitCircleIntersections<D> for Shape<D>
@@ -71,6 +87,7 @@ where
             Shape::Circle(c) => c.unit_intersections(),
             Shape::XYRR(e) => e.unit_intersections(),
             Shape::XYRRT(e) => e.unit_intersections(),
+            Shape::Polygon(p) => p.unit_intersections(),
         }
     }
 }

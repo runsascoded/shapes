@@ -14,6 +14,7 @@ pub mod optimization;
 // Re-exports for backwards compatibility
 pub use geometry::circle;
 pub use geometry::ellipses;
+pub use geometry::polygon;
 pub use geometry::r2;
 pub use geometry::rotate;
 pub use geometry::shape;

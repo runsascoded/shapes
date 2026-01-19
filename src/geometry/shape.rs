@@ -5,7 +5,7 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use tsify::{declare, Tsify};
 
-use crate::{dual::{D, Dual}, circle::{self, Circle}, ellipses::{xyrr::{self, XYRR, UnitCircleGap}, xyrrt::{self, XYRRT, LevelArg}}, zero::Zero, transform::{Transform, CanProject, CanTransform, HasProjection, Projection}, r2::R2, math::recip::Recip, intersect::{IntersectShapesArg, UnitCircleIntersections}, duals::InitDuals, coord_getter::CoordGetter};
+use crate::{dual::{D, Dual}, circle::{self, Circle}, ellipses::{xyrr::{self, XYRR, UnitCircleGap}, xyrrt::{self, XYRRT, LevelArg}}, zero::Zero, transform::{Transform, CanProject, CanTransform, HasProjection, Projection}, r2::R2, math::recip::Recip, intersect::{IntersectShapesArg, UnitCircleIntersections}, duals::InitDuals, coord_getter::CoordGetter, geometry::polygon::{self, Polygon}};
 
 #[declare]
 pub type Duals = Vec<Vec<f64>>;
@@ -18,6 +18,7 @@ pub enum Shape<D> {
     Circle(circle::Circle<D>),
     XYRR(xyrr::XYRR<D>),
     XYRRT(xyrrt::XYRRT<D>),
+    Polygon(polygon::Polygon<D>),
 }
 
 pub struct Shapes {}
@@ -38,6 +39,9 @@ pub fn xyrr<D>(cx: D, cy: D, rx: D, ry: D) -> Shape<D> {
 }
 pub fn xyrrt<D>(cx: D, cy: D, rx: D, ry: D, t: D) -> Shape<D> {
     Shape::XYRRT(XYRRT { c: R2 { x: cx, y: cy }, r: R2 { x: rx, y: ry }, t })
+}
+pub fn polygon<D>(vertices: Vec<R2<D>>) -> Shape<D> {
+    Shape::Polygon(Polygon::new(vertices))
 }
 
 impl<D> Shape<D> {
@@ -75,6 +79,15 @@ impl<D> Shape<D> {
                     })
                 }
             }).into_iter().collect(),
+            Shape::Polygon(p) => p.getters().into_iter().map(|CoordGetter { name, get }| {
+                CoordGetter {
+                    name,
+                    get: Box::new(move |s: Shape<f64>| match s {
+                        Shape::Polygon(p) => get(p),
+                        _ => panic!("Expected Polygon at idx {}", shape_idx),
+                    })
+                }
+            }).collect(),
         }
     }
 }
@@ -95,6 +108,7 @@ impl Shape<f64> {
             Shape::Circle(c) => Shape::Circle(c.dual(duals)),
             Shape::XYRR(e) => Shape::XYRR(e.dual(duals)),
             Shape::XYRRT(e) => Shape::XYRRT(e.dual(duals)),
+            Shape::Polygon(p) => Shape::Polygon(p.dual(duals)),
         }
     }
     pub fn at_y(&self, y: f64) -> Vec<f64> {
@@ -102,6 +116,7 @@ impl Shape<f64> {
             Shape::Circle(c) => c.at_y(y),
             Shape::XYRR(e) => e.at_y(y),
             Shape::XYRRT(e) => e.at_y(y),
+            Shape::Polygon(p) => p.at_y(y),
         };
         if xs.len() < 2 {
             // Skip tangent points
@@ -115,6 +130,7 @@ impl Shape<f64> {
             Shape::Circle(c) => c.names().to_vec(),
             Shape::XYRR(e) => e.names().to_vec(),
             Shape::XYRRT(e) => e.names().to_vec(),
+            Shape::Polygon(p) => p.names(),
         }
     }
     pub fn vals(&self) -> Vec<f64> {
@@ -122,26 +138,35 @@ impl Shape<f64> {
             Shape::Circle(c) => c.vals().to_vec(),
             Shape::XYRR(e) => e.vals().to_vec(),
             Shape::XYRRT(e) => e.vals().to_vec(),
+            Shape::Polygon(p) => p.vals(),
         }
     }
 }
 
 impl<D: Clone> Shape<D> {
-    pub fn center(&self) -> R2<D> {
+    pub fn center(&self) -> R2<D>
+    where
+        D: Add<Output = D> + Div<f64, Output = D>,
+    {
         match self {
             Shape::Circle(c) => c.c.clone(),
             Shape::XYRR(e) => e.c.clone(),
             Shape::XYRRT(e) => e.c.clone(),
+            Shape::Polygon(p) => p.center(),
         }
     }
 }
 
 impl<D: Clone> Shape<D> {
-    pub fn c(&self) -> R2<D> {
+    pub fn c(&self) -> R2<D>
+    where
+        D: Add<Output = D> + Div<f64, Output = D>,
+    {
         match self {
             Shape::Circle(c) => c.c.clone(),
             Shape::XYRR(e) => e.c.clone(),
             Shape::XYRRT(e) => e.c.clone(),
+            Shape::Polygon(p) => p.center(),
         }
     }
 }
@@ -150,11 +175,15 @@ pub trait AreaArg: Clone + Mul<Output = Self> + Mul<f64, Output = Self> {}
 impl<D: Clone + Mul<Output = D> + Mul<f64, Output = D>> AreaArg for D {}
 
 impl<D: AreaArg> Shape<D> {
-    pub fn area(&self) -> D {
+    pub fn area(&self) -> D
+    where
+        D: Add<Output = D> + Sub<Output = D>,
+    {
         match self {
             Shape::Circle(c) => c.area(),
             Shape::XYRR(e) => e.area(),
             Shape::XYRRT(e) => e.area(),
+            Shape::Polygon(p) => p.area(),
         }
     }
 }
@@ -165,6 +194,7 @@ impl From<Shape<Dual>> for Shape<f64> {
             Shape::Circle(c) => Shape::Circle(c.v()),
             Shape::XYRR(e) => Shape::XYRR(e.v()),
             Shape::XYRRT(e) => Shape::XYRRT(e.v()),
+            Shape::Polygon(p) => Shape::Polygon(p.v()),
         }
     }
 }
@@ -175,6 +205,7 @@ impl Shape<D> {
             Shape::Circle(c) => Shape::Circle(c.v()),
             Shape::XYRR(e) => Shape::XYRR(e.v()),
             Shape::XYRRT(e) => Shape::XYRRT(e.v()),
+            Shape::Polygon(p) => Shape::Polygon(p.v()),
         }
     }
     pub fn n(&self) -> usize {
@@ -182,6 +213,7 @@ impl Shape<D> {
             Shape::Circle(c) => c.n(),
             Shape::XYRR(e) => e.n(),
             Shape::XYRRT(e) => e.n(),
+            Shape::Polygon(p) => p.n(),
         }
     }
 }
@@ -192,6 +224,7 @@ impl<D: Zero> Shape<D> {
             Shape::Circle(c) => Zero::zero(&c.r),
             Shape::XYRR(e) => Zero::zero(&e.c.x),
             Shape::XYRRT(e) => Zero::zero(&e.c.x),
+            Shape::Polygon(p) => p.zero(),
         }
     }
 }
@@ -205,6 +238,7 @@ where
             Shape::Circle(c) => c.projection(),
             Shape::XYRR(e) => e.projection(),
             Shape::XYRRT(e) => e.projection(),
+            Shape::Polygon(p) => p.projection(),
         }
     }
 }
@@ -213,11 +247,13 @@ impl<
     D
     : circle::TransformD
     + xyrr::TransformD
+    + polygon::TransformD
 > CanTransform<D> for Shape<D>
 where
     R2<D>
     : circle::TransformR2<D>
-    + xyrr::TransformR2<D>,
+    + xyrr::TransformR2<D>
+    + polygon::TransformR2<D>,
 {
     type Output = Shape<D>;
     fn transform(&self, transform: &Transform<D>) -> Shape<D> {
@@ -225,16 +261,18 @@ where
             Shape::Circle(c) => c.transform(transform),
             Shape::XYRR(e) => e.transform(transform),
             Shape::XYRRT(e) => e.transform(transform),
+            Shape::Polygon(p) => p.transform(transform),
         }
     }
 }
 
-impl<D: LevelArg + UnitCircleGap> Shape<D> {
+impl<D: LevelArg + UnitCircleGap + polygon::UnitCircleGap> Shape<D> {
     pub fn unit_circle_gap(&self) -> Option<D> {
         match self {
             Shape::Circle(c) => c.unit_circle_gap(),
             Shape::XYRR(e) => e.unit_circle_gap(),
             Shape::XYRRT(e) => e.unit_circle_gap(),
+            Shape::Polygon(p) => p.unit_circle_gap(),
         }
     }
 }
@@ -264,6 +302,18 @@ impl Shape<Dual> {
                 let t = t + dt;
                 Shape::XYRRT(XYRRT { c, r, t })
             },
+            Shape::Polygon(p) => {
+                // Apply step to each vertex coordinate
+                let duals = p.duals();
+                let deltas: Vec<f64> = duals.iter().map(|d| d.iter().zip(step_vec).map(|(mask, step)| mask * step).sum()).collect();
+                let vertices = p.vertices.iter().enumerate().map(|(i, v)| {
+                    R2 {
+                        x: v.x.clone() + deltas[i * 2],
+                        y: v.y.clone() + deltas[i * 2 + 1],
+                    }
+                }).collect();
+                Shape::Polygon(Polygon { vertices })
+            },
         }
     }
     pub fn duals(&self) -> Duals {
@@ -271,6 +321,7 @@ impl Shape<Dual> {
             Shape::Circle(s) => s.duals().to_vec(),
             Shape::XYRR(e) => e.duals().to_vec(),
             Shape::XYRRT(e) => e.duals().to_vec(),
+            Shape::Polygon(p) => p.duals(),
         }
     }
 }

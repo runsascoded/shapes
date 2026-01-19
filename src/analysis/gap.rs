@@ -1,4 +1,4 @@
-use crate::{shape::Shape::{self}, transform::{CanProject, HasProjection, CanTransform}, ellipses::{xyrrt::LevelArg, xyrr::UnitCircleGap}};
+use crate::{shape::Shape::{self}, transform::{CanProject, HasProjection, CanTransform}, ellipses::{xyrrt::LevelArg, xyrr::UnitCircleGap}, geometry::polygon};
 
 pub trait Gap<O> {
     type Output;
@@ -6,7 +6,7 @@ pub trait Gap<O> {
 }
 
 impl<
-    D: LevelArg + UnitCircleGap
+    D: LevelArg + UnitCircleGap + polygon::UnitCircleGap
 > Gap<Shape<D>> for Shape<D>
 where
     Shape<D>: CanTransform<D, Output = Shape<D>> + HasProjection<D>,

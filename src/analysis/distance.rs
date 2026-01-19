@@ -1,4 +1,4 @@
-use std::ops::{Sub, Add, Mul};
+use std::ops::{Sub, Add, Mul, Div};
 
 use crate::{r2::R2, sqrt::Sqrt, shape::Shape};
 
@@ -19,7 +19,7 @@ where R2<D>: Sub<Output = R2<D>>
     }
 }
 
-impl<D: DistanceArg> Distance<Shape<D>> for Shape<D>
+impl<D: DistanceArg + Div<f64, Output = D>> Distance<Shape<D>> for Shape<D>
 where R2<D>: Sub<Output = R2<D>>
 {
     type Output = D;

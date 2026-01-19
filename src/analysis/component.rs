@@ -438,7 +438,7 @@ impl<D> Component<D> {
     }
 }
 
-impl<D: AreaArg + Into<f64>> Component<D>
+impl<D: AreaArg + Into<f64> + std::ops::Add<Output = D> + std::ops::Sub<Output = D>> Component<D>
 // where f64: From<&'a D>  `From<&f64> for f64` doesn't exist…?
 {
     pub fn verify_areas(&self, ε: f64) -> Result<()> {

@@ -94,18 +94,7 @@ src/
 
 All modules re-exported at crate root - existing imports unchanged.
 
-### 7. Split Large Files
-
-**scene.rs (816 lines)**:
-- Extract test helpers → `scene/tests.rs`
-- Extract intersection detection → `scene/intersect.rs`
-- Main Scene struct stays in `scene/mod.rs`
-
-**component.rs (464 lines)**:
-- Extract `traverse()` function → `component/traverse.rs`
-- Extract edge construction → `component/edges.rs`
-
-### 8. Documentation
+### 7. Documentation
 
 **Add rustdoc to**:
 - All `pub fn` in lib.rs (WASM API)
@@ -129,7 +118,7 @@ All modules re-exported at crate root - existing imports unchanged.
 pub fn make_model(...) -> Model { ... }
 ```
 
-### 9. Test Coverage ✅ EXPANDED
+### 8. Test Coverage ✅ EXPANDED
 
 **Added tests** (total: 142 tests):
 - `math/quadratic.rs` - 8 comprehensive tests (real roots, complex roots, edge cases)
@@ -157,7 +146,7 @@ proptest! {
 }
 ```
 
-### 10. Address TODOs ✅ MOSTLY DONE
+### 9. Address TODOs ✅ MOSTLY DONE
 
 | Location | TODO | Status |
 |----------|------|--------|

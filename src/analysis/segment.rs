@@ -1,6 +1,6 @@
 use std::{fmt::{Display, Formatter, self}, ops::Neg};
 
-use crate::{edge::{E, EdgeArg, Edge}, node::N, r2::R2, to::To};
+use crate::{edge::{E, EdgeArg, Edge}, node::N, r2::R2, to::To, zero::Zero};
 
 #[derive(Debug, Clone)]
 pub struct Segment<D> {
@@ -8,7 +8,7 @@ pub struct Segment<D> {
     pub fwd: bool,
 }
 
-impl<D: EdgeArg + Neg<Output = D>> Segment<D>
+impl<D: EdgeArg + Neg<Output = D> + Zero> Segment<D>
 where
     R2<D>: To<R2<f64>>,
 {
