@@ -83,3 +83,19 @@ Test data in `testdata/` (CSV files with expected values).
 - Issue #9: Only absolute error metric (no relative)
 - Issue #10: Basic missing-region penalty
 - Quartic solver can have numerical stability issues at edge cases
+- Polygon edge traversal uses theta-based logic (fragile for concave polygons)
+
+## Future Improvements
+
+### Algorithm Robustness
+- **Sweep line algorithm**: Replace current intersection/arrangement logic with sweep-line approach (Bentley-Ottmann style) for robust handling of all curve types
+- **Proper polygon edge traversal**: Track edge indices and walk perimeter instead of theta-based vertex filtering
+- **X-monotone decomposition**: Split curves at vertical tangent points for uniform handling
+
+### Optimization
+- **Adam optimizer**: Replace simple gradient descent with Adam or similar adaptive learning rate optimizer
+- **Loss function options**: Add stress metric, diagError metric (per eulerAPE/eulerr)
+
+### Shape Support
+- **Cubic Bezier curves**: Would require numerical intersection (Newton's method or Bezier clipping) and Green's theorem for area
+- Consider tradeoff: exact autodiff with Dual numbers vs finite differences (O(n) evals but simpler code for complex curves)
