@@ -115,6 +115,39 @@ impl Polygon<f64> {
         xs.sort_by(|a, b| a.partial_cmp(b).unwrap());
         xs
     }
+
+    /// Check if a point is inside the polygon using ray casting algorithm.
+    /// Casts a horizontal ray to the right and counts edge crossings.
+    pub fn contains(&self, p: &R2<f64>) -> bool {
+        let n = self.vertices.len();
+        let mut crossings = 0;
+
+        for i in 0..n {
+            let v0 = &self.vertices[i];
+            let v1 = &self.vertices[(i + 1) % n];
+
+            // Check if the ray at y=p.y crosses this edge (going rightward from p.x)
+            // Edge goes from v0 to v1
+
+            // Skip if edge is entirely above or below the ray
+            let (y_min, y_max) = if v0.y < v1.y { (v0.y, v1.y) } else { (v1.y, v0.y) };
+            if p.y < y_min || p.y >= y_max {
+                continue;
+            }
+
+            // Find x-coordinate where edge crosses y=p.y
+            let t = (p.y - v0.y) / (v1.y - v0.y);
+            let x_crossing = v0.x + t * (v1.x - v0.x);
+
+            // Count crossing if it's to the right of p
+            if x_crossing > p.x {
+                crossings += 1;
+            }
+        }
+
+        // Point is inside if odd number of crossings
+        crossings % 2 == 1
+    }
 }
 
 impl Polygon<D> {
@@ -304,6 +337,100 @@ where
     }
 }
 
+/// f64-based perimeter methods for BoundaryCoord trait.
+/// These work on any Polygon<D> by converting vertices to f64.
+impl<D: Clone + Into<f64>> Polygon<D> {
+    /// Compute the perimeter parameter for a point on the polygon boundary.
+    /// Returns edge_idx + t where edge_idx is which edge (0..n-1) and t ∈ [0,1).
+    /// This gives a continuous parameter from 0 to n as you traverse the polygon perimeter.
+    ///
+    /// The point is assumed to lie on the polygon boundary (from an intersection computation).
+    pub fn perimeter_param(&self, p: &R2<f64>) -> f64 {
+        let n = self.vertices.len();
+
+        for i in 0..n {
+            let v0x: f64 = self.vertices[i].x.clone().into();
+            let v0y: f64 = self.vertices[i].y.clone().into();
+            let v1x: f64 = self.vertices[(i + 1) % n].x.clone().into();
+            let v1y: f64 = self.vertices[(i + 1) % n].y.clone().into();
+
+            // Edge direction vector
+            let dx = v1x - v0x;
+            let dy = v1y - v0y;
+
+            // Vector from v0 to p
+            let px = p.x - v0x;
+            let py = p.y - v0y;
+
+            // Compute edge length squared
+            let edge_len_sq = dx * dx + dy * dy;
+            if edge_len_sq < 1e-20 {
+                continue; // Degenerate edge
+            }
+
+            // Project p onto the edge: t = (p - v0) · (v1 - v0) / |v1 - v0|²
+            let t = (px * dx + py * dy) / edge_len_sq;
+
+            // Check if t is in [0, 1] (point is between vertices)
+            if t < -1e-9 || t > 1.0 + 1e-9 {
+                continue;
+            }
+
+            // Check if point is actually on the edge (distance to edge is small)
+            let edge_pt_x = v0x + t * dx;
+            let edge_pt_y = v0y + t * dy;
+            let dist_sq = (p.x - edge_pt_x).powi(2) + (p.y - edge_pt_y).powi(2);
+
+            if dist_sq < 1e-12 {
+                // Found the edge! Return edge_idx + t
+                return (i as f64) + t;
+            }
+        }
+
+        // Fallback: point not found on any edge, use centroid angle
+        // This shouldn't happen for valid intersection points
+        eprintln!("Warning: perimeter_param could not find edge for point ({}, {})", p.x, p.y);
+        let cx: f64 = self.vertices.iter().map(|v| v.x.clone().into()).sum::<f64>() / (n as f64);
+        let cy: f64 = self.vertices.iter().map(|v| v.y.clone().into()).sum::<f64>() / (n as f64);
+        let theta = (p.y - cy).atan2(p.x - cx);
+        let normalized = if theta < 0.0 { theta + std::f64::consts::TAU } else { theta };
+        // Scale from [0, 2π) to [0, n)
+        normalized * (n as f64) / std::f64::consts::TAU
+    }
+
+    /// Get the point on the polygon boundary at perimeter parameter c.
+    /// c should be in [0, n) where n is the number of vertices.
+    pub fn perimeter_point(&self, c: f64) -> R2<f64> {
+        let n = self.vertices.len();
+
+        // Handle wrapping
+        let c = c.rem_euclid(n as f64);
+
+        let edge_idx = c.floor() as usize;
+        let edge_t = c - (edge_idx as f64);
+
+        let v0x: f64 = self.vertices[edge_idx].x.clone().into();
+        let v0y: f64 = self.vertices[edge_idx].y.clone().into();
+        let v1x: f64 = self.vertices[(edge_idx + 1) % n].x.clone().into();
+        let v1y: f64 = self.vertices[(edge_idx + 1) % n].y.clone().into();
+
+        R2 {
+            x: v0x + edge_t * (v1x - v0x),
+            y: v0y + edge_t * (v1y - v0y),
+        }
+    }
+
+    /// Get a point along the polygon perimeter between c0 and c1 (for containment testing).
+    /// Returns a point halfway along the perimeter path from c0 to c1.
+    pub fn perimeter_midpoint(&self, c0: f64, c1: f64) -> R2<f64> {
+        let n = self.vertices.len() as f64;
+        // Handle wrap-around: if c1 < c0, add n to c1
+        let c1 = if c1 < c0 { c1 + n } else { c1 };
+        let c_mid = (c0 + c1) / 2.0;
+        self.perimeter_point(c_mid)
+    }
+}
+
 impl<D: Clone> Polygon<D> {
     pub fn center(&self) -> R2<D>
     where
@@ -356,6 +483,98 @@ impl<D: UnitCircleGap> Polygon<D> {
 impl<D: Zero> Polygon<D> {
     pub fn zero(&self) -> D {
         Zero::zero(&self.vertices[0].x)
+    }
+}
+
+impl<D> Polygon<D>
+where
+    D: Clone + Into<f64> + Zero + Add<Output = D> + Sub<Output = D> + Mul<Output = D> + Div<f64, Output = D>,
+{
+    /// Compute the "secant area" for a polygon edge from p0 to p1.
+    /// This is the signed area between the chord (p0→p1) and the polygon boundary path.
+    /// The polygon boundary may include intermediate vertices between the two endpoints.
+    ///
+    /// theta0 and theta1 are the angular positions (relative to centroid) of the endpoints.
+    /// Vertices with theta in the range (theta0, theta1) are included in the path.
+    pub fn secant_area(&self, p0: &R2<D>, p1: &R2<D>, theta0: D, theta1: D) -> D {
+        let center = self.center();
+        let n = self.vertices.len();
+
+        // Compute theta for each vertex
+        let vertex_thetas: Vec<(usize, f64)> = (0..n)
+            .map(|i| {
+                let v = &self.vertices[i];
+                let rel_x: f64 = (v.x.clone() - center.x.clone()).into();
+                let rel_y: f64 = (v.y.clone() - center.y.clone()).into();
+                let theta = rel_y.atan2(rel_x);
+                (i, theta)
+            })
+            .collect();
+
+        let theta0_val: f64 = theta0.clone().into();
+        let theta1_val: f64 = theta1.clone().into();
+
+        // Find vertices in the theta range (theta0, theta1)
+        // Handle wrapping: theta1 might be > 2π if it wrapped around
+        let mut intermediate_vertices: Vec<(usize, f64)> = vertex_thetas
+            .iter()
+            .filter(|(_, vt)| {
+                // Normalize vertex theta to be in the same "revolution" as the range
+                let vt_normalized = if theta1_val > std::f64::consts::TAU {
+                    // Range wraps around, so we might need to add TAU to vt
+                    if *vt < theta0_val {
+                        *vt + std::f64::consts::TAU
+                    } else {
+                        *vt
+                    }
+                } else {
+                    *vt
+                };
+                // Vertex is between theta0 and theta1 (exclusive of endpoints)
+                vt_normalized > theta0_val + 1e-9 && vt_normalized < theta1_val - 1e-9
+            })
+            .map(|(i, vt)| {
+                // Normalize for sorting
+                let vt_normalized = if theta1_val > std::f64::consts::TAU && *vt < theta0_val {
+                    *vt + std::f64::consts::TAU
+                } else {
+                    *vt
+                };
+                (*i, vt_normalized)
+            })
+            .collect();
+
+        // Sort by theta
+        intermediate_vertices.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+
+        // If no intermediate vertices, secant area is 0 (chord = boundary)
+        if intermediate_vertices.is_empty() {
+            return self.zero();
+        }
+
+        // Compute the shoelace area of the polygon: p0 → v1 → v2 → ... → vn → p1 → back to p0
+        // Shoelace formula: sum of (x_i * y_{i+1} - x_{i+1} * y_i) / 2
+        let mut area = self.zero();
+
+        // First segment: p0 → first intermediate vertex
+        let first_v = &self.vertices[intermediate_vertices[0].0];
+        area = area + (p0.x.clone() * first_v.y.clone() - first_v.x.clone() * p0.y.clone());
+
+        // Intermediate segments: v_i → v_{i+1}
+        for i in 0..intermediate_vertices.len() - 1 {
+            let v_i = &self.vertices[intermediate_vertices[i].0];
+            let v_next = &self.vertices[intermediate_vertices[i + 1].0];
+            area = area + (v_i.x.clone() * v_next.y.clone() - v_next.x.clone() * v_i.y.clone());
+        }
+
+        // Segment from last intermediate vertex to p1
+        let last_v = &self.vertices[intermediate_vertices.last().unwrap().0];
+        area = area + (last_v.x.clone() * p1.y.clone() - p1.x.clone() * last_v.y.clone());
+
+        // Closing segment: p1 → back to p0
+        area = area + (p1.x.clone() * p0.y.clone() - p0.x.clone() * p1.y.clone());
+
+        area / 2.
     }
 }
 
@@ -711,18 +930,7 @@ mod tests {
         assert!(model.is_ok(), "Failed to build model: {:?}", model.err());
     }
 
-    // NOTE: The following tests are marked #[ignore] because they expose bugs in
-    // polygon containment testing and edge boundary detection that need deeper fixes.
-    // The basic scene building (test_polygon_circle_scene) works, but training
-    // requires proper boundary edge detection which fails for:
-    // - Fully contained polygons (all edges marked internal)
-    // - RefCell borrow issues during child component pruning
-    //
-    // TODO: Fix containment testing for polygon edges in component.rs
-    // TODO: Fix RefCell borrow in set.rs descendent_depths
-
     #[test]
-    #[ignore = "containment testing needs fix - all edges marked internal"]
     fn test_polygon_circle_training() {
         use crate::model::Model;
         use crate::to::To;
@@ -764,7 +972,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "dual vector issues during training"]
     fn test_polygon_ellipse_training() {
         use crate::model::Model;
         use crate::to::To;
@@ -806,22 +1013,31 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "polygon-polygon containment testing needs fix"]
+    #[ignore]  // Known bug: polygon-polygon containment testing gives wrong regions
     fn test_polygon_polygon_training() {
         use crate::model::Model;
         use crate::to::To;
 
-        // Two triangles
-        let tri1: Shape<f64> = Shape::Polygon(Polygon::new(vec![
+        // Two triangles with no coincident edges
+        // tri1: base at y=-1, apex at y=1
+        let tri1_poly = Polygon::new(vec![
             R2 { x: -1., y: -1. },
             R2 { x: 1., y: -1. },
             R2 { x: 0., y: 1. },
-        ]));
-        let tri2: Shape<f64> = Shape::Polygon(Polygon::new(vec![
-            R2 { x: -0.5, y: 0. },
-            R2 { x: 1.5, y: 0. },
-            R2 { x: 0.5, y: 2. },
-        ]));
+        ]);
+        // tri2: rotated differently, centered higher
+        let tri2_poly = Polygon::new(vec![
+            R2 { x: -0.5, y: 0.2 },
+            R2 { x: 1.3, y: 0.1 },
+            R2 { x: 0.4, y: 1.8 },
+        ]);
+
+        // Test basic intersection first
+        let intersections = polygon_polygon_intersect(&tri1_poly, &tri2_poly);
+        eprintln!("intersection points: {:?}", intersections);
+
+        let tri1: Shape<f64> = Shape::Polygon(tri1_poly);
+        let tri2: Shape<f64> = Shape::Polygon(tri2_poly);
 
         // Only second triangle moves
         let inputs = vec![
@@ -836,6 +1052,19 @@ mod tests {
         ];
 
         let mut model = Model::new(inputs, targets.to()).expect("Failed to create model");
+        let step = &model.steps[0];
+        eprintln!("total_area: {}", step.total_area);
+        eprintln!("num components: {}", step.components.len());
+        for (i, comp) in step.components.iter().enumerate() {
+            eprintln!("  component {}: key={}, {} regions", i, comp.key, comp.regions.len());
+            for (j, region) in comp.regions.iter().enumerate() {
+                eprintln!("    region {}: key={}, {} segments, area={}", j, region.key, region.segments.len(), region.area);
+            }
+        }
+        eprintln!("error: {:?}", step.error);
+        for (key, err) in &step.errors {
+            eprintln!("  {}: actual_area={:?}, target_area={}", key, err.actual_area, err.target_area);
+        }
         let initial_error = model.steps[0].error.v();
 
         model.train(0.5, 50).expect("Training failed");
@@ -886,7 +1115,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "concave polygon containment testing needs fix"]
     fn test_concave_polygon() {
         use crate::model::Model;
         use crate::to::To;

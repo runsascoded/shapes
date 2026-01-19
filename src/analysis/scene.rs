@@ -7,7 +7,7 @@ use std::{cell::RefCell, rc::Rc, collections::{BTreeSet, BTreeMap}, ops::{Neg, A
 use log::{debug, info, error};
 use ordered_float::OrderedFloat;
 
-use crate::{node::{N, Node}, contains::{Contains, ShapeContainsPoint}, distance::Distance, error::SceneError, region::RegionArg, set::S, shape::{Shape, AreaArg}, theta_points::ThetaPoints, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::{CanTransform, HasProjection, CanProject}, dual::Dual, to::To, math::deg::Deg, fmt::Fmt, component::{Component, self}, set::Set};
+use crate::{node::{N, Node}, contains::{ShapeContainsPoint, ContainsF64}, distance::Distance, error::SceneError, region::RegionArg, set::S, shape::{Shape, AreaArg}, boundary_coord::BoundaryCoord, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::{CanTransform, HasProjection, CanProject}, dual::Dual, to::To, math::deg::Deg, fmt::Fmt, component::{Component, self}, set::Set};
 
 /// Collection of [`Shape`]s (wrapped in [`Set`]s), and segmented into connected [`Component`]s.
 #[derive(Clone, Debug)]
@@ -53,7 +53,7 @@ impl<D: SceneD> Scene<D>
 where
     R2<D>: Into<R2<f64>> + SceneR2<D>,
     Shape<f64>: From<Shape<D>>,
-    Shape<D>: CanTransform<D, Output = Shape<D>> + HasProjection<D>,
+    Shape<D>: CanTransform<D, Output = Shape<D>> + HasProjection<D> + BoundaryCoord,
     f64: SceneFloat<D>,
 {
     pub fn new(shapes: Vec<Shape<D>>) -> Result<Scene<D>, SceneError> {
@@ -62,7 +62,6 @@ where
         let mut set_ptrs: Vec<S<D>> = sets.into_iter().map(|s| Rc::new(RefCell::new(s))).collect();
         let mut nodes: Vec<N<D>> = Vec::new();
         let merge_threshold = 1e-7;
-        let zero = set_ptrs[0].borrow().zero();
 
         let mut is_directly_connected: Vec<Vec<bool>> = Vec::new();
         // Intersect all shapes, pair-wise
@@ -96,17 +95,19 @@ where
                 } else {
                     directly_connected.push(true);
                 }
-                for i in intersections {
+                for intersection in intersections {
                     let mut merged = false;
-                    let theta0 = shape0.theta(&i);
-                    let theta1 = shape1.theta(&i);
+                    // Convert to f64 for coord computation
+                    let i_f64: R2<f64> = intersection.clone().into();
+                    let coord0 = shape0.coord(&i_f64);
+                    let coord1 = shape1.coord(&i_f64);
                     for node in &nodes {
-                        let d = node.borrow().p.distance(&i);
+                        let d = node.borrow().p.distance(&intersection);
                         if d.into() < merge_threshold {
                             // This intersection is close enough to an existing node; merge them
                             let mut node = node.borrow_mut();
-                            node.merge(i.clone(), idx, &theta0, jdx, &theta1);
-                            info!("Merged: {} into {}", i, node);
+                            node.merge(intersection.clone(), idx, coord0, jdx, coord1);
+                            info!("Merged: {} into {}", intersection, node);
                             merged = true;
                             break;
                         }
@@ -116,9 +117,9 @@ where
                     }
                     let node = Node {
                         idx: nodes.len(),
-                        p: i,
+                        p: intersection,
                         n: 1,
-                        shape_thetas: vec![(idx, theta0), (jdx, theta1)].into_iter().collect(),
+                        shape_coords: vec![(idx, coord0), (jdx, coord1)].into_iter().collect(),
                         edges: Vec::new(),
                     };
                     let n = Rc::new(RefCell::new(node));
@@ -160,7 +161,7 @@ where
         debug!("is_connected: {:?}", is_connected);
 
         for node in &nodes {
-            node.borrow().shape_thetas.keys().for_each(|i0| {
+            node.borrow().shape_coords.keys().for_each(|i0| {
                 nodes_by_shape[*i0].push(node.clone());
             });
         }
@@ -171,27 +172,27 @@ where
             let shape = &set_ptr.borrow().shape;
             let mut containers: BTreeSet<usize> = BTreeSet::new();
             for (jdx, container) in set_ptrs.iter().enumerate() {
-                // Get a boundary point: for polygons use first vertex, for others use point(0).
-                // Polygon's point(theta) doesn't give a boundary point (it uses projection-based
-                // parameterization intended for ellipses), so we must use an actual vertex.
-                let boundary_point = match shape {
-                    Shape::Polygon(p) => p.vertices[0].clone(),
-                    _ => shape.point(zero.clone()),
+                // Get a boundary point using BoundaryCoord::point(0)
+                let boundary_point: R2<f64> = shape.point(0.);
+                // Get center as f64 for containment check
+                let center_f64: R2<f64> = R2 {
+                    x: shape.center().x.clone().into(),
+                    y: shape.center().y.clone().into(),
                 };
                 if !is_connected[idx][jdx] &&
-                    // This check can false-positive if the shapes are tangent at theta == 0, so we check center-containment below as well
-                    container.borrow().shape.contains(&boundary_point) &&
+                    // This check can false-positive if the shapes are tangent at coord == 0, so we check center-containment below as well
+                    container.borrow().shape.contains_f64(&boundary_point) &&
                     // Concentric shapes contain each others' centers, so this check alone is insufficient (needs the above check as well)
-                    container.borrow().shape.contains(&shape.center()) {
+                    container.borrow().shape.contains_f64(&center_f64) {
                     containers.insert(jdx);
                 }
             }
             unconnected_containers.push(containers);
         }
 
-        // Sort each circle's nodes in order of where they appear on the circle (from -PI to PI)
+        // Sort each shape's nodes in order of where they appear on the boundary
         for (idx, nodes) in nodes_by_shape.iter_mut().enumerate() {
-            nodes.sort_by_cached_key(|n| OrderedFloat(n.borrow().theta(idx).into()))
+            nodes.sort_by_cached_key(|n| OrderedFloat(n.borrow().coord(idx)))
         }
 
         let components_idxs: Vec<Vec<usize>> = {
@@ -392,18 +393,16 @@ pub mod tests {
             let n = component.nodes[idx].borrow();
             assert_relative_eq!(n.p.x, x, epsilon = 1e-3);
             assert_relative_eq!(n.p.y, y, epsilon = 1e-3);
-            let shape_idxs: Vec<usize> = Vec::from_iter(n.shape_thetas.keys().copied());
+            let shape_idxs: Vec<usize> = Vec::from_iter(n.shape_coords.keys().copied());
             assert_eq!(
                 shape_idxs,
                 vec![c0idx, c1idx],
             );
-            let thetas: Vec<_> = n.shape_thetas.values().map(|t| t.deg()).map(|d| (round(&d.v()), d.d().iter().map(round).collect::<Vec<_>>())).collect();
+            // Note: shape_coords are now f64, so we just check the angle values directly
+            let coords: Vec<_> = n.shape_coords.values().map(|c| round(&c.deg())).collect();
             assert_eq!(
-                thetas,
-                vec![
-                    (deg0v, deg0d.into()),
-                    (deg1v, deg1d.into()),
-                ],
+                coords,
+                vec![deg0v, deg1v],
             );
         };
 
@@ -417,10 +416,10 @@ pub mod tests {
             ( 0.000, [ 0.000,  0.000,  0.000, 1.000,  0.000, -1.000, 0.000,  0.000,  0.000 ],  0.000, [ 0.000, 0.000,  0.000,  0.000, 0.000,  0.000,  0.000, 1.000, -1.000 ], 1, 180, [   0,   0,   0,   0, 57,   0,   0, -57,  57 ], 2,  -90, [   0,   0,   0,  57,  0, -57, -57,   0,   0 ]),
         ];
         assert_eq!(component.nodes.len(), expected.len());
-        for (idx, (x, dx, y, dy, c0idx, deg0v, deg0d, c1idx, deg1v, deg1d)) in expected.iter().enumerate() {
+        for (idx, (x, dx, y, dy, c0idx, deg0v, _deg0d, c1idx, deg1v, _deg1d)) in expected.iter().enumerate() {
             let x = Dual::new(*x, dx.iter().copied().collect());
             let y = Dual::new(*y, dy.iter().copied().collect());
-            check(idx, x, y, *c0idx, *deg0v, *deg0d, *c1idx, *deg1v, *deg1d);
+            check(idx, x, y, *c0idx, *deg0v, *_deg0d, *c1idx, *deg1v, *_deg1d);
         }
 
         assert_eq!(component.edges.len(), 12);
@@ -440,7 +439,7 @@ pub mod tests {
                 let start = segment.start();
                 let edge = segment.edge.clone();
                 let cidx = edge.borrow().set.borrow().idx;
-                format!("{}({})", cidx, start.borrow().theta(cidx).v().deg_str())
+                format!("{}({})", cidx, start.borrow().coord(cidx).deg_str())
             }).collect::<Vec<String>>().join(" ");
             format!("{} {}: {:.3} + {:.3} = {}", region.key, path_str, region.polygon_area.v(), region.secant_area.v(), region.area().s(3))
         }).collect::<Vec<String>>();
@@ -460,12 +459,12 @@ pub mod tests {
         assert_eq!(scene.components.len(), 2);
         assert_node_strs(&scene, vec![
               vec![
-                "N2( 0.999, vec![ 0.000,  0.000,  0.000,  0.000,  0.000,  0.000,  0.007,  0.042,  0.042,  0.993, -0.042,  0.994],  2.958, vec![ 0.000,  0.000,  0.000,  0.000,  0.000,  0.000,  0.168,  0.993,  1.007, -0.168,  0.007, -0.168]: C2(  80 [   0,    0,    0,    0,    0,    0, 1102,  -46,  138, -1102,   46, -1103]), C3(  -2 [   0,    0,    0,    0,    0,    0,  550, 3263, 3309, -550, -3263, -414]))",
-                "N3(-0.932, vec![ 0.000,  0.000,  0.000,  0.000,  0.000,  0.000,  0.175, -0.322, -0.366,  0.825,  0.322, -0.886],  2.636, vec![ 0.000,  0.000,  0.000,  0.000,  0.000,  0.000, -0.448,  0.825,  0.939,  0.448,  0.175, -0.481]: C2( 119 [   0,    0,    0,    0,    0,    0, 1027,  401, -138, -1027, -401, 1103]), C3(-159 [   0,    0,    0,    0,    0,    0, 1579, -2908, -3309, -1579, 2908,  414]))",
+                "N2( 0.999, vec![ 0.000,  0.000,  0.000,  0.000,  0.000,  0.000,  0.007,  0.042,  0.042,  0.993, -0.042,  0.994],  2.958, vec![ 0.000,  0.000,  0.000,  0.000,  0.000,  0.000,  0.168,  0.993,  1.007, -0.168,  0.007, -0.168]: C2(  80), C3(  -2))",
+                "N3(-0.932, vec![ 0.000,  0.000,  0.000,  0.000,  0.000,  0.000,  0.175, -0.322, -0.366,  0.825,  0.322, -0.886],  2.636, vec![ 0.000,  0.000,  0.000,  0.000,  0.000,  0.000, -0.448,  0.825,  0.939,  0.448,  0.175, -0.481]: C2( 119), C3(-159))",
               ],
               vec![
-                "N0( 0.500, vec![ 0.500,  0.866,  1.000,  0.500, -0.866, -1.000,  0.000,  0.000,  0.000,  0.000,  0.000,  0.000],  0.866, vec![ 0.289,  0.500,  0.577, -0.289,  0.500,  0.577,  0.000,  0.000,  0.000,  0.000,  0.000,  0.000]: C0(  60 [1895, -3283, -1895, -1895, 3283, 3791,    0,    0,    0,    0,    0,    0]), C1( 120 [-1895, -3283, -3791, 1895, 3283, 1895,    0,    0,    0,    0,    0,    0]))",
-                "N1( 0.500, vec![ 0.500, -0.866,  1.000,  0.500,  0.866, -1.000,  0.000,  0.000,  0.000,  0.000,  0.000,  0.000], -0.866, vec![-0.289,  0.500, -0.577,  0.289,  0.500, -0.577,  0.000,  0.000,  0.000,  0.000,  0.000,  0.000]: C0( -60 [-1895, -3283, 1895, 1895, 3283, -3791,    0,    0,    0,    0,    0,    0]), C1(-120 [1895, -3283, 3791, -1895, 3283, -1895,    0,    0,    0,    0,    0,    0]))",
+                "N0( 0.500, vec![ 0.500,  0.866,  1.000,  0.500, -0.866, -1.000,  0.000,  0.000,  0.000,  0.000,  0.000,  0.000],  0.866, vec![ 0.289,  0.500,  0.577, -0.289,  0.500,  0.577,  0.000,  0.000,  0.000,  0.000,  0.000,  0.000]: C0(  60), C1( 120))",
+                "N1( 0.500, vec![ 0.500, -0.866,  1.000,  0.500,  0.866, -1.000,  0.000,  0.000,  0.000,  0.000,  0.000,  0.000], -0.866, vec![-0.289,  0.500, -0.577,  0.289,  0.500, -0.577,  0.000,  0.000,  0.000,  0.000,  0.000,  0.000]: C0( -60), C1(-120))",
               ],
         ]);
     }

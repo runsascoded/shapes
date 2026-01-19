@@ -39,7 +39,7 @@ pub use analysis::regions;
 pub use analysis::scene;
 pub use analysis::segment;
 pub use analysis::set;
-pub use analysis::theta_points;
+pub use analysis::boundary_coord;
 
 // Re-export math utilities for backwards compatibility
 pub use math::d5;

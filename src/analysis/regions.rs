@@ -82,8 +82,8 @@ impl Component {
             set_idx: e.borrow().set.borrow().idx,
             node0_idx: e.borrow().node0.borrow().idx,
             node1_idx: e.borrow().node1.borrow().idx,
-            theta0: e.borrow().theta0.v(),
-            theta1: e.borrow().theta1.v(),
+            theta0: e.borrow().coord0,
+            theta1: e.borrow().coord1,
             container_idxs: e.borrow().container_set_idxs.clone(),
             is_component_boundary: e.borrow().is_component_boundary,
         }).collect();

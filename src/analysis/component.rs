@@ -5,7 +5,7 @@ use log::{debug, error};
 use serde::{Serialize, Deserialize};
 use tsify::Tsify;
 
-use crate::{node::{N, Node}, math::deg::Deg, edge::{E, self, EdgeArg, Edge}, contains::{Contains, ShapeContainsPoint}, region::{Region, RegionArg}, segment::Segment, set::S, theta_points::{ThetaPoints, ThetaPointsArg}, r2::R2, to::To, zero::Zero, fmt::{Fmt, DisplayNum}, hull::Hull, shape::{AreaArg, Shape}, dual::Dual};
+use crate::{node::{N, Node}, math::deg::Deg, edge::{E, self, EdgeArg, Edge}, contains::{ShapeContainsPoint, ContainsF64}, region::{Region, RegionArg}, segment::Segment, set::S, boundary_coord::BoundaryCoord, r2::R2, to::To, zero::Zero, fmt::{Fmt, DisplayNum}, hull::Hull, shape::AreaArg, dual::Dual};
 
 /// Trait alias for bounds required by [`Component`] construction and traversal.
 pub trait ComponentArg
@@ -16,7 +16,6 @@ pub trait ComponentArg
 + Fmt
 + RegionArg
 + ShapeContainsPoint
-+ ThetaPointsArg
 + Zero
 {}
 impl ComponentArg for f64 {}
@@ -66,29 +65,155 @@ where R2<D>: To<R2<f64>>,
             // Singleton component, set is on its own, doesn't intersect any others
             let set_idx = set_idxs[0];
             let set = &sets[set_idx];
-            let zero = set.borrow().zero();
-            let tau = zero.clone() + TAU;
-            let p = set.borrow().shape.point(zero.clone());
-            let mut node = Node {
-                idx: 0,
-                p,
-                n: 0,
-                shape_thetas: BTreeMap::new(),
-                edges: Vec::new(),
+            let shape = &set.borrow().shape;
+
+            // For polygons, we need one edge per polygon edge (vertex to vertex).
+            // For circles/ellipses, one edge from θ=0 to θ=2π works because secant_area()
+            // gives the enclosed area. For polygons, secant_area()=0, so we need actual
+            // polygon edges for the shoelace formula to compute the correct area.
+            let (nodes, edges, segments): (Vec<N<D>>, Vec<E<D>>, Vec<Segment<D>>) = match shape {
+                crate::shape::Shape::Polygon(polygon) => {
+                    let n_vertices = polygon.vertices.len();
+                    let mut nodes: Vec<N<D>> = Vec::with_capacity(n_vertices);
+                    let mut edges: Vec<E<D>> = Vec::with_capacity(n_vertices);
+
+                    // Create a node at each vertex
+                    for (i, vertex) in polygon.vertices.iter().enumerate() {
+                        let node = Node {
+                            idx: i,
+                            p: vertex.clone(),
+                            n: 0,
+                            shape_coords: BTreeMap::new(),
+                            edges: Vec::new(),
+                        };
+                        nodes.push(Rc::new(RefCell::new(node)));
+                    }
+
+                    // Create an edge for each polygon edge (vertex i to vertex i+1)
+                    // Use perimeter param as boundary coordinate
+                    for i in 0..n_vertices {
+                        let next_i = (i + 1) % n_vertices;
+                        let coord0 = i as f64;
+                        // Handle wrap-around: last edge goes from n-1 to n (not back to 0)
+                        let coord1 = if next_i == 0 { n_vertices as f64 } else { next_i as f64 };
+
+                        let edge = Edge {
+                            idx: i,
+                            set: set.clone(),
+                            node0: nodes[i].clone(),
+                            node1: nodes[next_i].clone(),
+                            coord0,
+                            coord1,
+                            container_set_idxs: container_set_idxs.clone(),
+                            is_component_boundary: true,
+                            visits: 0,
+                        };
+                        edges.push(Rc::new(RefCell::new(edge)));
+                    }
+
+                    // Link edges to nodes
+                    for (i, edge) in edges.iter().enumerate() {
+                        let next_i = (i + 1) % n_vertices;
+                        nodes[i].borrow_mut().add_edge(edge.clone());
+                        nodes[next_i].borrow_mut().add_edge(edge.clone());
+                    }
+
+                    // Create segments for the region (all edges traversed forward)
+                    let segments: Vec<Segment<D>> = edges.iter().map(|e| Segment { edge: e.clone(), fwd: true }).collect();
+
+                    (nodes, edges, segments)
+                }
+                crate::shape::Shape::Circle(c) => {
+                    // Circle: single edge from θ=0 to θ=2π
+                    // Point at θ=0 is (cx + r, cy)
+                    let p = R2 { x: c.c.x.clone() + c.r.clone(), y: c.c.y.clone() };
+                    let node = Node {
+                        idx: 0,
+                        p,
+                        n: 0,
+                        shape_coords: BTreeMap::new(),
+                        edges: Vec::new(),
+                    };
+                    let n = Rc::new(RefCell::new(node));
+                    let edge = Edge {
+                        idx: 0,
+                        set: set.clone(),
+                        node0: n.clone(),
+                        node1: n.clone(),
+                        coord0: 0.,
+                        coord1: TAU,
+                        container_set_idxs: container_set_idxs.clone(),
+                        is_component_boundary: true,
+                        visits: 0,
+                    };
+                    let e = Rc::new(RefCell::new(edge));
+                    n.borrow_mut().add_edge(e.clone());
+                    let segments = vec![Segment { edge: e.clone(), fwd: true }];
+                    (vec![n], vec![e], segments)
+                }
+                crate::shape::Shape::XYRR(e) => {
+                    // XYRR ellipse: single edge from θ=0 to θ=2π
+                    // Point at θ=0 is (cx + rx, cy)
+                    let p = R2 { x: e.c.x.clone() + e.r.x.clone(), y: e.c.y.clone() };
+                    let node = Node {
+                        idx: 0,
+                        p,
+                        n: 0,
+                        shape_coords: BTreeMap::new(),
+                        edges: Vec::new(),
+                    };
+                    let n = Rc::new(RefCell::new(node));
+                    let edge = Edge {
+                        idx: 0,
+                        set: set.clone(),
+                        node0: n.clone(),
+                        node1: n.clone(),
+                        coord0: 0.,
+                        coord1: TAU,
+                        container_set_idxs: container_set_idxs.clone(),
+                        is_component_boundary: true,
+                        visits: 0,
+                    };
+                    let edge_rc = Rc::new(RefCell::new(edge));
+                    n.borrow_mut().add_edge(edge_rc.clone());
+                    let segments = vec![Segment { edge: edge_rc.clone(), fwd: true }];
+                    (vec![n], vec![edge_rc], segments)
+                }
+                crate::shape::Shape::XYRRT(e) => {
+                    // XYRRT ellipse: single edge from θ=0 to θ=2π
+                    // Point at θ=0 is center + rotate((rx, 0), rotation_angle)
+                    let cos_t = e.t.clone().cos();
+                    let sin_t = e.t.clone().sin();
+                    let p = R2 {
+                        x: e.c.x.clone() + e.r.x.clone() * cos_t.clone(),
+                        y: e.c.y.clone() + e.r.x.clone() * sin_t,
+                    };
+                    let node = Node {
+                        idx: 0,
+                        p,
+                        n: 0,
+                        shape_coords: BTreeMap::new(),
+                        edges: Vec::new(),
+                    };
+                    let n = Rc::new(RefCell::new(node));
+                    let edge = Edge {
+                        idx: 0,
+                        set: set.clone(),
+                        node0: n.clone(),
+                        node1: n.clone(),
+                        coord0: 0.,
+                        coord1: TAU,
+                        container_set_idxs: container_set_idxs.clone(),
+                        is_component_boundary: true,
+                        visits: 0,
+                    };
+                    let edge_rc = Rc::new(RefCell::new(edge));
+                    n.borrow_mut().add_edge(edge_rc.clone());
+                    let segments = vec![Segment { edge: edge_rc.clone(), fwd: true }];
+                    (vec![n], vec![edge_rc], segments)
+                }
             };
-            let n = Rc::new(RefCell::new(node.clone()));
-            let edge = Edge {
-                idx: 0,
-                set: set.clone(),
-                node0: n.clone(),
-                node1: n.clone(),
-                theta0: zero,
-                theta1: tau.clone(),
-                container_set_idxs: container_set_idxs.clone(),
-                is_component_boundary: true,
-                visits: 0,
-            };
-            let e = Rc::new(RefCell::new(edge));
+
             let region = {
                 let mut key = String::new();
                 for i in 0..num_sets {
@@ -102,25 +227,24 @@ where R2<D>: To<R2<f64>>,
                 region_container_set_idxs.insert(set_idx);
                 Region::new(
                     key,
-                    vec![ Segment { edge: e.clone(), fwd: true } ],
+                    segments.clone(),
                     region_container_set_idxs.clone()
                 )
             };
-            node.add_edge(e.clone());
+            let hull = Hull(segments);
             let component = Component {
                 key,
                 set_idxs: vec![set_idx],
                 sets: component_sets,
-                nodes: vec![n.clone()],
-                edges: vec![e.clone()],
+                nodes: nodes.clone(),
+                edges: edges.clone(),
                 container_set_idxs: container_set_idxs.clone(),
                 child_component_keys: BTreeSet::new(),  // populated by `Scene`, once all `Component`s have been created
                 regions: vec![ region.clone() ],
-                hull: Hull(vec![ Segment { edge: e.clone(), fwd: true } ]),
+                hull,
             };
             debug!("singleton component: {}", set_idx);
-            debug!("  node: {}", node);
-            debug!("  edge: {}", e.borrow());
+            debug!("  {} nodes, {} edges", nodes.len(), edges.len());
             debug!("  region: {}", region);
             return component;
         }
@@ -132,7 +256,7 @@ where R2<D>: To<R2<f64>>,
                 nodes_by_set[*i]
                 .iter()
                 .filter(|n|
-                    n.borrow().shape_thetas.keys().min() == Some(i)
+                    n.borrow().shape_coords.keys().min() == Some(i)
                 )
                 .cloned()
             )
@@ -198,29 +322,22 @@ where R2<D>: To<R2<f64>>,
         for set_idx in set_idxs {
             let set_idx = *set_idx;
             let nodes = &nodes_by_set[set_idx];
-            debug!("{} nodes for set {}: {}", nodes.len(), set_idx, nodes.iter().map(|n| n.borrow().theta(set_idx).deg_str()).collect::<Vec<String>>().join(", "));
+            debug!("{} nodes for set {}: {}", nodes.len(), set_idx, nodes.iter().map(|n| n.borrow().coord(set_idx).deg_str()).collect::<Vec<String>>().join(", "));
             let num_set_nodes = nodes.len();
             let set = sets[set_idx].clone();
+            let coord_period = set.borrow().shape.coord_period();
             for node_idx in 0..num_set_nodes {
                 let cur_node = nodes[node_idx].clone();
                 let nxt_node = nodes[(node_idx + 1) % num_set_nodes].clone();
-                let cur_theta = cur_node.borrow().theta(set_idx);
-                let nxt_theta = nxt_node.borrow().theta(set_idx);
-                let nxt_theta = if nxt_theta <= cur_theta { nxt_theta + TAU } else { nxt_theta };
-                // For polygons, use line midpoint between nodes (edges are straight lines).
-                // For ellipses/circles, use arc_midpoint (edges are curved arcs).
-                let edge_midpoint = match &sets[set_idx].borrow().shape {
-                    Shape::Polygon(_) => {
-                        // Line midpoint between the two nodes
-                        let p0 = cur_node.borrow().p.clone();
-                        let p1 = nxt_node.borrow().p.clone();
-                        R2 {
-                            x: (p0.x + p1.x) / 2.,
-                            y: (p0.y + p1.y) / 2.,
-                        }
-                    }
-                    _ => sets[set_idx].borrow().shape.arc_midpoint(cur_theta.clone(), nxt_theta.clone()),
-                };
+                let cur_coord = cur_node.borrow().coord(set_idx);
+                let nxt_coord = nxt_node.borrow().coord(set_idx);
+                let nxt_coord = if nxt_coord <= cur_coord { nxt_coord + coord_period } else { nxt_coord };
+                // Use midpoint to get a test point for containment checking.
+                // For circles/ellipses, this gives a point on the boundary arc.
+                // For polygons, this gives a point on a unit circle centered at the centroid,
+                // which isn't on the polygon boundary but gives different points for edges
+                // going in different directions (enabling correct containment classification).
+                let edge_midpoint = sets[set_idx].borrow().shape.midpoint(cur_coord, nxt_coord);
                 let mut is_component_boundary = true;
                 let mut container_idxs: BTreeSet<usize> = component_container_idxs.clone();
                 for cdx in set_idxs {
@@ -229,7 +346,7 @@ where R2<D>: To<R2<f64>>,
                         continue;
                     }
                     let container = sets[cdx].clone();
-                    let contained = container.borrow().shape.contains(&edge_midpoint);
+                    let contained = container.borrow().shape.contains_f64(&edge_midpoint);
                     if contained {
                         // Set cdx contains this edge
                         container_idxs.insert(cdx);
@@ -240,7 +357,7 @@ where R2<D>: To<R2<f64>>,
                     idx: edges.len(),
                     set: set.clone(),
                     node0: cur_node, node1: nxt_node,
-                    theta0: cur_theta, theta1: nxt_theta,
+                    coord0: cur_coord, coord1: nxt_coord,
                     container_set_idxs: container_idxs,
                     is_component_boundary,
                     visits: 0,

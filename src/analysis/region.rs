@@ -18,7 +18,7 @@ use crate::{
     r2::R2,
     segment::Segment,
     shape::Shape,
-    theta_points::ThetaPoints,
+    boundary_coord::BoundaryCoord,
     to::To,
 };
 
@@ -134,14 +134,26 @@ where
     Shape<f64>: From<Shape<D>>,
 {
     pub fn contains(&self, p: &R2<f64>, all_shapes: &BTreeMap<usize, Shape<f64>>) -> bool {
+        // Special case for singleton polygon regions: the coord-based containment check
+        // doesn't work because polygon edge coords use perimeter params
+        // while shape.coord(&p) returns perimeter params. For singleton polygons, just
+        // check if the polygon contains the point directly.
+        if all_shapes.len() == 1 {
+            if let Some((_, shape)) = all_shapes.iter().next() {
+                if let Shape::Polygon(polygon) = shape {
+                    return polygon.contains(p);
+                }
+            }
+        }
+
         let y = p.y;
         let mut points_at_y: Vec<(usize, f64, f64)> = all_shapes
             .iter()
             .flat_map(|(idx, s)| {
                 s.at_y(y).into_iter().map(|x| {
                     let p = R2 { x, y };
-                    let theta = s.theta(&p);
-                    (*idx, x, theta)
+                    let coord = s.coord(&p);
+                    (*idx, x, coord)
                 })
             })
             .collect();
@@ -170,16 +182,16 @@ where
                 }
                 let prv_edges = self.edges_for_set(prv.0);
                 if !prv_edges
-                    .iter().any(|edge| edge.borrow().contains_theta(prv.2))
+                    .iter().any(|edge| edge.borrow().contains_coord(prv.2))
                 {
-                    // debug!("  breaking between {} and {}: {} does not contain theta {}", prv.1, x, prv_edges.iter().map(|e| format!("{}", e.borrow())).join(","), prv.2);
+                    // debug!("  breaking between {} and {}: {} does not contain coord {}", prv.1, x, prv_edges.iter().map(|e| format!("{}", e.borrow())).join(","), prv.2);
                     return false;
                 }
                 let cur_edges = self.edges_for_set(cur.0);
                 if !cur_edges
-                    .iter().any(|edge| edge.borrow().contains_theta(cur.2))
+                    .iter().any(|edge| edge.borrow().contains_coord(cur.2))
                 {
-                    // debug!("  breaking between {} and {}: {} does not contain theta {}", prv.1, x, cur_edges.iter().map(|e| format!("{}", e.borrow())).join(","), cur.2);
+                    // debug!("  breaking between {} and {}: {} does not contain coord {}", prv.1, x, cur_edges.iter().map(|e| format!("{}", e.borrow())).join(","), cur.2);
                     return false;
                 }
                 return true;

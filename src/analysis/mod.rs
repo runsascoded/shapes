@@ -12,4 +12,4 @@ pub mod regions;
 pub mod scene;
 pub mod segment;
 pub mod set;
-pub mod theta_points;
+pub mod boundary_coord;

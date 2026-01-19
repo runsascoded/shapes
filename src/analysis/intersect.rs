@@ -1,7 +1,7 @@
 use std::{ops::{Div, Neg, Add, Mul, Sub}, fmt::Display};
 
 
-use crate::{circle, dual::Dual, ellipses::{cdef, xyrrt}, r2::R2, transform::{CanProject, CanTransform}, shape::Shape, trig::Trig, theta_points::ThetaPointsArg, rotate::RotateArg, geometry::polygon::{self, polygon_polygon_intersect}};
+use crate::{circle, dual::Dual, ellipses::{cdef, xyrrt}, r2::R2, transform::{CanProject, CanTransform}, shape::Shape, trig::Trig, rotate::RotateArg, geometry::polygon::{self, polygon_polygon_intersect}};
 
 pub trait Intersect<In, Out> {
     fn intersect(&self, other: &In) -> Vec<R2<Out>>;
@@ -18,7 +18,6 @@ pub trait IntersectShapesArg
 + circle::UnitIntersectionsArg
 + xyrrt::UnitIntersectionsArg
 + polygon::UnitIntersectionsArg
-+ ThetaPointsArg
 {}
 
 impl IntersectShapesArg for f64 {}

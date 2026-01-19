@@ -207,6 +207,13 @@ impl Step {
 
         let step_size = error_size * max_step_error_ratio;
         let magnitude = grad_vec.iter().map(|d| d * d).sum::<f64>().sqrt();
+
+        // If magnitude is zero (no gradient), skip the step and return a clone with same shapes
+        if magnitude == 0. || magnitude.is_nan() {
+            debug!("  skipping step: magnitude is {} (error_size: {}, grad_vec: {:?})", magnitude, error_size, grad_vec);
+            return Step::nxt(self.shapes.clone(), self.targets.clone());
+        }
+
         let grad_scale = step_size / magnitude;
         let step_vec = grad_vec.iter().map(|grad| grad * grad_scale).collect::<Vec<f64>>();
 
