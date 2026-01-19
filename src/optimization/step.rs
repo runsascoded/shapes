@@ -15,7 +15,6 @@ pub type Errors = BTreeMap<String, Error>;
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
 pub struct Step {
-    #[serde(skip)]
     pub shapes: Vec<Shape<D>>,
     pub components: Vec<regions::Component>,
     pub targets: Targets<f64>,
