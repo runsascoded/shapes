@@ -14,6 +14,7 @@ pub type Input = (Shape<f64>, Duals);
 pub type InputSpec = (Shape<f64>, Vec<bool>);
 
 #[derive(Debug, Display, Clone, From, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(tag = "kind")]
 pub enum Shape<D> {
     Circle(circle::Circle<D>),
     XYRR(xyrr::XYRR<D>),
