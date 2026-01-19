@@ -1013,7 +1013,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]  // Known bug: polygon-polygon containment testing gives wrong regions
     fn test_polygon_polygon_training() {
         use crate::model::Model;
         use crate::to::To;
@@ -1052,19 +1051,6 @@ mod tests {
         ];
 
         let mut model = Model::new(inputs, targets.to()).expect("Failed to create model");
-        let step = &model.steps[0];
-        eprintln!("total_area: {}", step.total_area);
-        eprintln!("num components: {}", step.components.len());
-        for (i, comp) in step.components.iter().enumerate() {
-            eprintln!("  component {}: key={}, {} regions", i, comp.key, comp.regions.len());
-            for (j, region) in comp.regions.iter().enumerate() {
-                eprintln!("    region {}: key={}, {} segments, area={}", j, region.key, region.segments.len(), region.area);
-            }
-        }
-        eprintln!("error: {:?}", step.error);
-        for (key, err) in &step.errors {
-            eprintln!("  {}: actual_area={:?}, target_area={}", key, err.actual_area, err.target_area);
-        }
         let initial_error = model.steps[0].error.v();
 
         model.train(0.5, 50).expect("Training failed");

@@ -129,6 +129,48 @@ where
             is_directly_connected.push(directly_connected);
         }
 
+        // For polygons, add vertices as nodes (they're boundary points that need to be
+        // in the graph for proper area computation, since polygon edges are straight lines
+        // between consecutive nodes, not curved arcs with a "bulge" like circles/ellipses).
+        for (idx, set_ptr) in set_ptrs.iter().enumerate() {
+            let shape = &set_ptr.borrow().shape;
+            if let Shape::Polygon(polygon) = shape {
+                for (v_idx, vertex) in polygon.vertices.iter().enumerate() {
+                    let v_f64: R2<f64> = R2 { x: vertex.x.clone().into(), y: vertex.y.clone().into() };
+                    // Check if this vertex is already close to an existing node
+                    let mut merged = false;
+                    let coord = v_idx as f64;  // Perimeter param for polygon vertex
+                    for node in &nodes {
+                        let d = node.borrow().p.distance(vertex);
+                        if d.into() < merge_threshold {
+                            // Merge this vertex into existing node
+                            let mut node = node.borrow_mut();
+                            if !node.shape_coords.contains_key(&idx) {
+                                node.shape_coords.insert(idx, coord);
+                            }
+                            merged = true;
+                            break;
+                        }
+                    }
+                    if merged {
+                        continue;
+                    }
+                    // Create a new node for this vertex
+                    let node = Node {
+                        idx: nodes.len(),
+                        p: vertex.clone(),
+                        n: 1,
+                        shape_coords: vec![(idx, coord)].into_iter().collect(),
+                        edges: Vec::new(),
+                    };
+                    let n = Rc::new(RefCell::new(node));
+                    nodes.push(n.clone());
+                    debug!("Added polygon {} vertex {} as node {}: ({}, {})",
+                        idx, v_idx, n.borrow().idx, v_f64.x, v_f64.y);
+                }
+            }
+        }
+
         debug!("{} nodes", nodes.len());
         for (idx, node) in nodes.iter().enumerate() {
             debug!("  Node {}: {}", idx, node.borrow());
