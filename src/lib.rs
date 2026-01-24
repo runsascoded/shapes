@@ -167,22 +167,104 @@ pub fn train(model: JsValue, max_step_error_ratio: f64, max_steps: usize) -> JsV
     serde_wasm_bindgen::to_value(&model).unwrap()
 }
 
-/// Performs a single gradient descent step.
+/// Runs Adam optimizer training on a model.
+///
+/// Adam (Adaptive Moment Estimation) maintains per-parameter momentum and variance
+/// estimates, enabling better convergence for complex optimization landscapes.
+/// Particularly useful for mixed shape scenes (e.g., polygon + circle).
+///
+/// # Arguments
+/// * `model` - Model created by [`make_model`].
+/// * `learning_rate` - Adam learning rate (typical: 0.001 to 0.1).
+/// * `max_steps` - Maximum number of optimization steps.
+///
+/// # Returns
+/// Updated model with training history containing all intermediate steps.
+///
+/// # Panics
+/// If a training step fails due to invalid geometry.
+#[wasm_bindgen]
+pub fn train_adam(model: JsValue, learning_rate: f64, max_steps: usize) -> JsValue {
+    let mut model: Model = serde_wasm_bindgen::from_value(model).unwrap();
+    model.train_adam(learning_rate, max_steps).expect("Adam training failed");
+    serde_wasm_bindgen::to_value(&model).unwrap()
+}
+
+/// Runs robust optimization with Adam, gradient clipping, and backtracking.
+///
+/// This is the recommended training method. It combines:
+/// - Adam optimizer for per-parameter adaptive learning rates
+/// - Gradient clipping to prevent catastrophically large steps
+/// - Learning rate warmup for stability
+/// - Step rejection when error increases significantly
+///
+/// # Arguments
+/// * `model` - Model created by [`make_model`].
+/// * `max_steps` - Maximum number of optimization steps.
+///
+/// # Returns
+/// Updated model with training history containing all intermediate steps.
+///
+/// # Panics
+/// If a training step fails due to invalid geometry.
+#[wasm_bindgen]
+pub fn train_robust(model: JsValue, max_steps: usize) -> JsValue {
+    let mut model: Model = serde_wasm_bindgen::from_value(model).unwrap();
+    model.train_robust(max_steps).expect("Robust training failed");
+    serde_wasm_bindgen::to_value(&model).unwrap()
+}
+
+/// Performs a single gradient descent step with gradient clipping (recommended).
+///
+/// Uses fixed learning rate with gradient clipping for stable updates.
+/// This is the recommended method - it prevents the oscillation that occurs
+/// with error-scaled step sizes.
 ///
 /// # Arguments
 /// * `step` - Current optimization state from [`make_step`] or a previous [`step`] call.
-/// * `max_step_error_ratio` - Learning rate scaling factor.
+/// * `learning_rate` - Fixed learning rate (typical: 0.01 to 0.1, default 0.05).
 ///
 /// # Returns
 /// New [`Step`] with updated shape positions.
-///
-/// # Panics
-/// If the step fails due to invalid geometry.
 #[wasm_bindgen]
-pub fn step(step: JsValue, max_step_error_ratio: f64) -> JsValue {
+pub fn step(step: JsValue, learning_rate: f64) -> JsValue {
+    let step: Step = serde_wasm_bindgen::from_value(step).unwrap();
+    // Use sensible defaults for clipping
+    let step = step.step_clipped(learning_rate, 0.5, 1.0).expect("Step failed");
+    serde_wasm_bindgen::to_value(&step).unwrap()
+}
+
+/// Legacy step function that scales step size by error.
+///
+/// **Deprecated**: Use [`step`] instead. This function can cause oscillation
+/// when error is high because step_size = error * max_step_error_ratio.
+///
+/// # Arguments
+/// * `step` - Current optimization state.
+/// * `max_step_error_ratio` - Learning rate scaling factor.
+#[wasm_bindgen]
+pub fn step_legacy(step: JsValue, max_step_error_ratio: f64) -> JsValue {
     let step: Step = serde_wasm_bindgen::from_value(step).unwrap();
     let step = step.step(max_step_error_ratio).expect("Step failed");
     serde_wasm_bindgen::to_value(&step).unwrap()
+}
+
+/// Check if a step has converged below a custom threshold.
+///
+/// Use this to implement user-configurable convergence thresholds.
+/// The step.converged field uses the default threshold (1e-10), but
+/// this function lets you check against any threshold.
+///
+/// # Arguments
+/// * `step` - Current optimization state.
+/// * `threshold` - Custom convergence threshold (e.g., 1e-6 for fast, 1e-14 for precise).
+///
+/// # Returns
+/// True if step.error < threshold.
+#[wasm_bindgen]
+pub fn is_converged(step: JsValue, threshold: f64) -> bool {
+    let step: Step = serde_wasm_bindgen::from_value(step).unwrap();
+    step.error.v() < threshold
 }
 
 /// Expands target specifications into fully-qualified region targets.
@@ -200,6 +282,33 @@ pub fn expand_targets(targets: JsValue) -> JsValue {
     let targets: TargetsMap<f64> = serde_wasm_bindgen::from_value(targets.clone()).unwrap();
     let targets = Targets::new(targets);
     serde_wasm_bindgen::to_value(&targets).unwrap()
+}
+
+/// Checks if any polygon shapes in the given step are self-intersecting.
+///
+/// Self-intersecting polygons have edges that cross each other, which
+/// invalidates area calculations and causes visual artifacts.
+///
+/// # Arguments
+/// * `step` - Current optimization state.
+///
+/// # Returns
+/// Array of strings describing any validity issues (empty if valid).
+#[wasm_bindgen]
+pub fn check_polygon_validity(step: JsValue) -> JsValue {
+    let step: Step = serde_wasm_bindgen::from_value(step).unwrap();
+    let mut issues = Vec::<String>::new();
+
+    for (idx, shape) in step.shapes.iter().enumerate() {
+        if let crate::shape::Shape::Polygon(poly) = shape {
+            let poly_f64 = poly.v();
+            if poly_f64.is_self_intersecting() {
+                issues.push(format!("Shape {} (polygon) is self-intersecting", idx));
+            }
+        }
+    }
+
+    serde_wasm_bindgen::to_value(&issues).unwrap()
 }
 
 /// Computes intersection points between an axis-aligned ellipse and the unit circle.
