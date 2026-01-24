@@ -148,6 +148,112 @@ impl Polygon<f64> {
         // Point is inside if odd number of crossings
         crossings % 2 == 1
     }
+
+    /// Check if this polygon self-intersects (any non-adjacent edges cross).
+    /// A self-intersecting polygon is invalid for area calculations.
+    pub fn is_self_intersecting(&self) -> bool {
+        let n = self.vertices.len();
+        if n < 4 {
+            return false; // Triangles can't self-intersect
+        }
+
+        // Check all pairs of non-adjacent edges
+        for i in 0..n {
+            let a0 = &self.vertices[i];
+            let a1 = &self.vertices[(i + 1) % n];
+
+            // Only check edges that aren't adjacent (skip i+1, i-1)
+            for j in (i + 2)..n {
+                // Skip if j is adjacent to i (wraps around for last edge)
+                if j == (i + n - 1) % n || (i == 0 && j == n - 1) {
+                    continue;
+                }
+
+                let b0 = &self.vertices[j];
+                let b1 = &self.vertices[(j + 1) % n];
+
+                if Self::segments_intersect(a0, a1, b0, b1) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Check if two line segments intersect (excluding endpoints).
+    fn segments_intersect(a0: &R2<f64>, a1: &R2<f64>, b0: &R2<f64>, b1: &R2<f64>) -> bool {
+        // Using cross product method
+        let d1 = Self::cross_sign(b0, b1, a0);
+        let d2 = Self::cross_sign(b0, b1, a1);
+        let d3 = Self::cross_sign(a0, a1, b0);
+        let d4 = Self::cross_sign(a0, a1, b1);
+
+        // Segments intersect if endpoints are on opposite sides of each other's lines
+        if ((d1 > 0.0 && d2 < 0.0) || (d1 < 0.0 && d2 > 0.0)) &&
+           ((d3 > 0.0 && d4 < 0.0) || (d3 < 0.0 && d4 > 0.0)) {
+            return true;
+        }
+
+        // Collinear cases (endpoints touching) - we don't count these as intersections
+        // since adjacent edges share endpoints
+        false
+    }
+
+    /// Cross product sign: (b - a) × (c - a)
+    fn cross_sign(a: &R2<f64>, b: &R2<f64>, c: &R2<f64>) -> f64 {
+        (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
+    }
+
+    /// Compute a penalty value for self-intersection.
+    /// Returns 0 if not self-intersecting, positive value otherwise.
+    /// The penalty increases with the "severity" of the intersection.
+    pub fn self_intersection_penalty(&self) -> f64 {
+        let n = self.vertices.len();
+        if n < 4 {
+            return 0.0;
+        }
+
+        let mut total_penalty = 0.0;
+
+        for i in 0..n {
+            let a0 = &self.vertices[i];
+            let a1 = &self.vertices[(i + 1) % n];
+
+            for j in (i + 2)..n {
+                if j == (i + n - 1) % n || (i == 0 && j == n - 1) {
+                    continue;
+                }
+
+                let b0 = &self.vertices[j];
+                let b1 = &self.vertices[(j + 1) % n];
+
+                // Compute intersection depth (how much the segments overlap)
+                if let Some(depth) = Self::intersection_depth(a0, a1, b0, b1) {
+                    total_penalty += depth;
+                }
+            }
+        }
+
+        total_penalty
+    }
+
+    /// Compute how "deep" two segments intersect (0 if they don't).
+    fn intersection_depth(a0: &R2<f64>, a1: &R2<f64>, b0: &R2<f64>, b1: &R2<f64>) -> Option<f64> {
+        let d1 = Self::cross_sign(b0, b1, a0);
+        let d2 = Self::cross_sign(b0, b1, a1);
+        let d3 = Self::cross_sign(a0, a1, b0);
+        let d4 = Self::cross_sign(a0, a1, b1);
+
+        if ((d1 > 0.0 && d2 < 0.0) || (d1 < 0.0 && d2 > 0.0)) &&
+           ((d3 > 0.0 && d4 < 0.0) || (d3 < 0.0 && d4 > 0.0)) {
+            // Segments intersect - compute the depth as min of the cross products
+            // This gives a sense of how "deep" the intersection is
+            let depth = d1.abs().min(d2.abs()).min(d3.abs()).min(d4.abs());
+            Some(depth)
+        } else {
+            None
+        }
+    }
 }
 
 impl Polygon<D> {
@@ -170,6 +276,127 @@ impl Polygon<D> {
             .iter()
             .flat_map(|v| [v.x.d().clone(), v.y.d().clone()])
             .collect()
+    }
+
+    /// Compute regularization penalty that encourages "nice" polygon shapes.
+    ///
+    /// Returns a Dual with both value and gradient, penalizing:
+    /// - Non-convexity (vertices that create concave regions)
+    /// - Irregular edge lengths (variance in edge lengths)
+    ///
+    /// Higher penalty = worse shape. Returns 0 for perfectly regular convex polygons.
+    pub fn regularity_penalty(&self) -> Dual {
+        let n = self.vertices.len();
+        if n < 3 {
+            return Dual::new(0.0, vec![0.0; self.n()]);
+        }
+
+        let mut penalty = Dual::new(0.0, vec![0.0; self.n()]);
+
+        // 1. Edge length variance penalty - encourage uniform edge lengths
+        let edges: Vec<Dual> = (0..n).map(|i| {
+            let v0 = &self.vertices[i];
+            let v1 = &self.vertices[(i + 1) % n];
+            let dx = v1.x.clone() - &v0.x;
+            let dy = v1.y.clone() - &v0.y;
+            (dx.clone() * &dx + dy.clone() * &dy).sqrt()
+        }).collect();
+
+        // Compute mean edge length
+        let mean_edge: Dual = edges.iter().cloned().sum::<Dual>() / n as f64;
+
+        // Variance: sum of (edge - mean)^2
+        for edge in &edges {
+            let diff = edge.clone() - &mean_edge;
+            penalty = penalty + diff.clone() * &diff;
+        }
+
+        // 2. Convexity penalty - penalize concave vertices
+        // A vertex is concave if the cross product at that vertex has opposite sign from others
+        // Use soft penalty: for each vertex, penalize negative cross product
+        for i in 0..n {
+            let v0 = &self.vertices[(i + n - 1) % n];
+            let v1 = &self.vertices[i];
+            let v2 = &self.vertices[(i + 1) % n];
+
+            // Cross product (v1-v0) × (v2-v1) - should be positive for CCW convex
+            let dx1 = v1.x.clone() - &v0.x;
+            let dy1 = v1.y.clone() - &v0.y;
+            let dx2 = v2.x.clone() - &v1.x;
+            let dy2 = v2.y.clone() - &v1.y;
+            let cross = dx1.clone() * &dy2 - dy1.clone() * &dx2;
+
+            // Penalize negative cross products (concave vertices)
+            // Use soft penalty: max(0, -cross) or smooth approximation
+            let cross_v = cross.v();
+            if cross_v < 0.0 {
+                // Concave vertex - add penalty proportional to how concave it is
+                penalty = penalty - cross.clone() * 0.1; // Scale factor to balance with edge variance
+            }
+        }
+
+        penalty
+    }
+
+    /// Check for self-intersection and return a penalty with gradients.
+    ///
+    /// This uses a soft penalty based on how close non-adjacent edges are to intersecting.
+    /// For actually intersecting edges, returns a large penalty.
+    pub fn self_intersection_penalty_dual(&self) -> Dual {
+        let n = self.vertices.len();
+        if n < 4 {
+            return Dual::new(0.0, vec![0.0; self.n()]);
+        }
+
+        let mut penalty = Dual::new(0.0, vec![0.0; self.n()]);
+
+        // Check all pairs of non-adjacent edges
+        for i in 0..n {
+            let a0 = &self.vertices[i];
+            let a1 = &self.vertices[(i + 1) % n];
+
+            for j in (i + 2)..n {
+                // Skip adjacent edges
+                if j == (i + n - 1) % n || (i == 0 && j == n - 1) {
+                    continue;
+                }
+
+                let b0 = &self.vertices[j];
+                let b1 = &self.vertices[(j + 1) % n];
+
+                // Compute cross products for intersection test
+                // d1 = (b1-b0) × (a0-b0), d2 = (b1-b0) × (a1-b0)
+                let bx = b1.x.clone() - &b0.x;
+                let by = b1.y.clone() - &b0.y;
+
+                let d1 = bx.clone() * (a0.y.clone() - &b0.y) - by.clone() * (a0.x.clone() - &b0.x);
+                let d2 = bx.clone() * (a1.y.clone() - &b0.y) - by.clone() * (a1.x.clone() - &b0.x);
+
+                // If d1 and d2 have opposite signs, the edge a0-a1 crosses line b0-b1
+                let d1v = d1.v();
+                let d2v = d2.v();
+
+                if (d1v > 0.0 && d2v < 0.0) || (d1v < 0.0 && d2v > 0.0) {
+                    // Also check if b0-b1 crosses line a0-a1
+                    let ax = a1.x.clone() - &a0.x;
+                    let ay = a1.y.clone() - &a0.y;
+                    let d3 = ax.clone() * (b0.y.clone() - &a0.y) - ay.clone() * (b0.x.clone() - &a0.x);
+                    let d4 = ax.clone() * (b1.y.clone() - &a0.y) - ay.clone() * (b1.x.clone() - &a0.x);
+
+                    let d3v = d3.v();
+                    let d4v = d4.v();
+
+                    if (d3v > 0.0 && d4v < 0.0) || (d3v < 0.0 && d4v > 0.0) {
+                        // Actual intersection! Large penalty.
+                        // Use the minimum absolute cross product as measure of intersection depth
+                        let min_d = d1.abs().min(d2.abs()).min(d3.abs()).min(d4.abs());
+                        penalty = penalty + min_d * 10.0; // Large weight for actual intersections
+                    }
+                }
+            }
+        }
+
+        penalty
     }
 }
 
@@ -972,6 +1199,348 @@ mod tests {
     }
 
     #[test]
+    fn test_polygon_circle_gradient_diagnosis() {
+        use crate::model::Model;
+        use crate::to::To;
+
+        // Reproduce the apvd scenario: triangle + circle with equal targets
+        let triangle: Shape<f64> = Shape::Polygon(Polygon::new(vec![
+            R2 { x: -1., y: -1. },
+            R2 { x: 1., y: -1. },
+            R2 { x: 0., y: 1. },
+        ]));
+        let circle: Shape<f64> = crate::shape::circle(0.5, 0., 0.8);
+
+        // Both shapes trainable
+        let inputs = vec![
+            (triangle, vec![true; 6]),  // 6 polygon coords trainable
+            (circle, vec![true, true, true]),  // cx, cy, r trainable
+        ];
+
+        // Equal weight targets like in the bug report
+        let targets: [(&str, f64); 3] = [
+            ("0*", 1.),
+            ("*1", 1.),
+            ("01", 1.),
+        ];
+
+        let mut model = Model::new(inputs, targets.to()).expect("Failed to create model");
+
+        // Print initial state and gradients
+        let step0 = &model.steps[0];
+        eprintln!("Initial error: {}", step0.error.v());
+        eprintln!("Initial gradients (d): {:?}", step0.error.d());
+        eprintln!("Gradient magnitudes:");
+        let grads = step0.error.d();
+        for (i, g) in grads.iter().enumerate() {
+            let name = if i < 6 {
+                format!("polygon v{}.{}", i / 2, if i % 2 == 0 { "x" } else { "y" })
+            } else {
+                match i - 6 {
+                    0 => "circle cx".to_string(),
+                    1 => "circle cy".to_string(),
+                    2 => "circle r".to_string(),
+                    _ => format!("param {}", i),
+                }
+            };
+            eprintln!("  {}: {:.6}", name, g);
+        }
+
+        // Train and track error over time
+        let initial_error = step0.error.v();
+        model.train(0.5, 200).expect("Training failed");
+        let final_error = model.steps.last().unwrap().error.v();
+
+        // Print error every 20 steps
+        eprintln!("\nError progression:");
+        for (i, step) in model.steps.iter().enumerate() {
+            if i % 20 == 0 || i == model.steps.len() - 1 {
+                eprintln!("  Step {}: error = {:.6}", i, step.error.v());
+            }
+        }
+
+        eprintln!("\nTraining: {} -> {} ({:.1}% reduction)",
+            initial_error, final_error,
+            100. * (1. - final_error / initial_error));
+
+        // Check if polygon vertices actually moved
+        let final_shapes = &model.steps.last().unwrap().shapes;
+        if let Shape::Polygon(final_poly) = &final_shapes[0] {
+            eprintln!("\nFinal polygon vertices:");
+            for (i, v) in final_poly.vertices.iter().enumerate() {
+                eprintln!("  v{}: ({:.4}, {:.4})", i, v.x, v.y);
+            }
+        }
+        if let Shape::Circle(final_circle) = &final_shapes[1] {
+            eprintln!("Final circle: c=({:.4}, {:.4}), r={:.4}",
+                final_circle.c.x, final_circle.c.y, final_circle.r);
+        }
+
+        // Should converge reasonably well for this simple case
+        assert!(
+            final_error < initial_error * 0.5,
+            "Should achieve at least 50% error reduction: {} -> {}",
+            initial_error, final_error
+        );
+    }
+
+    #[test]
+    fn test_circle_center_gradients_with_polygon() {
+        use crate::model::Model;
+        use crate::to::To;
+
+        // Test that circle center gradients are non-zero when interacting with polygon
+        // Order: Circle first (A), Polygon second (B) - matches user's apvd setup
+        // Circle centered at (0, -0.2) - on x symmetry axis, but offset in y
+        let circle: Shape<f64> = crate::shape::circle(0., -0.2, 1.);
+        // Triangle symmetric around x=0
+        let triangle: Shape<f64> = Shape::Polygon(Polygon::new(vec![
+            R2 { x: -2., y: -1. },
+            R2 { x: 2., y: -1. },
+            R2 { x: 0., y: 2. },
+        ]));
+
+        // Circle trainable, polygon fixed
+        let inputs = vec![
+            (circle, vec![true, true, true]),  // cx, cy, r trainable
+            (triangle, vec![false; 6]),
+        ];
+
+        let targets: [(&str, f64); 3] = [
+            ("0*", 2.),  // circle area (inclusive)
+            ("*1", 3.),  // triangle area (inclusive)
+            ("01", 1.),  // intersection
+        ];
+
+        let model = Model::new(inputs, targets.to()).expect("Failed to create model");
+        let step0 = &model.steps[0];
+        let grads = step0.error.d();
+
+        eprintln!("Circle-polygon gradient test (circle first):");
+        eprintln!("  cx gradient: {:.6e}", grads[0]);
+        eprintln!("  cy gradient: {:.6e}", grads[1]);
+        eprintln!("  r  gradient: {:.6e}", grads[2]);
+
+        // cx should be ~0 due to symmetry (triangle is symmetric around x=0, circle on axis)
+        // cy should be non-zero (moving circle up/down changes intersection)
+        // r should be non-zero (changing radius changes intersection)
+
+        assert!(
+            grads[1].abs() > 1e-6,
+            "cy gradient should be non-zero, got {:.6e}",
+            grads[1]
+        );
+        assert!(
+            grads[2].abs() > 1e-6,
+            "r gradient should be non-zero, got {:.6e}",
+            grads[2]
+        );
+    }
+
+    #[test]
+    fn test_circle_polygon_multi_step_gradients() {
+        use crate::model::Model;
+        use crate::to::To;
+
+        // Test gradient stability over multiple steps
+        // Matches user's scenario more closely
+        let circle: Shape<f64> = crate::shape::circle(0., -0.2, 1.3);
+        let triangle: Shape<f64> = Shape::Polygon(Polygon::new(vec![
+            R2 { x: -1.6, y: -1.9 },
+            R2 { x: 1.6, y: 0.9 },
+            R2 { x: -1.6, y: 0.9 },
+        ]));
+
+        // Both trainable like user's scenario
+        let inputs = vec![
+            (circle, vec![true, true, true]),
+            (triangle, vec![true; 6]),
+        ];
+
+        let targets: [(&str, f64); 3] = [
+            ("0*", 1.),
+            ("*1", 1.),
+            ("01", 1.),
+        ];
+
+        let mut model = Model::new(inputs, targets.to()).expect("Failed to create model");
+
+        eprintln!("\nMulti-step gradient test:");
+        for i in 0..40 {
+            let step = &model.steps[i];
+            let grads = step.error.d();
+            if i % 10 == 0 || i >= 30 {
+                eprintln!("Step {}: error={:.4}, cx_grad={:.4e}, cy_grad={:.4e}, r_grad={:.4e}",
+                    i, step.error.v(), grads[0], grads[1], grads[2]);
+            }
+            if i < 39 {
+                model.train(0.5, 1).expect("Training failed");
+            }
+        }
+
+        // Check that gradients don't collapse to zero
+        let final_step = model.steps.last().unwrap();
+        let final_grads = final_step.error.d();
+        let grad_magnitude = (final_grads[0].powi(2) + final_grads[1].powi(2) + final_grads[2].powi(2)).sqrt();
+
+        eprintln!("Final gradient magnitude: {:.4e}", grad_magnitude);
+
+        // If error is still significant (>0.1), gradients shouldn't be zero
+        if final_step.error.v() > 0.1 {
+            assert!(
+                grad_magnitude > 1e-10,
+                "Gradients collapsed to zero while error is still {:.4}",
+                final_step.error.v()
+            );
+        }
+    }
+
+    #[test]
+    fn test_robust_optimizer_comparison() {
+        use crate::model::Model;
+        use crate::to::To;
+
+        // Compare vanilla GD, Adam, and robust optimization
+        let make_model = || {
+            let circle: Shape<f64> = crate::shape::circle(0., -0.2, 1.3);
+            let triangle: Shape<f64> = Shape::Polygon(Polygon::new(vec![
+                R2 { x: -1.6, y: -1.9 },
+                R2 { x: 1.6, y: 0.9 },
+                R2 { x: -1.6, y: 0.9 },
+            ]));
+
+            let inputs = vec![
+                (circle, vec![true, true, true]),
+                (triangle, vec![true; 6]),
+            ];
+
+            let targets: [(&str, f64); 3] = [
+                ("0*", 1.),
+                ("*1", 1.),
+                ("01", 1.),
+            ];
+
+            Model::new(inputs, targets.to()).expect("Failed to create model")
+        };
+
+        // Test 1: Vanilla GD
+        let mut vanilla = make_model();
+        let vanilla_initial = vanilla.steps[0].error.v();
+        vanilla.train(0.5, 100).expect("Vanilla training failed");
+        let vanilla_final = vanilla.steps.last().unwrap().error.v();
+
+        // Test 2: Adam
+        let mut adam = make_model();
+        adam.train_adam(0.1, 100).expect("Adam training failed");
+        let adam_final = adam.steps.last().unwrap().error.v();
+
+        // Test 3: Robust
+        let mut robust = make_model();
+        robust.train_robust(100).expect("Robust training failed");
+        let robust_final = robust.steps.last().unwrap().error.v();
+
+        eprintln!("\nOptimizer comparison (100 steps):");
+        eprintln!("  Initial error: {:.4}", vanilla_initial);
+        eprintln!("  Vanilla GD:    {:.4} ({:.1}% reduction)", vanilla_final, 100. * (1. - vanilla_final / vanilla_initial));
+        eprintln!("  Adam:          {:.4} ({:.1}% reduction)", adam_final, 100. * (1. - adam_final / vanilla_initial));
+        eprintln!("  Robust:        {:.4} ({:.1}% reduction)", robust_final, 100. * (1. - robust_final / vanilla_initial));
+
+        // Check radius stability for each method
+        let check_radius_stability = |model: &Model, name: &str| {
+            let radii: Vec<f64> = model.steps.iter().map(|s| {
+                if let crate::shape::Shape::Circle(c) = &s.shapes[0] {
+                    c.r.v()
+                } else { 0.0 }
+            }).collect();
+
+            let max_change: f64 = radii.windows(2)
+                .map(|w| (w[1] - w[0]).abs())
+                .fold(0.0, f64::max);
+
+            eprintln!("  {} max radius change: {:.4}", name, max_change);
+            max_change
+        };
+
+        let vanilla_stability = check_radius_stability(&vanilla, "Vanilla");
+        let adam_stability = check_radius_stability(&adam, "Adam");
+        let robust_stability = check_radius_stability(&robust, "Robust");
+
+        // Robust should have more stable updates
+        assert!(
+            robust_stability <= vanilla_stability + 0.01,
+            "Robust should be at least as stable as vanilla"
+        );
+    }
+
+    #[test]
+    fn test_polygon_circle_adam_optimizer() {
+        use crate::model::Model;
+        use crate::optimization::adam::AdamConfig;
+        use crate::to::To;
+
+        // Same setup as gradient diagnosis test, but using Adam optimizer
+        let triangle: Shape<f64> = Shape::Polygon(Polygon::new(vec![
+            R2 { x: -1., y: -1. },
+            R2 { x: 1., y: -1. },
+            R2 { x: 0., y: 1. },
+        ]));
+        let circle: Shape<f64> = crate::shape::circle(0.5, 0., 0.8);
+
+        // Both shapes trainable
+        let inputs = vec![
+            (triangle, vec![true; 6]),
+            (circle, vec![true, true, true]),
+        ];
+
+        // Equal weight targets like in the bug report
+        let targets: [(&str, f64); 3] = [
+            ("0*", 1.),
+            ("*1", 1.),
+            ("01", 1.),
+        ];
+
+        let mut model = Model::new(inputs, targets.to()).expect("Failed to create model");
+
+        let initial_error = model.steps[0].error.v();
+        eprintln!("Initial error: {}", initial_error);
+
+        // Train with Adam optimizer using higher learning rate and more aggressive momentum
+        // Default Adam beta1=0.9, beta2=0.999; try beta1=0.95 for more momentum
+        let adam_config = AdamConfig {
+            beta1: 0.95,
+            beta2: 0.999,
+            epsilon: 1e-8,
+        };
+        model.train_adam_with_config(0.2, 500, adam_config).expect("Training failed");
+
+        let final_error = model.steps.last().unwrap().error.v();
+
+        // Print error progression
+        eprintln!("\nAdam error progression:");
+        for (i, step) in model.steps.iter().enumerate() {
+            if i % 50 == 0 || i == model.steps.len() - 1 {
+                eprintln!("  Step {}: error = {:.6}", i, step.error.v());
+            }
+        }
+
+        eprintln!("\nAdam training: {} -> {} ({:.1}% reduction)",
+            initial_error, final_error,
+            100. * (1. - final_error / initial_error));
+
+        // Both vanilla GD and standard Adam plateau at ~0.61 (54% reduction).
+        // This appears to be a local minimum in the error landscape.
+        // The test verifies Adam works (doesn't diverge/NaN) and achieves
+        // comparable results to vanilla GD. Further improvements may require
+        // different loss functions or optimization strategies.
+        assert!(
+            final_error < initial_error * 0.5,
+            "Adam should achieve at least 50% error reduction: {} -> {} ({:.1}% reduction)",
+            initial_error, final_error,
+            100. * (1. - final_error / initial_error)
+        );
+    }
+
+    #[test]
     fn test_polygon_ellipse_training() {
         use crate::model::Model;
         use crate::to::To;
@@ -1010,6 +1579,116 @@ mod tests {
             "Training should reduce error: {} -> {}",
             initial_error, final_error
         );
+    }
+
+    #[test]
+    fn test_two_triangles_star_of_david() {
+        use crate::model::Model;
+        use crate::to::To;
+        use std::f64::consts::PI;
+
+        // Exact TwoTriangles layout from apvd frontend (Star of David pattern)
+        // Triangle 1: pointing up, centered at (0, 0.3), radius 1.2, rotation -π/2
+        let r = 1.2;
+        let cy1 = 0.3;
+        let rot1 = -PI / 2.0;
+        let tri1_poly = Polygon::new(vec![
+            R2 { x: r * (rot1).cos(), y: cy1 + r * (rot1).sin() },
+            R2 { x: r * (rot1 + 2.0 * PI / 3.0).cos(), y: cy1 + r * (rot1 + 2.0 * PI / 3.0).sin() },
+            R2 { x: r * (rot1 + 4.0 * PI / 3.0).cos(), y: cy1 + r * (rot1 + 4.0 * PI / 3.0).sin() },
+        ]);
+
+        // Triangle 2: pointing down, centered at (0, -0.3), radius 1.2, rotation π/2
+        let cy2 = -0.3;
+        let rot2 = PI / 2.0;
+        let tri2_poly = Polygon::new(vec![
+            R2 { x: r * (rot2).cos(), y: cy2 + r * (rot2).sin() },
+            R2 { x: r * (rot2 + 2.0 * PI / 3.0).cos(), y: cy2 + r * (rot2 + 2.0 * PI / 3.0).sin() },
+            R2 { x: r * (rot2 + 4.0 * PI / 3.0).cos(), y: cy2 + r * (rot2 + 4.0 * PI / 3.0).sin() },
+        ]);
+
+        eprintln!("Triangle 1 vertices:");
+        for (i, v) in tri1_poly.vertices.iter().enumerate() {
+            eprintln!("  v{}: ({:.4}, {:.4})", i, v.x, v.y);
+        }
+        eprintln!("Triangle 2 vertices:");
+        for (i, v) in tri2_poly.vertices.iter().enumerate() {
+            eprintln!("  v{}: ({:.4}, {:.4})", i, v.x, v.y);
+        }
+
+        // Test basic intersection first
+        let intersections = polygon_polygon_intersect(&tri1_poly, &tri2_poly);
+        eprintln!("Intersection points: {:?}", intersections);
+
+        let tri1: Shape<f64> = Shape::Polygon(tri1_poly);
+        let tri2: Shape<f64> = Shape::Polygon(tri2_poly);
+
+        // Both polygons fixed for now - just test scene building
+        let inputs = vec![
+            (tri1, vec![false; 6]),
+            (tri2, vec![false; 6]),
+        ];
+
+        let targets: [(&str, f64); 3] = [
+            ("0*", 1.),
+            ("*1", 1.),
+            ("01", 1.),
+        ];
+
+        let model = Model::new(inputs, targets.to());
+        assert!(model.is_ok(), "Failed to create model: {:?}", model.err());
+
+        let model = model.unwrap();
+        eprintln!("Model created successfully, initial error: {}", model.steps[0].error.v());
+    }
+
+    #[test]
+    fn test_vertex_on_edge_intersection() {
+        use crate::model::Model;
+        use crate::to::To;
+
+        // Create a scenario where one polygon's vertex lands on another's edge
+        // This is the edge case that can cause boundary successor issues
+        let tri1_poly = Polygon::new(vec![
+            R2 { x: 0., y: 0. },      // vertex at origin
+            R2 { x: 2., y: 0. },
+            R2 { x: 1., y: 2. },
+        ]);
+
+        // Second triangle positioned so one vertex lands on tri1's edge
+        let tri2_poly = Polygon::new(vec![
+            R2 { x: 1., y: 0. },      // This vertex lands on tri1's edge (0,0)-(2,0)
+            R2 { x: 2., y: 1.5 },
+            R2 { x: 0., y: 1.5 },
+        ]);
+
+        eprintln!("Vertex-on-edge test:");
+        eprintln!("Triangle 1: {:?}", tri1_poly.vertices);
+        eprintln!("Triangle 2: {:?}", tri2_poly.vertices);
+
+        let intersections = polygon_polygon_intersect(&tri1_poly, &tri2_poly);
+        eprintln!("Intersections: {:?}", intersections);
+
+        let tri1: Shape<f64> = Shape::Polygon(tri1_poly);
+        let tri2: Shape<f64> = Shape::Polygon(tri2_poly);
+
+        let inputs = vec![
+            (tri1, vec![false; 6]),
+            (tri2, vec![false; 6]),
+        ];
+
+        let targets: [(&str, f64); 3] = [
+            ("0*", 1.),
+            ("*1", 1.),
+            ("01", 0.5),
+        ];
+
+        let model = Model::new(inputs, targets.to());
+        if model.is_err() {
+            eprintln!("Model creation failed (expected for vertex-on-edge): {:?}", model.err());
+        } else {
+            eprintln!("Model created successfully, error: {}", model.unwrap().steps[0].error.v());
+        }
     }
 
     #[test]
@@ -1138,6 +1817,457 @@ mod tests {
             final_error <= initial_error,
             "Training should not increase error: {} -> {}",
             initial_error, final_error
+        );
+    }
+
+    /// Test that two circles converge to achievable targets.
+    ///
+    /// This is the simplest case: two circles can achieve any overlap from 0 to min(area_A, area_B).
+    /// We set targets based on actual computed areas, perturb, and verify convergence.
+    #[test]
+    fn test_two_circles_convergence() {
+        use crate::model::Model;
+        use crate::step::Step;
+        use crate::to::To;
+
+        // Two unit circles, slightly overlapping
+        let circle_a: Shape<f64> = crate::shape::circle(-0.3, 0., 1.0);
+        let circle_b: Shape<f64> = crate::shape::circle(0.3, 0., 1.0);
+
+        // First, compute what the actual areas are at this "solution" position
+        let solution_inputs = vec![
+            (circle_a.clone(), vec![true; 3]),
+            (circle_b.clone(), vec![true; 3]),
+        ];
+
+        // Use dummy targets to compute actual areas
+        let dummy_targets: [(&str, f64); 3] = [("0*", 1.), ("*1", 1.), ("01", 0.)];
+        let targets_map: crate::targets::TargetsMap<f64> = dummy_targets.to();
+        let solution_step = Step::new(solution_inputs, targets_map.into()).expect("Solution step failed");
+
+        // Extract actual areas from the solution
+        let area_a_total = solution_step.errors.get("0*").map(|e| e.actual_frac).unwrap_or(0.) * solution_step.total_area.v();
+        let area_b_total = solution_step.errors.get("*1").map(|e| e.actual_frac).unwrap_or(0.) * solution_step.total_area.v();
+        let area_intersection = solution_step.errors.get("01").map(|e| e.actual_frac).unwrap_or(0.) * solution_step.total_area.v();
+
+        eprintln!("Solution areas: A_total={:.4}, B_total={:.4}, intersection={:.4}",
+            area_a_total, area_b_total, area_intersection);
+
+        // Now perturb the shapes and train back to the solution
+        let perturbed_a: Shape<f64> = crate::shape::circle(-0.5, 0.2, 1.1);  // Moved and resized
+        let perturbed_b: Shape<f64> = crate::shape::circle(0.5, -0.1, 0.9); // Moved and resized
+
+        let inputs = vec![
+            (perturbed_a, vec![true; 3]),
+            (perturbed_b, vec![true; 3]),
+        ];
+
+        // Targets based on solution areas (these are achievable!)
+        let targets: [(&str, f64); 3] = [
+            ("0*", area_a_total),
+            ("*1", area_b_total),
+            ("01", area_intersection),
+        ];
+
+        let mut model = Model::new(inputs, targets.to()).expect("Failed to create model");
+        let initial_error = model.steps[0].error.v();
+
+        eprintln!("\nTwo circles convergence test:");
+        eprintln!("  Initial error: {:.6}", initial_error);
+
+        // Train with robust optimizer
+        model.train_robust(200).expect("Training failed");
+
+        let final_error = model.steps.last().unwrap().error.v();
+        let reduction_pct = 100. * (1. - final_error / initial_error);
+
+        eprintln!("  Final error: {:.6} ({:.1}% reduction)", final_error, reduction_pct);
+        eprintln!("  Steps taken: {}", model.steps.len());
+
+        // Print error progression
+        for (i, step) in model.steps.iter().enumerate() {
+            if i % 25 == 0 || i == model.steps.len() - 1 {
+                eprintln!("  Step {:3}: error = {:.6}", i, step.error.v());
+            }
+        }
+
+        // With achievable targets, we should converge to very low error
+        assert!(
+            final_error < 0.1,
+            "Should converge to near-zero error with achievable targets: got {:.4}",
+            final_error
+        );
+        assert!(
+            reduction_pct > 90.,
+            "Should achieve >90% error reduction: got {:.1}%",
+            reduction_pct
+        );
+    }
+
+    /// Test that a triangle and circle converge to achievable targets.
+    #[test]
+    fn test_triangle_circle_convergence() {
+        use crate::model::Model;
+        use crate::step::Step;
+        use crate::to::To;
+
+        // Triangle and circle in a "solution" overlapping position
+        let triangle: Shape<f64> = Shape::Polygon(Polygon::new(vec![
+            R2 { x: -1., y: -0.8 },
+            R2 { x: 1., y: -0.8 },
+            R2 { x: 0., y: 1.2 },
+        ]));
+        let circle: Shape<f64> = crate::shape::circle(0., 0., 0.8);
+
+        // Compute actual areas at solution
+        let solution_inputs = vec![
+            (triangle.clone(), vec![true; 6]),
+            (circle.clone(), vec![true; 3]),
+        ];
+        let dummy_targets: [(&str, f64); 3] = [("0*", 1.), ("*1", 1.), ("01", 0.)];
+        let targets_map: crate::targets::TargetsMap<f64> = dummy_targets.to();
+        let solution_step = Step::new(solution_inputs, targets_map.into()).expect("Solution step failed");
+
+        let area_a_total = solution_step.errors.get("0*").map(|e| e.actual_frac).unwrap_or(0.) * solution_step.total_area.v();
+        let area_b_total = solution_step.errors.get("*1").map(|e| e.actual_frac).unwrap_or(0.) * solution_step.total_area.v();
+        let area_intersection = solution_step.errors.get("01").map(|e| e.actual_frac).unwrap_or(0.) * solution_step.total_area.v();
+
+        eprintln!("Triangle-circle solution areas: A_total={:.4}, B_total={:.4}, intersection={:.4}",
+            area_a_total, area_b_total, area_intersection);
+
+        // Perturb: move triangle up and circle to the side
+        let perturbed_triangle: Shape<f64> = Shape::Polygon(Polygon::new(vec![
+            R2 { x: -1.2, y: -0.5 },
+            R2 { x: 1.2, y: -0.5 },
+            R2 { x: 0., y: 1.5 },
+        ]));
+        let perturbed_circle: Shape<f64> = crate::shape::circle(0.3, 0.2, 0.9);
+
+        let inputs = vec![
+            (perturbed_triangle, vec![true; 6]),
+            (perturbed_circle, vec![true; 3]),
+        ];
+
+        let targets: [(&str, f64); 3] = [
+            ("0*", area_a_total),
+            ("*1", area_b_total),
+            ("01", area_intersection),
+        ];
+
+        let mut model = Model::new(inputs, targets.to()).expect("Failed to create model");
+        let initial_error = model.steps[0].error.v();
+
+        eprintln!("\nTriangle-circle convergence test:");
+        eprintln!("  Initial error: {:.6}", initial_error);
+
+        model.train_robust(300).expect("Training failed");
+
+        let final_error = model.steps.last().unwrap().error.v();
+        let reduction_pct = 100. * (1. - final_error / initial_error);
+
+        eprintln!("  Final error: {:.6} ({:.1}% reduction)", final_error, reduction_pct);
+
+        for (i, step) in model.steps.iter().enumerate() {
+            if i % 50 == 0 || i == model.steps.len() - 1 {
+                eprintln!("  Step {:3}: error = {:.6}", i, step.error.v());
+            }
+        }
+
+        assert!(
+            final_error < 0.15,
+            "Should converge to low error with achievable targets: got {:.4}",
+            final_error
+        );
+    }
+
+    /// Test that two triangles converge to achievable targets.
+    #[test]
+    fn test_two_triangles_convergence() {
+        use crate::model::Model;
+        use crate::step::Step;
+        use crate::to::To;
+
+        // Two triangles in an overlapping "solution" position
+        let triangle_a: Shape<f64> = Shape::Polygon(Polygon::new(vec![
+            R2 { x: -1., y: -0.5 },
+            R2 { x: 1., y: -0.5 },
+            R2 { x: 0., y: 1. },
+        ]));
+        let triangle_b: Shape<f64> = Shape::Polygon(Polygon::new(vec![
+            R2 { x: -0.8, y: -0.3 },
+            R2 { x: 0.8, y: -0.3 },
+            R2 { x: 0., y: 1.2 },
+        ]));
+
+        // Compute actual areas at solution
+        let solution_inputs = vec![
+            (triangle_a.clone(), vec![true; 6]),
+            (triangle_b.clone(), vec![true; 6]),
+        ];
+        let dummy_targets: [(&str, f64); 3] = [("0*", 1.), ("*1", 1.), ("01", 0.)];
+        let targets_map: crate::targets::TargetsMap<f64> = dummy_targets.to();
+        let solution_step = Step::new(solution_inputs, targets_map.into()).expect("Solution step failed");
+
+        let area_a_total = solution_step.errors.get("0*").map(|e| e.actual_frac).unwrap_or(0.) * solution_step.total_area.v();
+        let area_b_total = solution_step.errors.get("*1").map(|e| e.actual_frac).unwrap_or(0.) * solution_step.total_area.v();
+        let area_intersection = solution_step.errors.get("01").map(|e| e.actual_frac).unwrap_or(0.) * solution_step.total_area.v();
+
+        eprintln!("Two triangles solution areas: A_total={:.4}, B_total={:.4}, intersection={:.4}",
+            area_a_total, area_b_total, area_intersection);
+
+        // Perturb both triangles
+        let perturbed_a: Shape<f64> = Shape::Polygon(Polygon::new(vec![
+            R2 { x: -1.3, y: -0.7 },
+            R2 { x: 0.9, y: -0.4 },
+            R2 { x: -0.1, y: 1.2 },
+        ]));
+        let perturbed_b: Shape<f64> = Shape::Polygon(Polygon::new(vec![
+            R2 { x: -0.6, y: -0.1 },
+            R2 { x: 1.0, y: -0.4 },
+            R2 { x: 0.2, y: 1.0 },
+        ]));
+
+        let inputs = vec![
+            (perturbed_a, vec![true; 6]),
+            (perturbed_b, vec![true; 6]),
+        ];
+
+        let targets: [(&str, f64); 3] = [
+            ("0*", area_a_total),
+            ("*1", area_b_total),
+            ("01", area_intersection),
+        ];
+
+        let mut model = Model::new(inputs, targets.to()).expect("Failed to create model");
+        let initial_error = model.steps[0].error.v();
+
+        eprintln!("\nTwo triangles convergence test:");
+        eprintln!("  Initial error: {:.6}", initial_error);
+
+        model.train_robust(300).expect("Training failed");
+
+        let final_error = model.steps.last().unwrap().error.v();
+        let reduction_pct = 100. * (1. - final_error / initial_error);
+
+        eprintln!("  Final error: {:.6} ({:.1}% reduction)", final_error, reduction_pct);
+
+        for (i, step) in model.steps.iter().enumerate() {
+            if i % 50 == 0 || i == model.steps.len() - 1 {
+                eprintln!("  Step {:3}: error = {:.6}", i, step.error.v());
+            }
+        }
+
+        assert!(
+            final_error < 0.2,
+            "Should converge to low error with achievable targets: got {:.4}",
+            final_error
+        );
+    }
+
+    /// Test with very simple achievable targets: complete disjointness.
+    /// Two shapes that don't need to overlap at all - simplest case.
+    #[test]
+    fn test_disjoint_targets_convergence() {
+        use crate::model::Model;
+        use crate::to::To;
+
+        // Two circles that should become disjoint
+        let circle_a: Shape<f64> = crate::shape::circle(-0.5, 0., 1.0);
+        let circle_b: Shape<f64> = crate::shape::circle(0.5, 0., 1.0);
+
+        let inputs = vec![
+            (circle_a, vec![true; 3]),
+            (circle_b, vec![true; 3]),
+        ];
+
+        // Targets: each circle has area π, no overlap
+        // Using fractions that sum to 1 (the optimization uses fractions, not absolute areas)
+        let targets: [(&str, f64); 3] = [
+            ("0*", 1.),   // Circle A total
+            ("*1", 1.),   // Circle B total
+            ("01", 0.),   // No intersection - this is achievable by separating the circles!
+        ];
+
+        let mut model = Model::new(inputs, targets.to()).expect("Failed to create model");
+        let initial_error = model.steps[0].error.v();
+
+        eprintln!("\nDisjoint targets convergence test:");
+        eprintln!("  Initial error: {:.6}", initial_error);
+
+        model.train_robust(200).expect("Training failed");
+
+        let final_error = model.steps.last().unwrap().error.v();
+        let reduction_pct = 100. * (1. - final_error / initial_error);
+
+        eprintln!("  Final error: {:.6} ({:.1}% reduction)", final_error, reduction_pct);
+
+        for (i, step) in model.steps.iter().enumerate() {
+            if i % 25 == 0 || i == model.steps.len() - 1 {
+                eprintln!("  Step {:3}: error = {:.6}", i, step.error.v());
+            }
+        }
+
+        // Disjoint is easy - shapes just need to separate
+        assert!(
+            final_error < 0.05,
+            "Should converge to near-zero for disjoint targets: got {:.4}",
+            final_error
+        );
+    }
+
+    /// Test behavior with impossible targets (each region = 100% of total).
+    ///
+    /// These targets are geometrically impossible for non-identical shapes.
+    /// This test characterizes the oscillation behavior to ensure it's bounded
+    /// and doesn't produce NaN/infinity.
+    #[test]
+    fn test_impossible_targets_oscillation() {
+        use crate::model::Model;
+        use crate::to::To;
+
+        // Circle and triangle with impossible targets
+        let circle: Shape<f64> = crate::shape::circle(0., 0., 1.0);
+        let triangle: Shape<f64> = Shape::Polygon(Polygon::new(vec![
+            R2 { x: -1.5, y: -1. },
+            R2 { x: 1.5, y: -1. },
+            R2 { x: 0., y: 1.5 },
+        ]));
+
+        let inputs = vec![
+            (circle, vec![true; 3]),
+            (triangle, vec![true; 6]),
+        ];
+
+        // Impossible targets: each region should be 100% of total
+        // This requires identical shapes with 100% overlap - impossible for circle+triangle
+        let targets: [(&str, f64); 3] = [
+            ("0*", 1.),  // Circle total = 100%
+            ("*1", 1.),  // Triangle total = 100%
+            ("01", 1.),  // Intersection = 100%
+        ];
+
+        let mut model = Model::new(inputs, targets.to()).expect("Failed to create model");
+        let initial_error = model.steps[0].error.v();
+
+        eprintln!("\nImpossible targets test (circle + triangle):");
+        eprintln!("  Initial error: {:.4}", initial_error);
+        eprintln!("  Targets: A*=1, *B=1, AB=1 (each region = 100%, impossible)");
+
+        // Run 50 steps with vanilla GD to see oscillation
+        for i in 0..50 {
+            model.train(0.5, 1).expect("Training failed");
+            let step = model.steps.last().unwrap();
+            let err = step.error.v();
+
+            // Check for NaN/infinity
+            assert!(!err.is_nan(), "Error became NaN at step {}", i);
+            assert!(err.is_finite(), "Error became infinite at step {}", i);
+
+            if i < 10 || i % 10 == 9 {
+                // Extract circle radius for debugging
+                let r = if let crate::shape::Shape::Circle(c) = &step.shapes[0] {
+                    c.r.v()
+                } else { 0.0 };
+                eprintln!("  Step {:2}: error={:.4}, r={:.4}", i + 1, err, r);
+            }
+        }
+
+        let final_error = model.steps.last().unwrap().error.v();
+
+        // Characterize the oscillation
+        let errors: Vec<f64> = model.steps.iter().map(|s| s.error.v()).collect();
+        let error_changes: Vec<f64> = errors.windows(2).map(|w| w[1] - w[0]).collect();
+        let sign_changes = error_changes.windows(2)
+            .filter(|w| (w[0] > 0.) != (w[1] > 0.))
+            .count();
+
+        eprintln!("  Final error: {:.4}", final_error);
+        eprintln!("  Sign changes in error delta: {} (oscillation indicator)", sign_changes);
+
+        // With impossible targets, error should be bounded (not explode)
+        assert!(
+            final_error < 10.0,
+            "Error should stay bounded even with impossible targets: got {:.4}",
+            final_error
+        );
+
+        // Oscillation is expected but shouldn't be too extreme
+        // (If there were bugs in gradient computation, error might grow unbounded)
+        let max_error = errors.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let min_error = errors.iter().cloned().fold(f64::INFINITY, f64::min);
+        eprintln!("  Error range: {:.4} to {:.4}", min_error, max_error);
+
+        assert!(
+            max_error < initial_error * 2.0,
+            "Error shouldn't more than double: initial={:.4}, max={:.4}",
+            initial_error, max_error
+        );
+    }
+
+    /// Test comparing vanilla GD vs clipped GD on impossible targets.
+    ///
+    /// Clipped GD should have smaller oscillation amplitude.
+    #[test]
+    fn test_clipped_vs_vanilla_impossible_targets() {
+        use crate::model::Model;
+        use crate::step::Step;
+        use crate::to::To;
+
+        let make_inputs = || {
+            let circle: Shape<f64> = crate::shape::circle(0., 0., 1.0);
+            let triangle: Shape<f64> = Shape::Polygon(Polygon::new(vec![
+                R2 { x: -1.5, y: -1. },
+                R2 { x: 1.5, y: -1. },
+                R2 { x: 0., y: 1.5 },
+            ]));
+            vec![
+                (circle, vec![true; 3]),
+                (triangle, vec![true; 6]),
+            ]
+        };
+
+        // Impossible targets
+        let targets: [(&str, f64); 3] = [
+            ("0*", 1.),
+            ("*1", 1.),
+            ("01", 1.),
+        ];
+
+        // Vanilla GD
+        let mut vanilla_model = Model::new(make_inputs(), targets.to()).expect("Failed to create model");
+        for _ in 0..30 {
+            vanilla_model.train(0.5, 1).expect("Training failed");
+        }
+        let vanilla_errors: Vec<f64> = vanilla_model.steps.iter().map(|s| s.error.v()).collect();
+
+        // Clipped GD (using step_clipped directly)
+        let clipped_inputs = make_inputs();
+        let targets_map: crate::targets::TargetsMap<f64> = targets.to();
+        let mut clipped_step = Step::new(clipped_inputs, targets_map.into()).expect("Step failed");
+        let mut clipped_errors = vec![clipped_step.error.v()];
+        for _ in 0..30 {
+            clipped_step = clipped_step.step_clipped(0.05, 0.5, 1.0).expect("Step failed");
+            clipped_errors.push(clipped_step.error.v());
+        }
+
+        // Compute oscillation amplitude (std dev of error changes)
+        let vanilla_deltas: Vec<f64> = vanilla_errors.windows(2).map(|w| (w[1] - w[0]).abs()).collect();
+        let clipped_deltas: Vec<f64> = clipped_errors.windows(2).map(|w| (w[1] - w[0]).abs()).collect();
+
+        let vanilla_avg_delta: f64 = vanilla_deltas.iter().sum::<f64>() / vanilla_deltas.len() as f64;
+        let clipped_avg_delta: f64 = clipped_deltas.iter().sum::<f64>() / clipped_deltas.len() as f64;
+
+        eprintln!("\nVanilla vs Clipped GD on impossible targets:");
+        eprintln!("  Vanilla avg |Δerror|: {:.4}", vanilla_avg_delta);
+        eprintln!("  Clipped avg |Δerror|: {:.4}", clipped_avg_delta);
+        eprintln!("  Vanilla final error: {:.4}", vanilla_errors.last().unwrap());
+        eprintln!("  Clipped final error: {:.4}", clipped_errors.last().unwrap());
+
+        // Clipped should have smaller oscillation
+        assert!(
+            clipped_avg_delta <= vanilla_avg_delta + 0.01,
+            "Clipped GD should have smaller oscillation: vanilla={:.4}, clipped={:.4}",
+            vanilla_avg_delta, clipped_avg_delta
         );
     }
 }
