@@ -21,7 +21,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ubuntu-testdata
-          path: testdata/*/linux.csv
+          path: apvd-core/testdata/*/linux.csv
 
   gen-macos:
     runs-on: macos-latest
@@ -35,7 +35,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: macos-testdata
-          path: testdata/*/macos.csv
+          path: apvd-core/testdata/*/macos.csv
 
   commit:
     needs: [gen-ubuntu, gen-macos]
@@ -46,17 +46,17 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: ubuntu-testdata
-          path: testdata
+          path: apvd-core/testdata
 
       - uses: actions/download-artifact@v4
         with:
           name: macos-testdata
-          path: testdata
+          path: apvd-core/testdata
 
       - name: Show generated files
         run: |
           echo "=== Generated expected value files ==="
-          find testdata -name '*.csv' -type f | sort | while read f; do
+          find apvd-core/testdata -name '*.csv' -type f | sort | while read f; do
             echo "--- $f ---"
             head -3 "$f"
             echo "..."
@@ -67,7 +67,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add testdata/*/linux.csv testdata/*/macos.csv
+          git add apvd-core/testdata/*/linux.csv apvd-core/testdata/*/macos.csv
           git status
 
           if git diff --staged --quiet; then

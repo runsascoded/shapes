@@ -33,10 +33,10 @@ jobs:
       - uses: jetli/wasm-pack-action@v0.4.0
 
       - name: Build WASM
-        run: wasm-pack build --target web
+        run: cd apvd-wasm && wasm-pack build --target web
 
       - name: Push dist branch
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         uses: runsascoded/npm-dist@v1.1
         with:
-          prebuilt_dir: pkg
+          prebuilt_dir: apvd-wasm/pkg
