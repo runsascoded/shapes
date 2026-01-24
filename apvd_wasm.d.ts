@@ -1,5 +1,20 @@
 /* tslint:disable */
 /* eslint-disable */
+export interface AdamConfig {
+    beta1: number;
+    beta2: number;
+    epsilon: number;
+}
+
+export interface AdamState {
+    m: number[];
+    v: number[];
+    t: number;
+    beta1: number;
+    beta2: number;
+    epsilon: number;
+}
+
 export interface Circle<D> {
     c: R2<D>;
     r: D;
@@ -7,11 +22,9 @@ export interface Circle<D> {
 
 export interface Component {
     key: string;
-    sets: Set<number>[];
     points: Point[];
     edges: Edge[];
     regions: Region[];
-    container_idxs: number[];
     hull: Segment[];
 }
 
@@ -60,9 +73,25 @@ export interface Model {
     min_error: number;
 }
 
+export interface OptimConfig {
+    learning_rate: number;
+    max_grad_norm: number;
+    max_grad_value: number;
+    beta1: number;
+    beta2: number;
+    epsilon: number;
+    warmup_steps: number;
+    max_error_increase: number;
+    max_rejections: number;
+}
+
 export interface Point {
     p: R2<number>;
     edge_idxs: number[];
+}
+
+export interface Polygon<D> {
+    vertices: R2<D>[];
 }
 
 export interface R2<D> {
@@ -96,6 +125,7 @@ export interface Step {
     total_area: Dual;
     errors: Errors;
     error: Dual;
+    converged: boolean;
 }
 
 export interface Targets<D> {
@@ -128,10 +158,24 @@ export type Input = [Shape<number>, Duals];
 
 export type Key = string;
 
-export type Shape<D> = { Circle: Circle<D> } | { XYRR: XYRR<D> } | { XYRRT: XYRRT<D> };
+export type Shape<D> = ({ kind: "Circle" } & Circle<D>) | ({ kind: "XYRR" } & XYRR<D>) | ({ kind: "XYRRT" } & XYRRT<D>) | ({ kind: "Polygon" } & Polygon<D>);
 
 export type TargetsMap<D> = Record<string, D>;
 
+
+/**
+ * Checks if any polygon shapes in the given step are self-intersecting.
+ *
+ * Self-intersecting polygons have edges that cross each other, which
+ * invalidates area calculations and causes visual artifacts.
+ *
+ * # Arguments
+ * * `step` - Current optimization state.
+ *
+ * # Returns
+ * Array of strings describing any validity issues (empty if valid).
+ */
+export function check_polygon_validity(step: any): any;
 
 /**
  * Expands target specifications into fully-qualified region targets.
@@ -154,6 +198,22 @@ export function expand_targets(targets: any): any;
  * Should be called once at application startup.
  */
 export function init_logs(): void;
+
+/**
+ * Check if a step has converged below a custom threshold.
+ *
+ * Use this to implement user-configurable convergence thresholds.
+ * The step.converged field uses the default threshold (1e-10), but
+ * this function lets you check against any threshold.
+ *
+ * # Arguments
+ * * `step` - Current optimization state.
+ * * `threshold` - Custom convergence threshold (e.g., 1e-6 for fast, 1e-14 for precise).
+ *
+ * # Returns
+ * True if step.error < threshold.
+ */
+export function is_converged(step: any, threshold: number): boolean;
 
 /**
  * Creates an optimization model for area-proportional Venn diagrams.
@@ -188,19 +248,32 @@ export function make_model(inputs: any, targets: any): any;
 export function make_step(inputs: any, targets: any): any;
 
 /**
- * Performs a single gradient descent step.
+ * Performs a single gradient descent step with gradient clipping (recommended).
+ *
+ * Uses fixed learning rate with gradient clipping for stable updates.
+ * This is the recommended method - it prevents the oscillation that occurs
+ * with error-scaled step sizes.
  *
  * # Arguments
  * * `step` - Current optimization state from [`make_step`] or a previous [`step`] call.
- * * `max_step_error_ratio` - Learning rate scaling factor.
+ * * `learning_rate` - Fixed learning rate (typical: 0.01 to 0.1, default 0.05).
  *
  * # Returns
  * New [`Step`] with updated shape positions.
- *
- * # Panics
- * If the step fails due to invalid geometry.
  */
-export function step(step: any, max_step_error_ratio: number): any;
+export function step(step: any, learning_rate: number): any;
+
+/**
+ * Legacy step function that scales step size by error.
+ *
+ * **Deprecated**: Use [`step`] instead. This function can cause oscillation
+ * when error is high because step_size = error * max_step_error_ratio.
+ *
+ * # Arguments
+ * * `step` - Current optimization state.
+ * * `max_step_error_ratio` - Learning rate scaling factor.
+ */
+export function step_legacy(step: any, max_step_error_ratio: number): any;
 
 /**
  * Runs gradient descent training on a model.
@@ -217,6 +290,47 @@ export function step(step: any, max_step_error_ratio: number): any;
  * If a training step fails due to invalid geometry.
  */
 export function train(model: any, max_step_error_ratio: number, max_steps: number): any;
+
+/**
+ * Runs Adam optimizer training on a model.
+ *
+ * Adam (Adaptive Moment Estimation) maintains per-parameter momentum and variance
+ * estimates, enabling better convergence for complex optimization landscapes.
+ * Particularly useful for mixed shape scenes (e.g., polygon + circle).
+ *
+ * # Arguments
+ * * `model` - Model created by [`make_model`].
+ * * `learning_rate` - Adam learning rate (typical: 0.001 to 0.1).
+ * * `max_steps` - Maximum number of optimization steps.
+ *
+ * # Returns
+ * Updated model with training history containing all intermediate steps.
+ *
+ * # Panics
+ * If a training step fails due to invalid geometry.
+ */
+export function train_adam(model: any, learning_rate: number, max_steps: number): any;
+
+/**
+ * Runs robust optimization with Adam, gradient clipping, and backtracking.
+ *
+ * This is the recommended training method. It combines:
+ * - Adam optimizer for per-parameter adaptive learning rates
+ * - Gradient clipping to prevent catastrophically large steps
+ * - Learning rate warmup for stability
+ * - Step rejection when error increases significantly
+ *
+ * # Arguments
+ * * `model` - Model created by [`make_model`].
+ * * `max_steps` - Maximum number of optimization steps.
+ *
+ * # Returns
+ * Updated model with training history containing all intermediate steps.
+ *
+ * # Panics
+ * If a training step fails due to invalid geometry.
+ */
+export function train_robust(model: any, max_steps: number): any;
 
 /**
  * Updates the log level filter.
@@ -244,12 +358,17 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly check_polygon_validity: (a: any) => any;
     readonly expand_targets: (a: any) => any;
     readonly init_logs: () => void;
+    readonly is_converged: (a: any, b: number) => number;
     readonly make_model: (a: any, b: any) => any;
     readonly make_step: (a: any, b: any) => any;
     readonly step: (a: any, b: number) => any;
+    readonly step_legacy: (a: any, b: number) => any;
     readonly train: (a: any, b: number, c: number) => any;
+    readonly train_adam: (a: any, b: number, c: number) => any;
+    readonly train_robust: (a: any, b: number) => any;
     readonly update_log_level: (a: any) => void;
     readonly xyrr_unit: (a: any) => any;
     readonly __wbindgen_malloc: (a: number, b: number) => number;

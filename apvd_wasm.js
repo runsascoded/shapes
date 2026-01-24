@@ -1,4 +1,23 @@
-/* @ts-self-types="./apvd.d.ts" */
+/* @ts-self-types="./apvd_wasm.d.ts" */
+
+/**
+ * Checks if any polygon shapes in the given step are self-intersecting.
+ *
+ * Self-intersecting polygons have edges that cross each other, which
+ * invalidates area calculations and causes visual artifacts.
+ *
+ * # Arguments
+ * * `step` - Current optimization state.
+ *
+ * # Returns
+ * Array of strings describing any validity issues (empty if valid).
+ * @param {any} step
+ * @returns {any}
+ */
+export function check_polygon_validity(step) {
+    const ret = wasm.check_polygon_validity(step);
+    return ret;
+}
 
 /**
  * Expands target specifications into fully-qualified region targets.
@@ -27,6 +46,28 @@ export function expand_targets(targets) {
  */
 export function init_logs() {
     wasm.init_logs();
+}
+
+/**
+ * Check if a step has converged below a custom threshold.
+ *
+ * Use this to implement user-configurable convergence thresholds.
+ * The step.converged field uses the default threshold (1e-10), but
+ * this function lets you check against any threshold.
+ *
+ * # Arguments
+ * * `step` - Current optimization state.
+ * * `threshold` - Custom convergence threshold (e.g., 1e-6 for fast, 1e-14 for precise).
+ *
+ * # Returns
+ * True if step.error < threshold.
+ * @param {any} step
+ * @param {number} threshold
+ * @returns {boolean}
+ */
+export function is_converged(step, threshold) {
+    const ret = wasm.is_converged(step, threshold);
+    return ret !== 0;
 }
 
 /**
@@ -74,23 +115,42 @@ export function make_step(inputs, targets) {
 }
 
 /**
- * Performs a single gradient descent step.
+ * Performs a single gradient descent step with gradient clipping (recommended).
+ *
+ * Uses fixed learning rate with gradient clipping for stable updates.
+ * This is the recommended method - it prevents the oscillation that occurs
+ * with error-scaled step sizes.
  *
  * # Arguments
  * * `step` - Current optimization state from [`make_step`] or a previous [`step`] call.
- * * `max_step_error_ratio` - Learning rate scaling factor.
+ * * `learning_rate` - Fixed learning rate (typical: 0.01 to 0.1, default 0.05).
  *
  * # Returns
  * New [`Step`] with updated shape positions.
+ * @param {any} step
+ * @param {number} learning_rate
+ * @returns {any}
+ */
+export function step(step, learning_rate) {
+    const ret = wasm.step(step, learning_rate);
+    return ret;
+}
+
+/**
+ * Legacy step function that scales step size by error.
  *
- * # Panics
- * If the step fails due to invalid geometry.
+ * **Deprecated**: Use [`step`] instead. This function can cause oscillation
+ * when error is high because step_size = error * max_step_error_ratio.
+ *
+ * # Arguments
+ * * `step` - Current optimization state.
+ * * `max_step_error_ratio` - Learning rate scaling factor.
  * @param {any} step
  * @param {number} max_step_error_ratio
  * @returns {any}
  */
-export function step(step, max_step_error_ratio) {
-    const ret = wasm.step(step, max_step_error_ratio);
+export function step_legacy(step, max_step_error_ratio) {
+    const ret = wasm.step_legacy(step, max_step_error_ratio);
     return ret;
 }
 
@@ -114,6 +174,60 @@ export function step(step, max_step_error_ratio) {
  */
 export function train(model, max_step_error_ratio, max_steps) {
     const ret = wasm.train(model, max_step_error_ratio, max_steps);
+    return ret;
+}
+
+/**
+ * Runs Adam optimizer training on a model.
+ *
+ * Adam (Adaptive Moment Estimation) maintains per-parameter momentum and variance
+ * estimates, enabling better convergence for complex optimization landscapes.
+ * Particularly useful for mixed shape scenes (e.g., polygon + circle).
+ *
+ * # Arguments
+ * * `model` - Model created by [`make_model`].
+ * * `learning_rate` - Adam learning rate (typical: 0.001 to 0.1).
+ * * `max_steps` - Maximum number of optimization steps.
+ *
+ * # Returns
+ * Updated model with training history containing all intermediate steps.
+ *
+ * # Panics
+ * If a training step fails due to invalid geometry.
+ * @param {any} model
+ * @param {number} learning_rate
+ * @param {number} max_steps
+ * @returns {any}
+ */
+export function train_adam(model, learning_rate, max_steps) {
+    const ret = wasm.train_adam(model, learning_rate, max_steps);
+    return ret;
+}
+
+/**
+ * Runs robust optimization with Adam, gradient clipping, and backtracking.
+ *
+ * This is the recommended training method. It combines:
+ * - Adam optimizer for per-parameter adaptive learning rates
+ * - Gradient clipping to prevent catastrophically large steps
+ * - Learning rate warmup for stability
+ * - Step rejection when error increases significantly
+ *
+ * # Arguments
+ * * `model` - Model created by [`make_model`].
+ * * `max_steps` - Maximum number of optimization steps.
+ *
+ * # Returns
+ * Updated model with training history containing all intermediate steps.
+ *
+ * # Panics
+ * If a training step fails due to invalid geometry.
+ * @param {any} model
+ * @param {number} max_steps
+ * @returns {any}
+ */
+export function train_robust(model, max_steps) {
+    const ret = wasm.train_robust(model, max_steps);
     return ret;
 }
 
@@ -274,6 +388,16 @@ function __wbg_get_imports() {
             const ret = result;
             return ret;
         },
+        __wbg_instanceof_Map_53af74335dec57f4: function(arg0) {
+            let result;
+            try {
+                result = arg0 instanceof Map;
+            } catch (_) {
+                result = false;
+            }
+            const ret = result;
+            return ret;
+        },
         __wbg_instanceof_Uint8Array_9b9075935c74707c: function(arg0) {
             let result;
             try {
@@ -367,12 +491,17 @@ function __wbg_get_imports() {
             const ret = arg0;
             return ret;
         },
-        __wbindgen_cast_0000000000000002: function(arg0, arg1) {
+        __wbindgen_cast_0000000000000002: function(arg0) {
+            // Cast intrinsic for `I64 -> Externref`.
+            const ret = arg0;
+            return ret;
+        },
+        __wbindgen_cast_0000000000000003: function(arg0, arg1) {
             // Cast intrinsic for `Ref(String) -> Externref`.
             const ret = getStringFromWasm0(arg0, arg1);
             return ret;
         },
-        __wbindgen_cast_0000000000000003: function(arg0) {
+        __wbindgen_cast_0000000000000004: function(arg0) {
             // Cast intrinsic for `U64 -> Externref`.
             const ret = BigInt.asUintN(64, arg0);
             return ret;
@@ -389,7 +518,7 @@ function __wbg_get_imports() {
     };
     return {
         __proto__: null,
-        "./apvd_bg.js": import0,
+        "./apvd_wasm_bg.js": import0,
     };
 }
 
@@ -647,7 +776,7 @@ async function __wbg_init(module_or_path) {
     }
 
     if (module_or_path === undefined) {
-        module_or_path = new URL('apvd_bg.wasm', import.meta.url);
+        module_or_path = new URL('apvd_wasm_bg.wasm', import.meta.url);
     }
     const imports = __wbg_get_imports();
 
