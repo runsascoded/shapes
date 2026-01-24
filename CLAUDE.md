@@ -1,82 +1,143 @@
 # shapes - Differentiable Shape Intersections
 
-Rust library (compiled to WASM) for computing shape intersections with automatic differentiation. Used by [apvd] for area-proportional Venn diagram generation.
+Rust library for computing shape intersections with automatic differentiation. Used by [apvd] for area-proportional Venn diagram generation.
 
 [apvd]: https://github.com/runsascoded/apvd
+
+## Workspace Structure
+
+```
+shapes/
+├── apvd-core/     # Core computation library (platform-agnostic)
+├── apvd-wasm/     # WASM bindings for browser
+└── apvd-cli/      # Native CLI and WebSocket server
+```
 
 ## Build
 
 ```bash
-wasm-pack build --target web   # WASM → pkg/
-cargo build                     # Native
-cargo test                      # Tests
+# WASM (for browser)
+cd apvd-wasm && wasm-pack build --target web   # Output: apvd-wasm/pkg/
+
+# Native CLI
+cargo build -p apvd-cli --release              # Output: target/release/apvd
+
+# Tests
+cargo test -p apvd-core                        # Core library tests
+cargo test -p apvd-cli                         # CLI tests
 ```
 
-Output goes to `pkg/` with TypeScript bindings.
+## CLI Usage
+
+```bash
+# Batch training
+apvd train -s shapes.json -t targets.json -m 1000 -p 6
+
+# WebSocket server (for frontend)
+apvd serve -p 8080
+```
+
+### Train Options
+- `-s, --shapes` - Input shapes JSON (file or inline)
+- `-t, --targets` - Target areas JSON
+- `-m, --max-steps` - Maximum steps [default: 1000]
+- `-l, --learning-rate` - Learning rate [default: 0.05]
+- `-p, --parallel` - Parallel scene variants [default: 1]
+- `-R, --robust` - Use Adam + gradient clipping
+- `-o, --output` - Output file (default: stdout)
+- `-q, --quiet` - JSON only, no progress
 
 ## Architecture
 
-### Shape Types (`src/shape.rs`)
+### Shape Types (`apvd-core/src/geometry/shape.rs`)
 - **Circle**: center + radius
 - **XYRR**: axis-aligned ellipse (center + x/y radii)
 - **XYRRT**: rotated ellipse (center + x/y radii + theta)
+- **Polygon**: arbitrary vertex list
 
-### Core Modules
+### Core Modules (`apvd-core/src/`)
 
-**Math & Autodiff**:
-- `dual.rs`: Forward-mode AD wrapper around `num_dual::DualDVec64`
-- `math/quartic.rs`, `cubic.rs`, `quadratic.rs`: Polynomial solvers
-
-**Geometry**:
+**Geometry** (`geometry/`):
+- `circle.rs`, `polygon.rs`: Shape implementations
+- `ellipses/xyrr.rs`, `xyrrt.rs`: Ellipse computations
 - `ellipses/quartic.rs`: Quartic solver for ellipse-ellipse intersections
-- `ellipses/xyrr.rs`, `xyrrt.rs`: Ellipse-specific computations
-- `circle.rs`: Circle operations
 - `r2.rs`: 2D point type
+- `shape.rs`: Shape enum and traits
+
+**Analysis** (`analysis/`):
 - `intersect.rs`, `intersection.rs`: Shape intersection detection
-
-**Regions & Optimization**:
 - `region.rs`, `regions.rs`: Region identification and area computation
-- `targets.rs`: Target region sizes with inclusive/exclusive expansion
-- `model.rs`: Training loop (gradient descent)
-- `step.rs`: Single optimization step
-- `history.rs`: Step history tracking
+- `scene.rs`: Full scene analysis
 
-**WASM Exports** (`lib.rs`):
+**Optimization** (`optimization/`):
+- `model.rs`: Training loop, supports vanilla GD, Adam, robust
+- `step.rs`: Single optimization step with gradient computation
+- `adam.rs`: Adam optimizer state
+- `robust.rs`: Robust optimizer (Adam + clipping + backtracking)
+- `targets.rs`: Target region sizes with inclusive/exclusive expansion
+
+**Math** (`math/`):
+- `polynomial/`: Quadratic, cubic, quartic solvers
+- `dual.rs`: Forward-mode AD wrapper around `num_dual::DualDVec64`
+
+### WASM Exports (`apvd-wasm/src/lib.rs`)
 - `make_model(inputs, targets)`: Create optimization model
-- `train(model, max_step_error_ratio, max_steps)`: Run training
-- `make_step(inputs, targets)`: Single step
-- `expand_targets(targets)`: Expand inclusive/exclusive targets
-- `init_logs()`, `update_log_level(level)`: Logging
+- `train(model, max_step_error_ratio, max_steps)`: Vanilla GD training
+- `train_adam(model, learning_rate, max_steps)`: Adam training
+- `train_robust(model, max_steps)`: Robust training (recommended)
+- `step(step, learning_rate)`: Single step with clipping (recommended)
+- `step_legacy(step, max_step_error_ratio)`: Old error-scaled step
+- `is_converged(step, threshold)`: Check custom convergence threshold
+- `check_polygon_validity(step)`: Detect self-intersecting polygons
+
+### Server Protocol (`apvd-cli/src/server.rs`)
+
+WebSocket at `ws://host:port/ws`:
+
+**Client → Server:**
+```json
+{"type": "StartTraining", "shapes": [...], "targets": {...}, "max_steps": 1000}
+{"type": "StopTraining"}
+{"type": "Ping"}
+```
+
+**Server → Client:**
+```json
+{"type": "StepUpdate", "step_idx": 42, "error": 0.001, "shapes": [...], "converged": false}
+{"type": "TrainingComplete", "total_steps": 100, "final_error": 1e-6}
+{"type": "Error", "message": "..."}
+{"type": "Pong"}
+```
 
 ## Key Dependencies
 
 - **num-dual**: Forward-mode automatic differentiation
 - **nalgebra**: Linear algebra (vectors, matrices)
+- **rayon**: Parallel scene training (CLI)
+- **axum**: WebSocket server (CLI)
 - **wasm-bindgen**: JS/WASM FFI
-- **serde-wasm-bindgen**: Serialization to/from JS
 - **tsify**: TypeScript type generation
-- **approx**: Floating-point comparison with tolerance
 
 ## Data Flow
 
-1. JS passes shape specs + target sizes to `make_model`
-2. Rust computes current region areas via:
+1. Frontend/CLI passes shape specs + target sizes
+2. Rust computes current region areas:
    - Find shape intersection points (quartic solver for ellipses)
    - Build boundary graph (edges, segments)
    - Compute signed area of each region
 3. Autodiff computes error gradient w.r.t. shape parameters
-4. Gradient descent updates shapes to minimize area error
-5. Model returned to JS with step history
+4. Optimizer updates shapes to minimize area error
+5. Repeat until converged or max steps reached
 
 ## Tests
 
 ```bash
-cargo test                    # All tests
-cargo test fizz_buzz_bazz     # Specific test
-RUST_LOG=debug cargo test     # With logging
+cargo test -p apvd-core                    # All core tests
+cargo test -p apvd-core fizz_buzz_bazz     # Specific test
+RUST_LOG=debug cargo test -p apvd-core     # With logging
 ```
 
-Test data in `testdata/` (CSV files with expected values).
+Test data in `apvd-core/testdata/` (CSV files with expected values).
 
 ## Known Issues
 
@@ -88,14 +149,12 @@ Test data in `testdata/` (CSV files with expected values).
 ## Future Improvements
 
 ### Algorithm Robustness
-- **Sweep line algorithm**: Replace current intersection/arrangement logic with sweep-line approach (Bentley-Ottmann style) for robust handling of all curve types
-- **Proper polygon edge traversal**: Track edge indices and walk perimeter instead of theta-based vertex filtering
-- **X-monotone decomposition**: Split curves at vertical tangent points for uniform handling
+- **Sweep line algorithm**: Replace current intersection logic with Bentley-Ottmann style
+- **Proper polygon edge traversal**: Track edge indices instead of theta-based filtering
+- **X-monotone decomposition**: Split curves at vertical tangent points
 
 ### Optimization
-- **Adam optimizer**: Replace simple gradient descent with Adam or similar adaptive learning rate optimizer
 - **Loss function options**: Add stress metric, diagError metric (per eulerAPE/eulerr)
 
 ### Shape Support
-- **Cubic Bezier curves**: Would require numerical intersection (Newton's method or Bezier clipping) and Green's theorem for area
-- Consider tradeoff: exact autodiff with Dual numbers vs finite differences (O(n) evals but simpler code for complex curves)
+- **Cubic Bezier curves**: Numerical intersection + Green's theorem for area

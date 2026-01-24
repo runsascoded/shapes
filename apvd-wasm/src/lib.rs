@@ -8,8 +8,19 @@ use apvd_core::{
     shape::Shape,
 };
 use log::{info, error};
+use tsify::declare;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_console_logger::DEFAULT_LOGGER;
+
+// Manually declare Dual type for TypeScript (the actual Rust type wraps num-dual's DualDVec64
+// which can't be directly exported via tsify)
+#[declare]
+struct Dual {
+    /// The scalar value
+    pub v: f64,
+    /// The gradient vector (partial derivatives)
+    pub d: Vec<f64>,
+}
 
 /// Initializes the logging system for WASM.
 ///

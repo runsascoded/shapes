@@ -4,6 +4,7 @@
 //! streaming step updates back to the client.
 
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use axum::{
@@ -16,6 +17,7 @@ use axum::{
     Router,
 };
 use futures_util::{SinkExt, StreamExt};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
@@ -41,6 +43,9 @@ pub enum ClientMessage {
         learning_rate: f64,
         #[serde(default)]
         robust: bool,
+        /// Number of parallel variants to train (overrides server config if provided)
+        #[serde(default)]
+        parallel: Option<usize>,
     },
     /// Stop current training
     StopTraining,
@@ -57,10 +62,10 @@ fn default_learning_rate() -> f64 {
 }
 
 /// Messages from server to client
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type")]
 pub enum ServerMessage {
-    /// Training step update
+    /// Training step update (from best variant when running parallel)
     StepUpdate {
         step_idx: usize,
         error: f64,
@@ -68,6 +73,9 @@ pub enum ServerMessage {
         min_step: usize,
         shapes: Vec<serde_json::Value>,
         converged: bool,
+        /// Which variant this update is from (0 if single training)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        variant_id: Option<usize>,
     },
     /// Training completed
     TrainingComplete {
@@ -75,11 +83,55 @@ pub enum ServerMessage {
         final_error: f64,
         min_error: f64,
         min_step: usize,
+        /// Permutation used for best result (if parallel training)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        best_permutation: Option<Vec<usize>>,
     },
     /// Error occurred
     Error { message: String },
+    /// Training was stopped
+    Stopped,
     /// Pong response
     Pong,
+}
+
+/// Shared state for a training session
+struct TrainingSession {
+    /// Flag to signal training should stop
+    stop_requested: AtomicBool,
+    /// Current best error across all variants
+    best_error: std::sync::Mutex<f64>,
+    /// Which variant currently has best error
+    best_variant: AtomicUsize,
+}
+
+impl TrainingSession {
+    fn new() -> Self {
+        Self {
+            stop_requested: AtomicBool::new(false),
+            best_error: std::sync::Mutex::new(f64::INFINITY),
+            best_variant: AtomicUsize::new(0),
+        }
+    }
+
+    fn request_stop(&self) {
+        self.stop_requested.store(true, Ordering::SeqCst);
+    }
+
+    fn should_stop(&self) -> bool {
+        self.stop_requested.load(Ordering::SeqCst)
+    }
+
+    fn update_best(&self, variant_id: usize, error: f64) -> bool {
+        let mut best = self.best_error.lock().unwrap();
+        if error < *best {
+            *best = error;
+            self.best_variant.store(variant_id, Ordering::SeqCst);
+            true
+        } else {
+            false
+        }
+    }
 }
 
 /// Run the WebSocket server
@@ -104,11 +156,15 @@ async fn ws_handler(
     ws.on_upgrade(move |socket| handle_socket(socket, config))
 }
 
-async fn handle_socket(socket: WebSocket, _config: Arc<ServerConfig>) {
+async fn handle_socket(socket: WebSocket, config: Arc<ServerConfig>) {
     let (mut sender, mut receiver) = socket.split();
 
     // Channel for sending messages back to the client
     let (tx, mut rx) = mpsc::channel::<ServerMessage>(100);
+
+    // Current training session (if any)
+    let current_session: Arc<std::sync::Mutex<Option<Arc<TrainingSession>>>> =
+        Arc::new(std::sync::Mutex::new(None));
 
     // Task to forward messages to WebSocket
     let send_task = tokio::spawn(async move {
@@ -136,18 +192,65 @@ async fn handle_socket(socket: WebSocket, _config: Arc<ServerConfig>) {
                         max_steps,
                         learning_rate,
                         robust,
+                        parallel,
                     }) => {
+                        // Create new session
+                        let session = Arc::new(TrainingSession::new());
+                        {
+                            let mut current = current_session.lock().unwrap();
+                            // Stop any existing training
+                            if let Some(old_session) = current.take() {
+                                old_session.request_stop();
+                            }
+                            *current = Some(session.clone());
+                        }
+
                         let tx = tx.clone();
-                        // Run training in a blocking task (uses rayon internally)
+                        let num_parallel = parallel.unwrap_or(config.parallel);
+
+                        // Run training in a blocking task
                         tokio::task::spawn_blocking(move || {
-                            run_training(shapes, targets, max_steps, learning_rate, robust, tx);
+                            if num_parallel > 1 {
+                                run_parallel_training(
+                                    shapes,
+                                    targets,
+                                    max_steps,
+                                    learning_rate,
+                                    robust,
+                                    num_parallel,
+                                    session,
+                                    tx,
+                                );
+                            } else {
+                                run_single_training(
+                                    shapes,
+                                    targets,
+                                    max_steps,
+                                    learning_rate,
+                                    robust,
+                                    session,
+                                    tx,
+                                );
+                            }
                         });
                     }
                     Ok(ClientMessage::StopTraining) => {
-                        // TODO: Implement cancellation
-                        let _ = tx.send(ServerMessage::Error {
-                            message: "Stop not yet implemented".to_string(),
-                        }).await;
+                        let has_session = {
+                            let mut current = current_session.lock().unwrap();
+                            if let Some(session) = current.take() {
+                                session.request_stop();
+                                true
+                            } else {
+                                false
+                            }
+                        };
+                        if has_session {
+                            let _ = tx.send(ServerMessage::Stopped).await;
+                        } else {
+                            let _ = tx.send(ServerMessage::Error {
+                                message: "No training in progress".to_string(),
+                            }).await;
+                        }
                     }
                     Ok(ClientMessage::Ping) => {
                         let _ = tx.send(ServerMessage::Pong).await;
@@ -159,7 +262,14 @@ async fn handle_socket(socket: WebSocket, _config: Arc<ServerConfig>) {
                     }
                 }
             }
-            Message::Close(_) => break,
+            Message::Close(_) => {
+                // Stop any running training when client disconnects
+                let mut current = current_session.lock().unwrap();
+                if let Some(session) = current.take() {
+                    session.request_stop();
+                }
+                break;
+            }
             _ => {}
         }
     }
@@ -169,12 +279,13 @@ async fn handle_socket(socket: WebSocket, _config: Arc<ServerConfig>) {
     let _ = send_task.await;
 }
 
-fn run_training(
+fn run_single_training(
     shapes: Vec<InputSpec>,
     targets: TargetsMap<f64>,
     max_steps: usize,
     learning_rate: f64,
     robust: bool,
+    session: Arc<TrainingSession>,
     tx: mpsc::Sender<ServerMessage>,
 ) {
     // Create model
@@ -190,10 +301,15 @@ fn run_training(
     };
 
     // Send initial step
-    send_step_update(&tx, &model, 0);
+    send_step_update(&tx, &model, 0, None);
 
-    // Training loop - we do it manually to send updates
+    // Training loop
     for step_idx in 0..max_steps {
+        // Check for stop request
+        if session.should_stop() {
+            return;
+        }
+
         let current_step = model.steps.last().unwrap();
 
         // Check for convergence
@@ -228,7 +344,7 @@ fn run_training(
 
                 // Send update every 10 steps or on significant changes
                 if step_idx % 10 == 0 || step_idx < 20 {
-                    send_step_update(&tx, &model, step_idx + 1);
+                    send_step_update(&tx, &model, step_idx + 1, None);
                 }
             }
             Err(e) => {
@@ -240,6 +356,10 @@ fn run_training(
         }
     }
 
+    if session.should_stop() {
+        return;
+    }
+
     // Send final update
     let final_step = model.steps.last().unwrap();
     let _ = tx.blocking_send(ServerMessage::TrainingComplete {
@@ -247,10 +367,126 @@ fn run_training(
         final_error: final_step.error.v(),
         min_error: model.min_error,
         min_step: model.min_idx,
+        best_permutation: None,
     });
 }
 
-fn send_step_update(tx: &mpsc::Sender<ServerMessage>, model: &Model, step_idx: usize) {
+fn run_parallel_training(
+    shapes: Vec<InputSpec>,
+    targets: TargetsMap<f64>,
+    max_steps: usize,
+    learning_rate: f64,
+    robust: bool,
+    num_parallel: usize,
+    session: Arc<TrainingSession>,
+    tx: mpsc::Sender<ServerMessage>,
+) {
+    let num_shapes = shapes.len();
+    let permutations = generate_permutations(num_shapes, num_parallel);
+
+    // Shared state for tracking best result
+    let best_result: Arc<std::sync::Mutex<Option<(Vec<usize>, Model)>>> =
+        Arc::new(std::sync::Mutex::new(None));
+
+    // Train all variants in parallel
+    permutations.into_par_iter().enumerate().for_each(|(variant_id, permutation)| {
+        if session.should_stop() {
+            return;
+        }
+
+        // Reorder inputs according to permutation
+        let reordered_inputs: Vec<InputSpec> = permutation
+            .iter()
+            .map(|&idx| shapes[idx].clone())
+            .collect();
+
+        // Create model
+        let model_result = Model::new(reordered_inputs, targets.clone());
+        let mut model = match model_result {
+            Ok(m) => m,
+            Err(_) => return,
+        };
+
+        // Training loop
+        for step_idx in 0..max_steps {
+            if session.should_stop() {
+                return;
+            }
+
+            let current_step = model.steps.last().unwrap();
+
+            if current_step.converged {
+                break;
+            }
+
+            let next_step = if robust {
+                current_step.step_clipped(learning_rate, 0.5, 1.0)
+            } else {
+                current_step.step(learning_rate)
+            };
+
+            match next_step {
+                Ok(step) => {
+                    let err = step.error.v();
+                    if err.is_nan() {
+                        break;
+                    }
+
+                    if err < model.min_error {
+                        model.min_idx = model.steps.len();
+                        model.min_error = err;
+                    }
+
+                    model.steps.push(step);
+
+                    // Check if this is now the best variant
+                    if session.update_best(variant_id, err) {
+                        // Send update (only from best variant)
+                        if step_idx % 10 == 0 || step_idx < 20 {
+                            send_step_update(&tx, &model, step_idx + 1, Some(variant_id));
+                        }
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+
+        // Update best result if this variant is best
+        let final_error = model.steps.last().map(|s| s.error.v()).unwrap_or(f64::INFINITY);
+        let mut best = best_result.lock().unwrap();
+        if best.is_none() || final_error < best.as_ref().unwrap().1.min_error {
+            *best = Some((permutation, model));
+        }
+    });
+
+    if session.should_stop() {
+        return;
+    }
+
+    // Send final result
+    let best = best_result.lock().unwrap();
+    if let Some((permutation, model)) = best.as_ref() {
+        let final_step = model.steps.last().unwrap();
+        let _ = tx.blocking_send(ServerMessage::TrainingComplete {
+            total_steps: model.steps.len(),
+            final_error: final_step.error.v(),
+            min_error: model.min_error,
+            min_step: model.min_idx,
+            best_permutation: Some(permutation.clone()),
+        });
+    } else {
+        let _ = tx.blocking_send(ServerMessage::Error {
+            message: "All training variants failed".to_string(),
+        });
+    }
+}
+
+fn send_step_update(
+    tx: &mpsc::Sender<ServerMessage>,
+    model: &Model,
+    step_idx: usize,
+    variant_id: Option<usize>,
+) {
     let step = model.steps.last().unwrap();
     let shapes: Vec<serde_json::Value> = step
         .shapes
@@ -265,5 +501,45 @@ fn send_step_update(tx: &mpsc::Sender<ServerMessage>, model: &Model, step_idx: u
         min_step: model.min_idx,
         shapes,
         converged: step.converged,
+        variant_id,
     });
+}
+
+/// Generate shape permutations for parallel training.
+fn generate_permutations(n: usize, max_count: usize) -> Vec<Vec<usize>> {
+    if max_count == 1 {
+        return vec![(0..n).collect()];
+    }
+
+    let mut permutations = Vec::new();
+    let mut arr: Vec<usize> = (0..n).collect();
+
+    fn heap_permute(k: usize, arr: &mut Vec<usize>, result: &mut Vec<Vec<usize>>) {
+        if k == 1 {
+            result.push(arr.clone());
+            return;
+        }
+        heap_permute(k - 1, arr, result);
+        for i in 0..k - 1 {
+            if k % 2 == 0 {
+                arr.swap(i, k - 1);
+            } else {
+                arr.swap(0, k - 1);
+            }
+            heap_permute(k - 1, arr, result);
+        }
+    }
+
+    heap_permute(n, &mut arr, &mut permutations);
+
+    if permutations.len() > max_count {
+        let step = permutations.len() / max_count;
+        permutations = permutations
+            .into_iter()
+            .step_by(step)
+            .take(max_count)
+            .collect();
+    }
+
+    permutations
 }
