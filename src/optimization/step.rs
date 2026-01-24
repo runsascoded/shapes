@@ -9,9 +9,13 @@ use crate::math::recip::Recip;
 use crate::shape::{Shape, Shapes, InputSpec};
 use crate::{distance::Distance, error::SceneError, scene::Scene, math::is_zero::IsZero, r2::R2, targets::Targets, regions};
 use crate::dual::{Dual, D};
+use super::adam::AdamState;
 
 #[declare]
 pub type Errors = BTreeMap<String, Error>;
+
+/// Convergence threshold - below this error, consider the optimization converged.
+pub const CONVERGENCE_THRESHOLD: f64 = 1e-10;
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
 pub struct Step {
@@ -21,6 +25,9 @@ pub struct Step {
     pub total_area: Dual,
     pub errors: Errors,
     pub error: Dual,
+    /// True if error is below convergence threshold (1e-10).
+    /// Frontend should stop iterating when this is true.
+    pub converged: bool,
 }
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
@@ -155,11 +162,41 @@ impl Step {
             error += Dual::new(0., total_contained_penalty.d());
         }
 
+        // Add polygon regularization penalties (self-intersection, convexity, edge regularity)
+        let mut total_regularization_penalty = scene.zero();
+        for set in sets.iter() {
+            if let crate::shape::Shape::Polygon(poly) = &set.borrow().shape {
+                // Self-intersection penalty (high weight - this is a serious problem)
+                let self_int_penalty = poly.self_intersection_penalty_dual();
+                if self_int_penalty.v() > 0.0 {
+                    debug!("  self-intersection penalty: {}", self_int_penalty.v());
+                    total_regularization_penalty = total_regularization_penalty + self_int_penalty;
+                }
+
+                // Regularity penalty (edge variance + convexity, lower weight)
+                let reg_penalty = poly.regularity_penalty();
+                if reg_penalty.v() > 0.0 {
+                    debug!("  regularity penalty: {}", reg_penalty.v());
+                    // Scale down regularity penalty relative to area error
+                    total_regularization_penalty = total_regularization_penalty + reg_penalty * 0.01;
+                }
+            }
+        }
+
+        let total_reg_penalty_v = total_regularization_penalty.v();
+        if total_reg_penalty_v > 0.0 {
+            debug!("  total_regularization_penalty: {}", total_reg_penalty_v);
+            // Add gradient only (like other penalties) to not disrupt error metric
+            // but still guide optimization away from bad shapes
+            error += Dual::new(0., total_regularization_penalty.d());
+        }
+
         // Take shapes back from `scene`
         let shapes = sets.iter().map(|s| s.borrow().to_owned().shape).collect::<Vec<Shape<D>>>();
 
-        debug!("all-in error: {:?}", error);
-        Ok(Step { shapes, components, targets, total_area, errors, error })
+        let converged = error.v() < CONVERGENCE_THRESHOLD;
+        debug!("all-in error: {:?}, converged: {}", error, converged);
+        Ok(Step { shapes, components, targets, total_area, errors, error, converged })
     }
 
     pub fn n(&self) -> usize {
@@ -225,6 +262,88 @@ impl Step {
         for (cur, nxt) in shapes.iter().zip(new_shapes.iter()) {
             debug!("  {} -> {:?}", cur.v(), nxt.v());
         }
+        Step::nxt(new_shapes, self.targets.clone())
+    }
+
+    /// Take an optimization step using Adam optimizer.
+    ///
+    /// Unlike vanilla gradient descent which uses `step_size = error * max_step_error_ratio`,
+    /// Adam maintains per-parameter momentum and variance estimates, enabling:
+    /// - Escape from local minima via momentum
+    /// - Adaptive per-parameter learning rates
+    /// - Smoother convergence with less oscillation
+    pub fn step_with_adam(&self, adam: &mut AdamState, learning_rate: f64) -> Result<Step, SceneError> {
+        let error = self.error.clone();
+        let grad_vec = (-error.clone()).d();
+
+        let magnitude = grad_vec.iter().map(|d| d * d).sum::<f64>().sqrt();
+
+        // If magnitude is zero (no gradient), skip the step and return a clone with same shapes
+        if magnitude == 0. || magnitude.is_nan() {
+            debug!("  skipping step: magnitude is {} (grad_vec: {:?})", magnitude, grad_vec);
+            return Step::nxt(self.shapes.clone(), self.targets.clone());
+        }
+
+        // Adam computes the step vector using momentum and variance estimates
+        let step_vec = adam.step(&grad_vec, learning_rate);
+
+        debug!("  err {:?} (Adam step {})", error, adam.t);
+        debug!("  learning_rate {}, magnitude {}", learning_rate, magnitude);
+        debug!("  grad_vec {:?}", grad_vec);
+        debug!("  step_vec {:?}", step_vec);
+
+        let shapes = &self.shapes;
+        let new_shapes = shapes.iter().map(|s| s.step(&step_vec)).collect::<Vec<Shape<D>>>();
+        for (cur, nxt) in shapes.iter().zip(new_shapes.iter()) {
+            debug!("  {} -> {:?}", cur.v(), nxt.v());
+        }
+        Step::nxt(new_shapes, self.targets.clone())
+    }
+
+    /// Take an optimization step with gradient clipping.
+    ///
+    /// Unlike vanilla `step()` which can take very large steps when error is high,
+    /// this method clips gradients to prevent oscillation:
+    /// - Per-component clipping: each gradient is clamped to [-max_grad, max_grad]
+    /// - L2 norm clipping: total gradient magnitude is clamped to max_grad_norm
+    /// - Fixed learning rate: doesn't scale with error, providing more stable updates
+    ///
+    /// This is a simpler alternative to Adam that doesn't require persistent state.
+    pub fn step_clipped(&self, learning_rate: f64, max_grad_value: f64, max_grad_norm: f64) -> Result<Step, SceneError> {
+        let error = self.error.clone();
+        let grad_vec = (-error.clone()).d();
+
+        let magnitude = grad_vec.iter().map(|d| d * d).sum::<f64>().sqrt();
+
+        // If magnitude is zero (no gradient), skip the step
+        if magnitude == 0. || magnitude.is_nan() {
+            debug!("  skipping step: magnitude is {} (grad_vec: {:?})", magnitude, grad_vec);
+            return Step::nxt(self.shapes.clone(), self.targets.clone());
+        }
+
+        // Clip by value (per-component)
+        let mut clipped: Vec<f64> = grad_vec.iter()
+            .map(|&g| g.clamp(-max_grad_value, max_grad_value))
+            .collect();
+
+        // Clip by L2 norm
+        let clipped_norm: f64 = clipped.iter().map(|g| g * g).sum::<f64>().sqrt();
+        if clipped_norm > max_grad_norm {
+            let scale = max_grad_norm / clipped_norm;
+            for g in &mut clipped {
+                *g *= scale;
+            }
+        }
+
+        // Apply fixed learning rate (not scaled by error)
+        let step_vec: Vec<f64> = clipped.iter().map(|&g| g * learning_rate).collect();
+
+        debug!("  err {:?} (clipped step)", error);
+        debug!("  learning_rate {}, original magnitude {}, clipped norm {}", learning_rate, magnitude, clipped_norm.min(max_grad_norm));
+        debug!("  step_vec {:?}", step_vec);
+
+        let shapes = &self.shapes;
+        let new_shapes = shapes.iter().map(|s| s.step(&step_vec)).collect::<Vec<Shape<D>>>();
         Step::nxt(new_shapes, self.targets.clone())
     }
 }
