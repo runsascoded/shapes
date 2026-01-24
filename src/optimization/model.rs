@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
 use crate::{error::SceneError, step::Step, targets::TargetsMap, shape::InputSpec};
+use super::adam::{AdamState, AdamConfig};
+use super::robust::{self, OptimConfig};
 
 #[derive(Debug, Clone, Tsify, Serialize, Deserialize)]
 pub struct Model {
@@ -68,6 +70,99 @@ impl Model {
     }
     pub fn grad_size(&self) -> usize {
         self.steps[0].grad_size()
+    }
+
+    /// Train using Adam optimizer instead of vanilla gradient descent.
+    ///
+    /// Adam provides momentum and per-parameter adaptive learning rates,
+    /// which helps escape local minima and reduces oscillation - particularly
+    /// useful for mixed shape scenes (e.g., polygon + circle).
+    pub fn train_adam(&mut self, learning_rate: f64, max_steps: usize) -> Result<(), SceneError> {
+        self.train_adam_with_config(learning_rate, max_steps, AdamConfig::default())
+    }
+
+    /// Train using Adam optimizer with custom hyperparameters.
+    pub fn train_adam_with_config(&mut self, learning_rate: f64, max_steps: usize, config: AdamConfig) -> Result<(), SceneError> {
+        let num_steps = self.steps.len();
+        let mut step = self.steps[num_steps - 1].clone();
+        let grad_size = step.grad_size();
+        let mut adam = AdamState::with_config(grad_size, config);
+
+        for idx in 0..max_steps {
+            let step_idx = idx + num_steps;
+            debug!("Step {} (Adam):", step_idx);
+            let nxt = step.step_with_adam(&mut adam, learning_rate)?;
+            let nxt_err = nxt.error.re;
+            if nxt_err.is_nan() {
+                warn!("NaN err at step {}: {:?}", step_idx, nxt);
+                self.repeat_idx = Some(step_idx);
+                break;
+            }
+            let min_step = &self.steps[self.min_idx];
+            if nxt_err < min_step.error.re {
+                self.min_idx = step_idx;
+                self.min_error = nxt_err;
+            }
+            self.steps.push(nxt.clone());
+
+            // Check whether the newest step (`nxt`) is a repeat of a previous step:
+            for (prv_idx, prv) in self.steps.iter().enumerate().rev().skip(1) {
+                let prv_err = prv.error.re;
+                if prv_err == nxt_err &&
+                    prv
+                    .shapes
+                    .iter()
+                    .zip(nxt.shapes.iter())
+                    .all(|(a, b)| {
+                        a.v() == b.v()
+                    })
+                {
+                    info!("  Step {} matches step {}: {}", step_idx, prv_idx, prv_err);
+                    self.repeat_idx = Some(prv_idx);
+                    break;
+                }
+            }
+            // If so, break
+            if self.repeat_idx.is_some() {
+                break;
+            }
+            step = nxt;
+        }
+        Ok(())
+    }
+
+    /// Train using robust optimization with Adam, gradient clipping, and backtracking.
+    ///
+    /// This is the recommended training method. It combines:
+    /// - Adam optimizer for per-parameter adaptive learning rates
+    /// - Gradient clipping to prevent catastrophically large steps
+    /// - Learning rate warmup for stability
+    /// - Step rejection when error increases significantly
+    pub fn train_robust(&mut self, max_steps: usize) -> Result<(), SceneError> {
+        self.train_robust_with_config(OptimConfig::default(), max_steps)
+    }
+
+    /// Train using robust optimization with custom configuration.
+    pub fn train_robust_with_config(&mut self, config: OptimConfig, max_steps: usize) -> Result<(), SceneError> {
+        let num_steps = self.steps.len();
+        let initial_step = &self.steps[num_steps - 1];
+
+        let new_steps = robust::train_robust(initial_step, config, max_steps)?;
+
+        // Add new steps to history, tracking min error
+        for (idx, step) in new_steps.into_iter().skip(1).enumerate() {
+            let step_idx = num_steps + idx;
+            let err = step.error.re;
+
+            if err < self.min_error {
+                self.min_idx = step_idx;
+                self.min_error = err;
+            }
+
+            self.steps.push(step);
+        }
+
+        Ok(())
     }
 }
 
