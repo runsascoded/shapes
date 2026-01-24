@@ -9,8 +9,8 @@ pub static D: bool = true;
 /// i.e. the first differentiable coordinate will be `one_hot(0)`, the second will be `one_hot(1)`, etc.
 /// This level of indirection makes it easier to specify a model's Shapes, and toggle which coordinates are considered moveable (and whose error-partial-derivative ∂(error) is propagated through all calculations).
 /// See [`model::tests`] for example:
-/// ```rust
-/// use crate::dual::{d, z};
+/// ```rust,ignore
+/// use apvd_core::{Model, duals::{D, Z}, circle::circle, to::To};
 /// let inputs = vec![
 ///     (circle(0., 0., 1.), vec![ Z, Z, Z ]),
 ///     (circle(1., 0., 1.), vec![ D, Z, D ]),

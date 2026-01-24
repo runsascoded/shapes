@@ -1,88 +1,15 @@
-#![allow(mixed_script_confusables)]
+//! WASM bindings for area-proportional Venn diagrams.
+//!
+//! This crate provides JavaScript/WASM bindings for the apvd-core library,
+//! enabling browser-based Venn diagram optimization.
 
-#[cfg_attr(not(test), allow(unused_imports))]
-#[macro_use]
-extern crate approx;
-extern crate console_error_panic_hook;
-
-// Organized modules
-pub mod analysis;
-pub mod geometry;
-pub mod math;
-pub mod optimization;
-
-// Re-exports for backwards compatibility
-pub use geometry::circle;
-pub use geometry::ellipses;
-pub use geometry::polygon;
-pub use geometry::r2;
-pub use geometry::rotate;
-pub use geometry::shape;
-pub use geometry::transform;
-
-pub use optimization::history;
-pub use optimization::model;
-pub use optimization::step;
-pub use optimization::targets;
-
-pub use analysis::component;
-pub use analysis::contains;
-pub use analysis::distance;
-pub use analysis::edge;
-pub use analysis::gap;
-pub use analysis::hull;
-pub use analysis::intersect;
-pub use analysis::intersection;
-pub use analysis::node;
-pub use analysis::region;
-pub use analysis::regions;
-pub use analysis::scene;
-pub use analysis::segment;
-pub use analysis::set;
-pub use analysis::boundary_coord;
-
-// Re-export math utilities for backwards compatibility
-pub use math::d5;
-pub use math::float_arr;
-pub use math::float_wrap;
-pub use math::roots;
-pub use math::sqrt;
-pub use math::trig;
-pub use math::zero;
-
-// Utility modules
-pub mod coord_getter;
-pub mod dual;
-pub mod duals;
-pub mod error;
-pub mod fmt;
-pub mod js_dual;
-pub mod to;
-
-use targets::Targets;
-use shape::InputSpec;
-use step::Step;
-use dual::D;
-use ellipses::xyrr::XYRR;
-use log::{LevelFilter, info, error};
-
+use apvd_core::{
+    Model, Step, Targets, TargetsMap, InputSpec, XYRR, D,
+    shape::Shape,
+};
+use log::{info, error};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_console_logger::DEFAULT_LOGGER;
-use crate::targets::TargetsMap;
-use crate::model::Model;
-
-pub fn deser_log_level(level: JsValue) -> LevelFilter {
-    let level: Option<String> = serde_wasm_bindgen::from_value(level).unwrap();
-    let level = match level.as_deref() {
-        Some("error") => LevelFilter::Error,
-        Some("warn") => LevelFilter::Warn,
-        Some("info") | Some("") | None => LevelFilter::Info,
-        Some("debug") => LevelFilter::Debug,
-        Some("trace") => LevelFilter::Trace,
-        Some(level) => panic!("invalid log level: {}", level),
-    };
-    level
-}
 
 /// Initializes the logging system for WASM.
 ///
@@ -104,7 +31,8 @@ pub fn init_logs() {
 ///   Defaults to "info" if empty or null.
 #[wasm_bindgen]
 pub fn update_log_level(level: JsValue) {
-    let level = deser_log_level(level);
+    let level: Option<String> = serde_wasm_bindgen::from_value(level).unwrap();
+    let level = apvd_core::parse_log_level(level.as_deref());
     log::set_max_level(level);
 }
 
@@ -300,7 +228,7 @@ pub fn check_polygon_validity(step: JsValue) -> JsValue {
     let mut issues = Vec::<String>::new();
 
     for (idx, shape) in step.shapes.iter().enumerate() {
-        if let crate::shape::Shape::Polygon(poly) = shape {
+        if let Shape::Polygon(poly) = shape {
             let poly_f64 = poly.v();
             if poly_f64.is_self_intersecting() {
                 issues.push(format!("Shape {} (polygon) is self-intersecting", idx));

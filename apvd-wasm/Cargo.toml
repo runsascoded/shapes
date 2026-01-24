@@ -1,0 +1,19 @@
+[package]
+name = "apvd-wasm"
+version.workspace = true
+edition.workspace = true
+description = "WASM bindings for area-proportional Venn diagrams"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+apvd-core.workspace = true
+console_error_panic_hook.workspace = true
+log.workspace = true
+serde.workspace = true
+serde-wasm-bindgen.workspace = true
+tsify.workspace = true
+wasm-bindgen.workspace = true
+wasm-bindgen-console-logger.workspace = true
+web-sys.workspace = true

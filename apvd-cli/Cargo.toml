@@ -1,0 +1,22 @@
+[package]
+name = "apvd-cli"
+version.workspace = true
+edition.workspace = true
+description = "CLI and server for area-proportional Venn diagrams"
+
+[[bin]]
+name = "apvd"
+path = "src/main.rs"
+
+[dependencies]
+apvd-core.workspace = true
+clap.workspace = true
+tokio.workspace = true
+axum.workspace = true
+tokio-tungstenite.workspace = true
+futures-util.workspace = true
+rayon.workspace = true
+log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+env_logger.workspace = true

@@ -1,0 +1,28 @@
+[package]
+name = "apvd-core"
+version.workspace = true
+edition.workspace = true
+description = "Core computation library for area-proportional Venn diagrams"
+
+[dependencies]
+anyhow.workspace = true
+approx.workspace = true
+derive_more.workspace = true
+itertools.workspace = true
+log.workspace = true
+nalgebra.workspace = true
+num-dual.workspace = true
+num-traits.workspace = true
+ordered-float.workspace = true
+roots.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# TypeScript type generation (also needed for Serialize/Deserialize derives)
+tsify.workspace = true
+wasm-bindgen.workspace = true
+
+[dev-dependencies]
+env_logger.workspace = true
+polars.workspace = true
+test-log.workspace = true
