@@ -5,6 +5,8 @@
 //! - WebSocket server for frontend connections
 //! - Parallel scene training across different initial assignments
 
+mod server;
+
 use std::io::{self, Write};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -126,10 +128,12 @@ fn main() {
             }
         }
         Commands::Serve { port, parallel } => {
-            eprintln!("Server mode not yet implemented");
-            eprintln!("  port: {}", port);
-            eprintln!("  parallel: {}", parallel);
-            std::process::exit(1);
+            let config = server::ServerConfig { parallel };
+            let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
+            if let Err(e) = rt.block_on(server::run_server(port, config)) {
+                eprintln!("Server error: {}", e);
+                std::process::exit(1);
+            }
         }
     }
 }
