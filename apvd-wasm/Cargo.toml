@@ -3,6 +3,8 @@ name = "apvd-wasm"
 version.workspace = true
 edition.workspace = true
 description = "WASM bindings for area-proportional Venn diagrams"
+repository = "https://github.com/runsascoded/shapes"
+license = "MIT"
 
 [lib]
 crate-type = ["cdylib"]

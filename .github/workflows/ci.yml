@@ -35,6 +35,11 @@ jobs:
       - name: Build WASM
         run: cd apvd-wasm && wasm-pack build --target web
 
+      - name: Add directory to package.json repository
+        run: |
+          cd apvd-wasm/pkg
+          jq '.repository.directory = "apvd-wasm/pkg"' package.json > tmp.json && mv tmp.json package.json
+
       - name: Push dist branch
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         uses: runsascoded/npm-dist@v1.1
