@@ -2,7 +2,7 @@
   "name": "apvd-wasm",
   "type": "module",
   "description": "WASM bindings for area-proportional Venn diagrams",
-  "version": "0.1.0-dist.1493d47",
+  "version": "0.1.0-dist.0a0d4e4",
   "files": [
     "apvd_wasm_bg.wasm",
     "apvd_wasm.js",
