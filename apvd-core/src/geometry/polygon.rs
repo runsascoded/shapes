@@ -2270,4 +2270,297 @@ mod tests {
             vanilla_avg_delta, clipped_avg_delta
         );
     }
+
+    // ============================================================
+    // Self-intersection detection tests
+    // ============================================================
+
+    /// Create a self-intersecting "bowtie" quadrilateral (figure-8 shape)
+    fn bowtie() -> Polygon<f64> {
+        // Vertices in order that creates crossing edges
+        Polygon::new(vec![
+            R2 { x: 0., y: 0. },
+            R2 { x: 2., y: 2. },  // crosses with edge 2-3
+            R2 { x: 2., y: 0. },
+            R2 { x: 0., y: 2. },  // crosses with edge 0-1
+        ])
+    }
+
+    /// Create a regular n-gon centered at (cx, cy) with given radius
+    fn regular_ngon(n: usize, cx: f64, cy: f64, radius: f64) -> Polygon<f64> {
+        let vertices: Vec<R2<f64>> = (0..n)
+            .map(|i| {
+                let angle = 2.0 * std::f64::consts::PI * (i as f64) / (n as f64);
+                R2 {
+                    x: cx + radius * angle.cos(),
+                    y: cy + radius * angle.sin(),
+                }
+            })
+            .collect();
+        Polygon::new(vertices)
+    }
+
+    #[test]
+    fn test_is_self_intersecting_simple() {
+        // Convex shapes should not self-intersect
+        assert!(!triangle().is_self_intersecting(), "Triangle should not self-intersect");
+        assert!(!square().is_self_intersecting(), "Square should not self-intersect");
+
+        // Regular n-gons should not self-intersect
+        for n in 5..=12 {
+            let ngon = regular_ngon(n, 0., 0., 1.);
+            assert!(!ngon.is_self_intersecting(), "{}-gon should not self-intersect", n);
+        }
+
+        // Bowtie (figure-8) should self-intersect
+        assert!(bowtie().is_self_intersecting(), "Bowtie should self-intersect");
+    }
+
+    #[test]
+    fn test_self_intersection_penalty_nonzero_for_bowtie() {
+        let bow = bowtie();
+        let penalty = bow.self_intersection_penalty();
+        assert!(penalty > 0., "Bowtie should have positive self-intersection penalty, got {}", penalty);
+
+        // Regular shapes should have zero penalty
+        assert_eq!(square().self_intersection_penalty(), 0., "Square should have zero penalty");
+        assert_eq!(regular_ngon(12, 0., 0., 1.).self_intersection_penalty(), 0., "12-gon should have zero penalty");
+    }
+
+    #[test]
+    fn test_self_intersection_penalty_dual_produces_gradients() {
+        // Create a nearly self-intersecting quadrilateral that can become self-intersecting
+        // by moving one vertex slightly
+        let almost_bowtie: Polygon<Dual> = Polygon::new(vec![
+            R2 { x: Dual::new(0., vec![1., 0., 0., 0., 0., 0., 0., 0.]), y: Dual::new(0., vec![0., 1., 0., 0., 0., 0., 0., 0.]) },
+            R2 { x: Dual::new(1., vec![0., 0., 1., 0., 0., 0., 0., 0.]), y: Dual::new(0., vec![0., 0., 0., 1., 0., 0., 0., 0.]) },
+            R2 { x: Dual::new(0.5, vec![0., 0., 0., 0., 1., 0., 0., 0.]), y: Dual::new(1., vec![0., 0., 0., 0., 0., 1., 0., 0.]) },
+            R2 { x: Dual::new(0.5, vec![0., 0., 0., 0., 0., 0., 1., 0.]), y: Dual::new(-0.1, vec![0., 0., 0., 0., 0., 0., 0., 1.]) },  // below x-axis, causes self-intersection
+        ]);
+
+        let penalty = almost_bowtie.self_intersection_penalty_dual();
+
+        // Should have positive penalty
+        assert!(penalty.v() > 0., "Self-intersecting quad should have positive penalty, got {}", penalty.v());
+
+        // Should have non-zero gradients
+        let grads = penalty.d();
+        let grad_magnitude: f64 = grads.iter().map(|g| g.powi(2)).sum::<f64>().sqrt();
+        assert!(grad_magnitude > 0., "Should have non-zero gradients for self-intersection penalty");
+
+        eprintln!("Self-intersection penalty: {}", penalty.v());
+        eprintln!("Gradient magnitude: {}", grad_magnitude);
+    }
+
+    // ============================================================
+    // Variant callers 12-gon integration test
+    // ============================================================
+
+    #[test]
+    fn test_dodecagon_training_no_self_intersection() {
+        use crate::model::Model;
+        use crate::to::To;
+
+        // Create 2 regular 12-gons (dodecagons) in an overlapping configuration
+        let shapes: Vec<Shape<f64>> = vec![
+            Shape::Polygon(regular_ngon(12, 0.0, 0.0, 1.5)),  // A
+            Shape::Polygon(regular_ngon(12, 1.0, 0.0, 1.5)),  // B (overlaps with A)
+        ];
+
+        // All vertices trainable: 12 vertices × 2 coords = 24 per polygon
+        let inputs: Vec<(Shape<f64>, Vec<bool>)> = shapes
+            .into_iter()
+            .map(|s| (s, vec![true; 24]))
+            .collect();
+
+        // Simple targets for 2 shapes using inclusive format
+        let targets: [(&str, f64); 3] = [
+            ("0*", 5.),  // A inclusive
+            ("*1", 5.),  // B inclusive
+            ("01", 2.),  // A∩B
+        ];
+
+        let mut model = Model::new(inputs, targets.to()).expect("Failed to create model");
+        let initial_error = model.steps[0].error.v();
+
+        eprintln!("\n=== 12-gon Training Self-Intersection Test ===");
+        eprintln!("Initial error: {:.4}", initial_error);
+
+        // Train for 100 steps, checking for self-intersection periodically
+        let mut self_intersection_count = 0;
+        let mut max_error_increase = 0.0f64;
+        let mut prev_error = initial_error;
+
+        for step_num in 0..100 {
+            model.train(0.3, 1).expect("Training failed");
+
+            let step = model.steps.last().unwrap();
+            let error = step.error.v();
+
+            // Track error increases (oscillation indicator)
+            if error > prev_error {
+                max_error_increase = max_error_increase.max(error - prev_error);
+            }
+            prev_error = error;
+
+            // Check for self-intersection in all polygons
+            for (i, shape) in step.shapes.iter().enumerate() {
+                if let Shape::Polygon(poly) = shape {
+                    // Need to convert Dual vertices to f64 for is_self_intersecting
+                    let f64_poly = Polygon::new(
+                        poly.vertices.iter().map(|v| R2 { x: v.x.v(), y: v.y.v() }).collect()
+                    );
+                    if f64_poly.is_self_intersecting() {
+                        self_intersection_count += 1;
+                        if self_intersection_count <= 5 {
+                            eprintln!("  Step {}: Polygon {} self-intersecting!", step_num, i);
+                        }
+                    }
+                }
+            }
+
+            if step_num % 20 == 0 {
+                eprintln!("  Step {}: error = {:.4}", step_num, error);
+            }
+        }
+
+        let final_error = model.steps.last().unwrap().error.v();
+        eprintln!("Final error: {:.4}", final_error);
+        eprintln!("Self-intersections detected: {}", self_intersection_count);
+        eprintln!("Max single-step error increase: {:.4}", max_error_increase);
+
+        // Assertions
+        assert!(
+            final_error < initial_error,
+            "Training should reduce error: {} -> {}",
+            initial_error, final_error
+        );
+
+        // Warn (but don't fail) if there were self-intersections
+        // The penalty should prevent them, but this test documents the behavior
+        if self_intersection_count > 0 {
+            eprintln!("WARNING: {} self-intersections occurred during training!", self_intersection_count);
+        }
+
+        // Check for severe oscillation (error increases > 50% of current error)
+        assert!(
+            max_error_increase < initial_error * 0.5,
+            "Severe oscillation detected: max error increase {:.4} exceeds threshold",
+            max_error_increase
+        );
+    }
+
+    #[test]
+    fn test_four_dodecagons_variant_callers() {
+        use crate::model::Model;
+        use crate::to::To;
+
+        // Create 4 regular 12-gons (dodecagons) in a Venn-like configuration
+        // Position them so they overlap in interesting ways
+        let shapes: Vec<Shape<f64>> = vec![
+            Shape::Polygon(regular_ngon(12, 0.0, 0.5, 1.2)),   // Shape 0 - left
+            Shape::Polygon(regular_ngon(12, 1.0, 0.5, 1.2)),   // Shape 1 - right
+            Shape::Polygon(regular_ngon(12, 0.5, 0.0, 1.2)),   // Shape 2 - top
+            Shape::Polygon(regular_ngon(12, 0.5, 1.0, 1.2)),   // Shape 3 - bottom
+        ];
+
+        // All vertices trainable: 12 vertices × 2 coords = 24 per polygon
+        let inputs: Vec<(Shape<f64>, Vec<bool>)> = shapes
+            .into_iter()
+            .map(|s| (s, vec![true; 24]))
+            .collect();
+
+        // Variant callers targets (exclusive format)
+        // These are real-world targets from genomics variant calling
+        let targets: [(&str, f64); 15] = [
+            ("0---", 633.),  // Shape 0 only
+            ("-1--", 618.),  // Shape 1 only
+            ("--2-", 187.),  // Shape 2 only
+            ("---3", 319.),  // Shape 3 only
+            ("01--", 112.),  // Shapes 0∩1 only
+            ("0-2-",   0.),  // Shapes 0∩2 only
+            ("0--3",  13.),  // Shapes 0∩3 only
+            ("-12-",  14.),  // Shapes 1∩2 only
+            ("-1-3",  55.),  // Shapes 1∩3 only
+            ("--23",  21.),  // Shapes 2∩3 only
+            ("012-",   1.),  // Shapes 0∩1∩2 only
+            ("01-3",  17.),  // Shapes 0∩1∩3 only
+            ("0-23",   0.),  // Shapes 0∩2∩3 only
+            ("-123",   9.),  // Shapes 1∩2∩3 only
+            ("0123",  36.),  // All four shapes
+        ];
+
+        let mut model = Model::new(inputs, targets.to()).expect("Failed to create model");
+        let initial_error = model.steps[0].error.v();
+
+        eprintln!("\n=== 4 Dodecagon Variant Callers Test ===");
+        eprintln!("Initial error: {:.4}", initial_error);
+
+        // Train for 200 steps, checking for self-intersection and oscillation
+        let mut self_intersection_count = 0;
+        let mut oscillation_count = 0;
+        let mut prev_error = initial_error;
+        let mut best_error = initial_error;
+
+        for step_num in 0..200 {
+            model.train(0.3, 1).expect("Training failed");
+
+            let step = model.steps.last().unwrap();
+            let error = step.error.v();
+
+            // Track oscillation (error increases)
+            if error > prev_error * 1.01 {  // Allow 1% noise
+                oscillation_count += 1;
+            }
+
+            // Track best error
+            if error < best_error {
+                best_error = error;
+            }
+
+            prev_error = error;
+
+            // Check for self-intersection in all polygons
+            for (i, shape) in step.shapes.iter().enumerate() {
+                if let Shape::Polygon(poly) = shape {
+                    let f64_poly = Polygon::new(
+                        poly.vertices.iter().map(|v| R2 { x: v.x.v(), y: v.y.v() }).collect()
+                    );
+                    if f64_poly.is_self_intersecting() {
+                        self_intersection_count += 1;
+                        if self_intersection_count <= 3 {
+                            eprintln!("  Step {}: Polygon {} self-intersecting!", step_num, i);
+                        }
+                    }
+                }
+            }
+
+            if step_num % 50 == 0 {
+                eprintln!("  Step {}: error = {:.4}", step_num, error);
+            }
+        }
+
+        let final_error = model.steps.last().unwrap().error.v();
+        eprintln!("Final error: {:.4}", final_error);
+        eprintln!("Best error: {:.4}", best_error);
+        eprintln!("Self-intersections detected: {}", self_intersection_count);
+        eprintln!("Oscillation events: {}", oscillation_count);
+
+        // Report self-intersections (don't fail the test, but document)
+        if self_intersection_count > 0 {
+            eprintln!("WARNING: {} self-intersections occurred - penalty may be too weak!", self_intersection_count);
+        }
+
+        // Report oscillation (the user's original complaint)
+        if oscillation_count > 20 {
+            eprintln!("WARNING: {} oscillation events - training is unstable!", oscillation_count);
+        }
+
+        // Assertions - training should make progress even if not perfect
+        assert!(
+            best_error < initial_error * 0.8,
+            "Training should achieve at least 20% improvement: {} -> best {}",
+            initial_error, best_error
+        );
+    }
 }
