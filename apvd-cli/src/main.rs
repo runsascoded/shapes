@@ -4,7 +4,9 @@
 //! - Batch training from command line
 //! - WebSocket server for frontend connections
 //! - Parallel scene training across different initial assignments
+//! - SVG rendering of training results
 
+mod render;
 mod server;
 
 use std::io::{self, Write};
@@ -14,9 +16,10 @@ use std::time::Instant;
 
 use clap::{Parser, Subcommand};
 use rayon::prelude::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use apvd_core::{Model, InputSpec, TargetsMap};
+use render::{render_svg, RenderConfig};
 
 #[derive(Parser)]
 #[command(name = "apvd")]
@@ -61,6 +64,14 @@ enum Commands {
         /// Quiet mode - only output final JSON
         #[arg(short, long)]
         quiet: bool,
+
+        /// Include full step history in output (for trace inspection/time-travel)
+        #[arg(short = 'H', long)]
+        history: bool,
+
+        /// Render SVG of final result to this file
+        #[arg(long)]
+        svg: Option<String>,
     },
 
     /// Start WebSocket server for frontend connections
@@ -73,11 +84,56 @@ enum Commands {
         #[arg(long, default_value = "1")]
         parallel: usize,
     },
+
+    /// Render shapes to SVG
+    Render {
+        /// Input file (training output JSON or trace JSON)
+        #[arg(short, long)]
+        input: String,
+
+        /// Output SVG file
+        #[arg(short, long)]
+        output: String,
+
+        /// Step index to render (default: final step, or use "best" for min error step)
+        #[arg(long)]
+        step: Option<String>,
+
+        /// Which trace to render (for multi-trace sessions)
+        #[arg(long, default_value = "0")]
+        trace: usize,
+
+        /// SVG width in pixels
+        #[arg(long, default_value = "800")]
+        width: f64,
+
+        /// SVG height in pixels
+        #[arg(long, default_value = "600")]
+        height: f64,
+
+        /// Hide shape labels
+        #[arg(long)]
+        no_labels: bool,
+    },
 }
 
-/// Result of training a single scene variant
-#[derive(Debug, Clone, Serialize)]
-struct TrainingResult {
+/// A single step in the training history (for trace output)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TraceStep {
+    /// Step index
+    step_idx: usize,
+    /// Error at this step
+    error: f64,
+    /// Shapes at this step
+    shapes: Vec<serde_json::Value>,
+    /// Whether this was a "best to date" step
+    #[serde(skip_serializing_if = "Option::is_none")]
+    is_best: Option<bool>,
+}
+
+/// A training trace (single permutation run)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TrainingTrace {
     /// Which permutation of shapes was used (index into all permutations)
     variant_id: usize,
     /// The permutation used (maps target index to shape index)
@@ -94,15 +150,22 @@ struct TrainingResult {
     training_time_ms: u64,
     /// Final shapes (serialized)
     final_shapes: Vec<serde_json::Value>,
+    /// Full step history (if --history was specified)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    history: Option<Vec<TraceStep>>,
 }
 
-/// Combined output for all training variants
-#[derive(Debug, Serialize)]
-struct TrainingOutput {
-    /// Best result (lowest final error)
-    best: TrainingResult,
-    /// All results, sorted by final error
-    all_results: Vec<TrainingResult>,
+/// Combined output for all training variants (a "session")
+#[derive(Debug, Serialize, Deserialize)]
+struct TrainingSession {
+    /// Input shapes specification
+    inputs: Vec<serde_json::Value>,
+    /// Target areas
+    targets: TargetsMap<f64>,
+    /// Best trace (lowest final error)
+    best: TrainingTrace,
+    /// All traces, sorted by final error
+    traces: Vec<TrainingTrace>,
     /// Total wall-clock time in milliseconds
     total_time_ms: u64,
 }
@@ -121,8 +184,10 @@ fn main() {
             output,
             robust,
             quiet,
+            history,
+            svg,
         } => {
-            if let Err(e) = run_train(shapes, targets, max_steps, learning_rate, parallel, output, robust, quiet) {
+            if let Err(e) = run_train(shapes, targets, max_steps, learning_rate, parallel, output, robust, quiet, history, svg) {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
@@ -132,6 +197,20 @@ fn main() {
             let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
             if let Err(e) = rt.block_on(server::run_server(port, config)) {
                 eprintln!("Server error: {}", e);
+                std::process::exit(1);
+            }
+        }
+        Commands::Render {
+            input,
+            output,
+            step,
+            trace,
+            width,
+            height,
+            no_labels,
+        } => {
+            if let Err(e) = run_render(input, output, step, trace, width, height, no_labels) {
+                eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
         }
@@ -147,6 +226,8 @@ fn run_train(
     output: Option<String>,
     robust: bool,
     quiet: bool,
+    include_history: bool,
+    svg_output: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let start_time = Instant::now();
 
@@ -165,6 +246,9 @@ fn run_train(
         eprintln!("Training with {} shapes, {} target regions", num_shapes, targets.len());
         eprintln!("  max_steps: {}, learning_rate: {}", max_steps, learning_rate);
         eprintln!("  optimizer: {}", if robust { "robust (Adam + clipping)" } else { "standard GD" });
+        if include_history {
+            eprintln!("  history: enabled");
+        }
     }
 
     // Generate permutations for parallel training
@@ -179,7 +263,7 @@ fn run_train(
     let completed = Arc::new(AtomicUsize::new(0));
 
     // Train all variants in parallel
-    let results: Vec<TrainingResult> = permutations
+    let traces: Vec<TrainingTrace> = permutations
         .into_par_iter()
         .enumerate()
         .map(|(variant_id, permutation)| {
@@ -211,7 +295,31 @@ fn run_train(
                 .map(|s| serde_json::to_value(s).unwrap())
                 .collect();
 
-            let result = TrainingResult {
+            // Build history if requested
+            let history = if include_history {
+                let mut min_so_far = f64::INFINITY;
+                Some(
+                    model.steps.iter().enumerate().map(|(idx, step)| {
+                        let error = step.error.v();
+                        let is_best = if error < min_so_far {
+                            min_so_far = error;
+                            Some(true)
+                        } else {
+                            None
+                        };
+                        TraceStep {
+                            step_idx: idx,
+                            error,
+                            shapes: step.shapes.iter().map(|s| serde_json::to_value(s).unwrap()).collect(),
+                            is_best,
+                        }
+                    }).collect()
+                )
+            } else {
+                None
+            };
+
+            let trace = TrainingTrace {
                 variant_id,
                 permutation: permutation.clone(),
                 final_error: final_step.error.v(),
@@ -220,6 +328,7 @@ fn run_train(
                 total_steps: model.steps.len(),
                 training_time_ms,
                 final_shapes,
+                history,
             };
 
             // Update progress
@@ -229,7 +338,7 @@ fn run_train(
                 io::stderr().flush().ok();
             }
 
-            result
+            trace
         })
         .collect();
 
@@ -238,10 +347,10 @@ fn run_train(
     }
 
     // Sort by final error and find best
-    let mut sorted_results = results;
-    sorted_results.sort_by(|a, b| a.final_error.partial_cmp(&b.final_error).unwrap());
+    let mut sorted_traces = traces;
+    sorted_traces.sort_by(|a, b| a.final_error.partial_cmp(&b.final_error).unwrap());
 
-    let best = sorted_results[0].clone();
+    let best = sorted_traces[0].clone();
     let total_time_ms = start_time.elapsed().as_millis() as u64;
 
     if !quiet {
@@ -251,14 +360,21 @@ fn run_train(
         eprintln!("  total time: {}ms", total_time_ms);
     }
 
-    let output_data = TrainingOutput {
-        best,
-        all_results: sorted_results,
+    // Store inputs as JSON values for the session
+    let inputs_json: Vec<serde_json::Value> = inputs.iter()
+        .map(|i| serde_json::to_value(i).unwrap())
+        .collect();
+
+    let session = TrainingSession {
+        inputs: inputs_json,
+        targets: targets.clone(),
+        best: best.clone(),
+        traces: sorted_traces,
         total_time_ms,
     };
 
     // Output results
-    let json_output = serde_json::to_string_pretty(&output_data)?;
+    let json_output = serde_json::to_string_pretty(&session)?;
     if let Some(output_path) = output {
         std::fs::write(&output_path, &json_output)?;
         if !quiet {
@@ -268,6 +384,97 @@ fn run_train(
         println!("{}", json_output);
     }
 
+    // Render SVG if requested
+    if let Some(svg_path) = svg_output {
+        // Parse final shapes back to Shape<D> for rendering
+        let shapes: Vec<apvd_core::shape::Shape<apvd_core::D>> = best.final_shapes.iter()
+            .map(|v| serde_json::from_value(v.clone()).expect("Failed to parse shape"))
+            .collect();
+
+        let config = RenderConfig::default();
+        let svg = render_svg(&shapes, &config);
+        std::fs::write(&svg_path, &svg)?;
+        if !quiet {
+            eprintln!("SVG written to {}", svg_path);
+        }
+    }
+
+    Ok(())
+}
+
+fn run_render(
+    input: String,
+    output: String,
+    step: Option<String>,
+    trace_idx: usize,
+    width: f64,
+    height: f64,
+    no_labels: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Load the session/trace file
+    let json_content = std::fs::read_to_string(&input)
+        .map_err(|e| format!("Failed to read '{}': {}", input, e))?;
+
+    let session: TrainingSession = serde_json::from_str(&json_content)
+        .map_err(|e| format!("Failed to parse session JSON: {}", e))?;
+
+    // Get the requested trace
+    if trace_idx >= session.traces.len() {
+        return Err(format!(
+            "Trace index {} out of range (session has {} traces)",
+            trace_idx, session.traces.len()
+        ).into());
+    }
+    let trace = &session.traces[trace_idx];
+
+    // Determine which shapes to render
+    let shapes_json: &[serde_json::Value] = match &step {
+        None => {
+            // Default: final step
+            &trace.final_shapes
+        }
+        Some(s) if s == "best" => {
+            // Best (minimum error) step
+            if let Some(history) = &trace.history {
+                &history[trace.min_step].shapes
+            } else {
+                return Err("Cannot use --step=best without history (use --history when training)".into());
+            }
+        }
+        Some(s) => {
+            // Specific step index
+            let step_idx: usize = s.parse()
+                .map_err(|_| format!("Invalid step '{}': expected number or 'best'", s))?;
+            if let Some(history) = &trace.history {
+                if step_idx >= history.len() {
+                    return Err(format!(
+                        "Step index {} out of range (trace has {} steps)",
+                        step_idx, history.len()
+                    ).into());
+                }
+                &history[step_idx].shapes
+            } else {
+                return Err("Cannot specify step without history (use --history when training)".into());
+            }
+        }
+    };
+
+    // Parse shapes
+    let shapes: Vec<apvd_core::shape::Shape<apvd_core::D>> = shapes_json.iter()
+        .map(|v| serde_json::from_value(v.clone()).expect("Failed to parse shape"))
+        .collect();
+
+    // Render
+    let config = RenderConfig {
+        width,
+        height,
+        show_labels: !no_labels,
+        ..Default::default()
+    };
+    let svg = render_svg(&shapes, &config);
+    std::fs::write(&output, &svg)?;
+
+    eprintln!("SVG written to {}", output);
     Ok(())
 }
 
