@@ -1,0 +1,32 @@
+{
+  "name": "@apvd/client",
+  "version": "0.1.0",
+  "description": "Training client for area-proportional Venn diagrams",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./worker": {
+      "import": "./dist/worker.js",
+      "types": "./dist/worker.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "peerDependencies": {
+    "apvd-wasm": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
