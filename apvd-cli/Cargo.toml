@@ -11,6 +11,7 @@ path = "src/main.rs"
 [dependencies]
 apvd-core.workspace = true
 clap.workspace = true
+flate2.workspace = true
 tokio.workspace = true
 axum.workspace = true
 tokio-tungstenite.workspace = true

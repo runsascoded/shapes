@@ -14,6 +14,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
+use flate2::write::GzEncoder;
+use flate2::Compression;
+
 use clap::{Parser, Subcommand};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -76,9 +79,13 @@ enum Commands {
 
         /// Include tiered keyframes for efficient random seek (I-frame storage)
         /// Tier 0: 2B samples at resolution 1, Tier n: B samples at resolution 2^n
-        /// Default B=1563 gives ~10:1 compression at 100k steps
+        /// Default B=1024 gives ~15:1 compression at 100k steps
         #[arg(short = 'T', long)]
         tiered: Option<Option<usize>>,
+
+        /// Gzip compress the output (adds .gz extension if not present)
+        #[arg(short = 'z', long)]
+        gzip: bool,
 
         /// Render SVG of final result to this file
         #[arg(long)]
@@ -210,7 +217,7 @@ struct TieredConfig {
 }
 
 impl TieredConfig {
-    const DEFAULT_BUCKET_SIZE: usize = 1563;  // ~10:1 compression at 100k steps
+    const DEFAULT_BUCKET_SIZE: usize = 1024;  // Power of 2, ~15:1 compression at 100k steps
 
     fn new(bucket_size: Option<usize>) -> Self {
         Self {
@@ -313,9 +320,10 @@ fn main() {
             history,
             checkpoints,
             tiered,
+            gzip,
             svg,
         } => {
-            if let Err(e) = run_train(shapes, targets, max_steps, learning_rate, parallel, output, robust, quiet, history, checkpoints, tiered, svg) {
+            if let Err(e) = run_train(shapes, targets, max_steps, learning_rate, parallel, output, robust, quiet, history, checkpoints, tiered, gzip, svg) {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
@@ -379,6 +387,7 @@ fn run_train(
     include_history: bool,
     include_checkpoints: bool,
     tiered: Option<Option<usize>>,
+    gzip: bool,
     svg_output: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let start_time = Instant::now();
@@ -575,9 +584,30 @@ fn run_train(
     // Output results
     let json_output = serde_json::to_string_pretty(&session)?;
     if let Some(output_path) = output {
-        std::fs::write(&output_path, &json_output)?;
-        if !quiet {
-            eprintln!("Results written to {}", output_path);
+        // Ensure .gz extension if gzip is enabled
+        let output_path = if gzip && !output_path.ends_with(".gz") {
+            format!("{}.gz", output_path)
+        } else {
+            output_path
+        };
+
+        if gzip {
+            let file = std::fs::File::create(&output_path)?;
+            let mut encoder = GzEncoder::new(file, Compression::default());
+            encoder.write_all(json_output.as_bytes())?;
+            encoder.finish()?;
+            if !quiet {
+                let uncompressed_size = json_output.len();
+                let compressed_size = std::fs::metadata(&output_path)?.len() as usize;
+                let ratio = uncompressed_size as f64 / compressed_size as f64;
+                eprintln!("Results written to {} ({} → {} bytes, {:.1}x compression)",
+                    output_path, uncompressed_size, compressed_size, ratio);
+            }
+        } else {
+            std::fs::write(&output_path, &json_output)?;
+            if !quiet {
+                eprintln!("Results written to {}", output_path);
+            }
         }
     } else {
         println!("{}", json_output);

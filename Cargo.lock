@@ -133,6 +133,7 @@ dependencies = [
  "axum",
  "clap",
  "env_logger 0.10.2",
+ "flate2",
  "futures-util",
  "log",
  "rayon",
