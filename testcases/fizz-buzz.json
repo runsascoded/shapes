@@ -1,0 +1,16 @@
+{
+  "name": "fizz-buzz",
+  "description": "2-circle FizzBuzz: multiples of 3 and 5 out of 15",
+  "inputs": [
+    [{"kind": "Circle", "c": {"x": 0, "y": 0}, "r": 1}, [true, true, true]],
+    [{"kind": "Circle", "c": {"x": 1.5, "y": 0}, "r": 1}, [true, true, true]]
+  ],
+  "targets": {
+    "0*": 5,
+    "*1": 3,
+    "01": 1
+  },
+  "expected": {
+    "max_error": 0.01
+  }
+}

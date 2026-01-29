@@ -1,0 +1,21 @@
+{
+  "name": "fizz-buzz-bazz",
+  "description": "3-circle FizzBuzzBazz: multiples of 3, 5, 7 out of 105",
+  "inputs": [
+    [{"kind": "Circle", "c": {"x": -0.5, "y": 0}, "r": 1}, [true, true, true]],
+    [{"kind": "Circle", "c": {"x": 0, "y": 0.866}, "r": 1}, [true, true, true]],
+    [{"kind": "Circle", "c": {"x": 0.5, "y": 0}, "r": 1}, [true, true, true]]
+  ],
+  "targets": {
+    "0**": 35,
+    "*1*": 21,
+    "**2": 15,
+    "01*": 7,
+    "0*2": 5,
+    "*12": 3,
+    "012": 1
+  },
+  "expected": {
+    "max_error": 0.05
+  }
+}

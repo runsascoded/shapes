@@ -115,6 +115,62 @@ enum Commands {
         #[arg(long)]
         no_labels: bool,
     },
+
+    /// Run test cases from JSON files
+    Test {
+        /// Test case files (JSON). Can specify multiple files or use glob patterns.
+        #[arg(required = true)]
+        files: Vec<String>,
+
+        /// Maximum training steps
+        #[arg(short, long, default_value = "1000")]
+        max_steps: usize,
+
+        /// Save traces for failed tests to this directory
+        #[arg(long)]
+        save_failed: Option<String>,
+
+        /// Verbose output
+        #[arg(short, long)]
+        verbose: bool,
+    },
+
+    /// Benchmark test cases
+    Bench {
+        /// Test case files (JSON). Can specify multiple files or use glob patterns.
+        #[arg(required = true)]
+        files: Vec<String>,
+
+        /// Maximum training steps
+        #[arg(short, long, default_value = "1000")]
+        max_steps: usize,
+
+        /// Number of iterations per test case
+        #[arg(short, long, default_value = "3")]
+        iterations: usize,
+    },
+}
+
+/// A test case definition loaded from JSON
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TestCase {
+    name: String,
+    #[serde(default)]
+    description: Option<String>,
+    inputs: Vec<InputSpec>,
+    targets: TargetsMap<f64>,
+    #[serde(default)]
+    expected: Option<ExpectedResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ExpectedResult {
+    /// Maximum acceptable error
+    #[serde(default)]
+    max_error: Option<f64>,
+    /// Path to golden trace file (relative to test case file)
+    #[serde(default)]
+    golden_trace: Option<String>,
 }
 
 /// A single step in the training history (for trace output)
@@ -210,6 +266,27 @@ fn main() {
             no_labels,
         } => {
             if let Err(e) = run_render(input, output, step, trace, width, height, no_labels) {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
+        Commands::Test {
+            files,
+            max_steps,
+            save_failed,
+            verbose,
+        } => {
+            if let Err(e) = run_tests(files, max_steps, save_failed, verbose) {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
+        Commands::Bench {
+            files,
+            max_steps,
+            iterations,
+        } => {
+            if let Err(e) = run_bench(files, max_steps, iterations) {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
@@ -539,6 +616,210 @@ fn generate_permutations(n: usize, max_count: usize) -> Vec<Vec<usize>> {
     }
 
     permutations
+}
+
+/// Run test cases from JSON files
+fn run_tests(
+    files: Vec<String>,
+    max_steps: usize,
+    save_failed: Option<String>,
+    verbose: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Expand glob patterns
+    let test_files = expand_file_patterns(&files)?;
+
+    if test_files.is_empty() {
+        return Err("No test files found".into());
+    }
+
+    eprintln!("Running {} test case(s)...\n", test_files.len());
+
+    let mut passed = 0;
+    let mut failed = 0;
+    let mut results: Vec<(String, bool, f64, Option<f64>)> = Vec::new();
+
+    for file_path in &test_files {
+        // Load test case
+        let json_content = std::fs::read_to_string(file_path)
+            .map_err(|e| format!("Failed to read '{}': {}", file_path, e))?;
+
+        let test_case: TestCase = serde_json::from_str(&json_content)
+            .map_err(|e| format!("Failed to parse '{}': {}", file_path, e))?;
+
+        if verbose {
+            eprintln!("Running: {} ({} shapes, {} targets)",
+                test_case.name,
+                test_case.inputs.len(),
+                test_case.targets.len()
+            );
+        }
+
+        // Train
+        let start = Instant::now();
+        let mut model = Model::new(test_case.inputs.clone(), test_case.targets.clone())
+            .map_err(|e| format!("Failed to create model for '{}': {}", test_case.name, e))?;
+
+        model.train(0.05, max_steps)
+            .map_err(|e| format!("Training failed for '{}': {}", test_case.name, e))?;
+
+        let elapsed_ms = start.elapsed().as_millis();
+        let final_error = model.min_error;
+
+        // Check against expected
+        let max_error = test_case.expected.as_ref().and_then(|e| e.max_error);
+        let test_passed = max_error.map_or(true, |me| final_error <= me);
+
+        if test_passed {
+            passed += 1;
+            eprintln!("  PASS: {} (error: {:.6e}, {}ms)", test_case.name, final_error, elapsed_ms);
+        } else {
+            failed += 1;
+            eprintln!("  FAIL: {} (error: {:.6e}, expected <= {:.6e}, {}ms)",
+                test_case.name, final_error, max_error.unwrap(), elapsed_ms);
+
+            // Save failed trace if requested
+            if let Some(ref save_dir) = save_failed {
+                std::fs::create_dir_all(save_dir)?;
+                let trace_path = format!("{}/{}-failed.json", save_dir, test_case.name);
+
+                let final_step = model.steps.last().unwrap();
+                let final_shapes: Vec<serde_json::Value> = final_step.shapes.iter()
+                    .map(|s| serde_json::to_value(s).unwrap())
+                    .collect();
+
+                let trace = TrainingTrace {
+                    variant_id: 0,
+                    permutation: (0..test_case.inputs.len()).collect(),
+                    final_error,
+                    min_error: model.min_error,
+                    min_step: model.min_idx,
+                    total_steps: model.steps.len(),
+                    training_time_ms: elapsed_ms as u64,
+                    final_shapes,
+                    history: None,
+                };
+
+                let inputs_json: Vec<serde_json::Value> = test_case.inputs.iter()
+                    .map(|i| serde_json::to_value(i).unwrap())
+                    .collect();
+
+                let session = TrainingSession {
+                    inputs: inputs_json,
+                    targets: test_case.targets.clone(),
+                    best: trace.clone(),
+                    traces: vec![trace],
+                    total_time_ms: elapsed_ms as u64,
+                };
+
+                let json_output = serde_json::to_string_pretty(&session)?;
+                std::fs::write(&trace_path, &json_output)?;
+                eprintln!("         Trace saved to: {}", trace_path);
+            }
+        }
+
+        results.push((test_case.name, test_passed, final_error, max_error));
+    }
+
+    eprintln!("\n{} passed, {} failed", passed, failed);
+
+    if failed > 0 {
+        std::process::exit(1);
+    }
+
+    Ok(())
+}
+
+/// Run benchmarks on test cases
+fn run_bench(
+    files: Vec<String>,
+    max_steps: usize,
+    iterations: usize,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Expand glob patterns
+    let test_files = expand_file_patterns(&files)?;
+
+    if test_files.is_empty() {
+        return Err("No test files found".into());
+    }
+
+    eprintln!("Benchmarking {} test case(s) with {} iterations each...\n", test_files.len(), iterations);
+
+    // Print header
+    eprintln!("{:<25} {:>10} {:>10} {:>10} {:>12} {:>10}",
+        "Name", "Shapes", "Targets", "Steps", "Time (ms)", "Error");
+    eprintln!("{}", "-".repeat(80));
+
+    for file_path in &test_files {
+        // Load test case
+        let json_content = std::fs::read_to_string(file_path)
+            .map_err(|e| format!("Failed to read '{}': {}", file_path, e))?;
+
+        let test_case: TestCase = serde_json::from_str(&json_content)
+            .map_err(|e| format!("Failed to parse '{}': {}", file_path, e))?;
+
+        let mut times: Vec<u128> = Vec::with_capacity(iterations);
+        let mut errors: Vec<f64> = Vec::with_capacity(iterations);
+        let mut steps: Vec<usize> = Vec::with_capacity(iterations);
+
+        for _ in 0..iterations {
+            let start = Instant::now();
+            let mut model = Model::new(test_case.inputs.clone(), test_case.targets.clone())?;
+            model.train(0.05, max_steps)?;
+            times.push(start.elapsed().as_millis());
+            errors.push(model.min_error);
+            steps.push(model.min_idx);
+        }
+
+        // Compute statistics
+        let avg_time: f64 = times.iter().map(|&t| t as f64).sum::<f64>() / iterations as f64;
+        let avg_error: f64 = errors.iter().sum::<f64>() / iterations as f64;
+        let avg_steps: f64 = steps.iter().map(|&s| s as f64).sum::<f64>() / iterations as f64;
+
+        eprintln!("{:<25} {:>10} {:>10} {:>10.0} {:>12.1} {:>10.2e}",
+            test_case.name,
+            test_case.inputs.len(),
+            test_case.targets.len(),
+            avg_steps,
+            avg_time,
+            avg_error
+        );
+    }
+
+    Ok(())
+}
+
+/// Expand file patterns (globs) to a list of file paths
+fn expand_file_patterns(patterns: &[String]) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    let mut files = Vec::new();
+
+    for pattern in patterns {
+        // Check if it's a glob pattern
+        if pattern.contains('*') || pattern.contains('?') {
+            // Use glob crate would be better, but for now just try direct paths
+            // For simple cases, check if it looks like testcases/*.json
+            if pattern.ends_with("*.json") {
+                let dir = pattern.trim_end_matches("*.json");
+                let dir = if dir.is_empty() { "." } else { dir.trim_end_matches('/') };
+
+                if let Ok(entries) = std::fs::read_dir(dir) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if path.extension().map_or(false, |ext| ext == "json") {
+                            files.push(path.to_string_lossy().to_string());
+                        }
+                    }
+                }
+            } else {
+                // Fall back to treating as literal path
+                files.push(pattern.clone());
+            }
+        } else {
+            files.push(pattern.clone());
+        }
+    }
+
+    files.sort();
+    Ok(files)
 }
 
 #[cfg(test)]
