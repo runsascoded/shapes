@@ -74,6 +74,12 @@ enum Commands {
         #[arg(short = 'C', long)]
         checkpoints: bool,
 
+        /// Include tiered keyframes for efficient random seek (I-frame storage)
+        /// Tier 0: 2B samples at resolution 1, Tier n: B samples at resolution 2^n
+        /// Default B=1563 gives ~10:1 compression at 100k steps
+        #[arg(short = 'T', long)]
+        tiered: Option<Option<usize>>,
+
         /// Render SVG of final result to this file
         #[arg(long)]
         svg: Option<String>,
@@ -196,6 +202,55 @@ struct TraceStep {
     is_best: Option<bool>,
 }
 
+/// Tiered keyframe configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TieredConfig {
+    /// Bucket size (B): Tier 0 has 2B samples, other tiers have B samples
+    bucket_size: usize,
+}
+
+impl TieredConfig {
+    const DEFAULT_BUCKET_SIZE: usize = 1563;  // ~10:1 compression at 100k steps
+
+    fn new(bucket_size: Option<usize>) -> Self {
+        Self {
+            bucket_size: bucket_size.unwrap_or(Self::DEFAULT_BUCKET_SIZE),
+        }
+    }
+
+    /// Which tier contains this step
+    fn tier(&self, step: usize) -> usize {
+        let b = self.bucket_size;
+        if step < 2 * b { 0 }
+        else { (step / b).ilog2() as usize }
+    }
+
+    /// Resolution (decimation factor) for this tier
+    /// Tier 0: 1, Tier 1: 2, Tier 2: 4, Tier n: 2^n
+    fn resolution(&self, tier: usize) -> usize {
+        1 << tier
+    }
+
+    /// First step index of this tier
+    fn tier_start(&self, tier: usize) -> usize {
+        if tier == 0 { 0 } else { self.bucket_size << tier }
+    }
+
+    /// Check if this step should be stored as a keyframe
+    fn is_keyframe(&self, step: usize) -> bool {
+        let tier = self.tier(step);
+        let res = self.resolution(tier);
+        step % res == 0
+    }
+
+    /// Find the nearest keyframe at or before this step
+    fn nearest_keyframe(&self, step: usize) -> usize {
+        let tier = self.tier(step);
+        let res = self.resolution(tier);
+        (step / res) * res
+    }
+}
+
 /// A training trace (single permutation run)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct TrainingTrace {
@@ -218,6 +273,12 @@ struct TrainingTrace {
     /// Full step history (if --history was specified)
     #[serde(skip_serializing_if = "Option::is_none")]
     history: Option<Vec<TraceStep>>,
+    /// BTD (Best To Date) step indices - steps where error improved
+    #[serde(skip_serializing_if = "Option::is_none")]
+    btd_steps: Option<Vec<usize>>,
+    /// Tiered keyframe config (if --tiered was specified)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tiered_config: Option<TieredConfig>,
 }
 
 /// Combined output for all training variants (a "session")
@@ -251,9 +312,10 @@ fn main() {
             quiet,
             history,
             checkpoints,
+            tiered,
             svg,
         } => {
-            if let Err(e) = run_train(shapes, targets, max_steps, learning_rate, parallel, output, robust, quiet, history, checkpoints, svg) {
+            if let Err(e) = run_train(shapes, targets, max_steps, learning_rate, parallel, output, robust, quiet, history, checkpoints, tiered, svg) {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
@@ -316,9 +378,13 @@ fn run_train(
     quiet: bool,
     include_history: bool,
     include_checkpoints: bool,
+    tiered: Option<Option<usize>>,
     svg_output: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let start_time = Instant::now();
+
+    // Parse tiered config if specified
+    let tiered_config = tiered.map(|opt_b| TieredConfig::new(opt_b));
 
     // Parse shapes (from file or inline JSON)
     let shapes_json = read_json_arg(&shapes_arg)?;
@@ -339,6 +405,8 @@ fn run_train(
             eprintln!("  history: enabled (full)");
         } else if include_checkpoints {
             eprintln!("  history: enabled (checkpoints only)");
+        } else if let Some(ref tc) = tiered_config {
+            eprintln!("  history: enabled (tiered, B={})", tc.bucket_size);
         }
     }
 
@@ -386,10 +454,24 @@ fn run_train(
                 .map(|s| serde_json::to_value(s).unwrap())
                 .collect();
 
+            // Collect BTD (Best To Date) step indices
+            let mut btd_steps = Vec::new();
+            let mut min_so_far = f64::INFINITY;
+            for (idx, step) in model.steps.iter().enumerate() {
+                let error = step.error.v();
+                if error < min_so_far {
+                    min_so_far = error;
+                    btd_steps.push(idx);
+                }
+            }
+
             // Build history if requested
-            let history = if include_history || include_checkpoints {
-                // Checkpoint steps: 0, 100, 500, 1000, best, final
-                let checkpoint_indices: std::collections::HashSet<usize> = if include_checkpoints {
+            let history = if include_history || include_checkpoints || tiered_config.is_some() {
+                // Determine which steps to include
+                let include_step: Box<dyn Fn(usize) -> bool> = if include_history {
+                    Box::new(|_| true) // all steps
+                } else if include_checkpoints {
+                    // Checkpoint steps: 0, 100, 500, 1000, best, final
                     let mut indices: std::collections::HashSet<usize> = [0, 100, 500, 1000]
                         .iter()
                         .filter(|&&i| i < model.steps.len())
@@ -397,15 +479,23 @@ fn run_train(
                         .collect();
                     indices.insert(model.min_idx); // best step
                     indices.insert(model.steps.len() - 1); // final step
-                    indices
+                    Box::new(move |idx| indices.contains(&idx))
+                } else if let Some(ref tc) = tiered_config {
+                    // Tiered keyframes
+                    let tc = tc.clone();
+                    let final_idx = model.steps.len() - 1;
+                    let min_idx = model.min_idx;
+                    Box::new(move |idx| {
+                        tc.is_keyframe(idx) || idx == final_idx || idx == min_idx
+                    })
                 } else {
-                    (0..model.steps.len()).collect() // all steps
+                    Box::new(|_| false)
                 };
 
                 let mut min_so_far = f64::INFINITY;
                 Some(
                     model.steps.iter().enumerate()
-                        .filter(|(idx, _)| checkpoint_indices.contains(idx))
+                        .filter(|(idx, _)| include_step(*idx))
                         .map(|(idx, step)| {
                             let error = step.error.v();
                             let is_best = if error < min_so_far {
@@ -436,6 +526,8 @@ fn run_train(
                 training_time_ms,
                 final_shapes,
                 history,
+                btd_steps: if tiered_config.is_some() || include_history { Some(btd_steps) } else { None },
+                tiered_config: tiered_config.clone(),
             };
 
             // Update progress
@@ -789,6 +881,8 @@ fn run_tests(
                     training_time_ms: elapsed_ms as u64,
                     final_shapes,
                     history: None,
+                    btd_steps: None,
+                    tiered_config: None,
                 };
 
                 let inputs_json: Vec<serde_json::Value> = test_case.inputs.iter()

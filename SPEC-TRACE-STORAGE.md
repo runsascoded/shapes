@@ -15,60 +15,86 @@ Training histories can grow arbitrarily long (10k+ steps). Storing every step:
 4. **Git-friendly**: Small files for test fixtures
 5. **Large data on S3**: Full histories via dvx, not git
 
-## Proposed: Tiered/Tower Sampling (RRD-style)
+## Design: Tiered Keyframes + BTD Bitmask
+
+Two orthogonal concerns:
+1. **Keyframes**: Tiered I-frames for efficient random seek
+2. **BTD (Best To Date)**: Bitmask marking which steps achieved new minimum error
+
+BTD steps aren't stored specially - if we need one that's not a keyframe, we recompute from the nearest keyframe like any other step.
+
+## Tiered Keyframe Scheme
 
 ```
-Tier 0: Last B steps at full resolution
-Tier 1: B steps at 1/k decimation
-Tier 2: B steps at 1/k² decimation
+Tier 0: 2B samples at resolution 1  → covers [0, 2B)
+Tier 1: B samples at resolution 2   → covers [2B, 4B)
+Tier 2: B samples at resolution 4   → covers [4B, 8B)
+Tier 3: B samples at resolution 8   → covers [8B, 16B)
 ...
-
-Parameters:
-- B = bucket size (e.g., 100)
-- k = decimation factor (e.g., 2)
+Tier n: B samples at resolution 2^n → covers [B·2^n, B·2^(n+1))
 ```
 
-### Example (B=100, k=2)
+**Key properties**:
+- All tier boundaries at B·2^k (powers of 2)
+- Coverage after tier n: B·2^(n+1) steps
+- Storage: 2B + n·B = B·(n+2) samples
 
-For 10,000 steps:
+### Example: 100k steps → 10k storage
+
+With B=1563, n=5 tiers:
 ```
-Tier 0: steps 9900-9999 (100 steps, full)
-Tier 1: steps 9700-9899 at 1/2 → 100 stored
-Tier 2: steps 9300-9699 at 1/4 → 100 stored
-Tier 3: steps 8500-9299 at 1/8 → 100 stored
-Tier 4: steps 6900-8499 at 1/16 → 100 stored
-Tier 5: steps 3700-6899 at 1/32 → 100 stored
-Tier 6: steps 0-3699 at 1/64 → ~58 stored
+Tier 0: 3126 samples, resolution 1  → [0, 3126)
+Tier 1: 1563 samples, resolution 2  → [3126, 6252)
+Tier 2: 1563 samples, resolution 4  → [6252, 12504)
+Tier 3: 1563 samples, resolution 8  → [12504, 25008)
+Tier 4: 1563 samples, resolution 16 → [25008, 50016)
+Tier 5: 1563 samples, resolution 32 → [50016, 100032)
 ```
 
-**Total: ~658 steps stored for 10k history** (vs 10k for full)
+Total: 10,941 samples for 100k steps (10.9:1 compression)
+
+### Tier Lookup
+
+```rust
+fn tier(step: usize, b: usize) -> usize {
+    if step < 2 * b { 0 }
+    else { (step / b).ilog2() as usize }
+}
+
+fn tier_start(tier: usize, b: usize) -> usize {
+    if tier == 0 { 0 } else { b << tier }
+}
+
+fn resolution(tier: usize) -> usize {
+    if tier == 0 { 1 } else { 1 << (tier - 1) }
+}
+```
 
 ### Seek Algorithm
 
 To seek to step N:
-1. Find tier containing N
-2. Find nearest stored keyframe before N
-3. Recompute from keyframe to N
+1. Find tier: `t = tier(N, B)`
+2. Find resolution: `r = resolution(t)`
+3. Find nearest keyframe: `kf = (N / r) * r`
+4. Load keyframe state at `kf`
+5. Recompute `N - kf` steps forward
 
-**Worst case recomputation**: k^tier ≈ O(N) for very old steps
-**Typical case**: O(B) for recent steps
+**Worst case**: resolution 2^n → up to 2^n steps recomputation
+**Typical case**: ~B/2 steps for uniformly random seek
 
-## Alternative: BTD (Best-To-Date) Only
+## BTD Bitmask
 
-Store only steps where error improved:
-- Natural for optimization traces
-- Much sparser (maybe 50-200 steps for 10k run)
-- Lose intermediate states, but those are less interesting
+Stored separately from keyframes:
+```rust
+struct TraceMetadata {
+    total_steps: usize,
+    btd_steps: Vec<usize>,  // sorted list of BTD step indices
+    // or: btd_mask: BitVec,  // if dense enough
+}
+```
 
-**Hybrid**: BTD + tiered sampling for non-BTD steps?
-
-## Alternative: Phi-based (Golden Ratio) Spacing
-
-Store steps at: 0, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, ...
-
-- O(log₁.618(N)) ≈ O(1.44 * log₂(N)) storage
-- Even spacing on log scale
-- Simple to implement
+To find BTD steps in a range, binary search the sorted list.
+To render a BTD step, seek to it like any other step.
 
 ## I-frames vs P-frames (Video Codec Analogy)
 
@@ -109,23 +135,23 @@ This is exactly why video seeking is "slow" - must decode from nearest I-frame.
 }
 ```
 
-### I-frames + P-frames (more compact)
+### I-frames + P-frames (more compact, future optimization)
 ```json
 {
   "format": "tiered-delta",
-  "params": { "bucket_size": 100, "decimation": 2 },
-  "total_steps": 10000,
+  "params": { "bucket_size": 1563 },
+  "total_steps": 100000,
   "learning_rate": 0.05,
   "keyframes": [
     { "step_idx": 0, "type": "I", "error": 0.5, "shapes": [...] },
     { "step_idx": 1, "type": "P", "error": 0.48, "gradient": [...] },
-    { "step_idx": 2, "type": "P", "error": 0.45, "gradient": [...] },
-    ...
-    { "step_idx": 100, "type": "I", "error": 0.1, "shapes": [...] },
     ...
   ]
 }
 ```
+
+P-frames store only gradient vectors (~48 bytes/shape vs ~200+ for full Dual shapes).
+4-5x smaller but requires sequential decode from nearest I-frame.
 
 ## File Organization
 
@@ -140,27 +166,35 @@ traces/
 
 ## Implementation Plan
 
-### Phase 1: BTD-only mode
-- `--btd` flag: only save steps where error improved
-- Simplest, often sufficient
+### Phase 1: Tiered I-frames with BTD bitmask
+- `--tiered` flag with B parameter
+- Store keyframes at tier boundaries
+- Store BTD indices as separate array
+- Implement seek algorithm
 
-### Phase 2: Tiered sampling
-- `--tiered B=100,k=2` flag
-- Implement tier assignment and seek
+### Phase 2: P-frames (optional optimization)
+- Store gradients instead of full shapes between keyframes
+- Reduces storage 4-5x
+- Requires sequential decode
 
 ### Phase 3: dvx integration
 - Move large traces to S3
 - Keep small test fixtures in git
 
-## Open Questions
+## Configuration
 
-1. What bucket size B? (100 seems reasonable)
-2. What decimation factor k? (2 is standard, 4 might be enough)
-3. BTD-only vs hybrid?
-4. LRU cache for recomputed steps in frontend?
+For 100k steps → 10k storage: `B = 1563`
+
+```rust
+const DEFAULT_BUCKET_SIZE: usize = 1563;  // ~10:1 compression at 100k steps
+```
+
+Bucket size can be tuned:
+- Smaller B → more compression, longer recomputation
+- Larger B → less compression, faster seek
 
 ## References
 
 - [RRDtool](https://oss.oetiker.ch/rrdtool/) - canonical tiered time-series DB
 - [Exponential Histograms](https://en.wikipedia.org/wiki/Exponential_histogram) - streaming algorithms
-- [Prometheus downsampling](https://prometheus.io/docs/prometheus/latest/querying/basics/)
+- [Video I-frames/P-frames](https://en.wikipedia.org/wiki/Video_compression_picture_types)
