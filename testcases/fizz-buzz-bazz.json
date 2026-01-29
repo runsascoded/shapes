@@ -2,9 +2,51 @@
   "name": "fizz-buzz-bazz",
   "description": "3-circle FizzBuzzBazz: multiples of 3, 5, 7 out of 105",
   "inputs": [
-    [{"kind": "Circle", "c": {"x": -0.5, "y": 0}, "r": 1}, [true, true, true]],
-    [{"kind": "Circle", "c": {"x": 0, "y": 0.866}, "r": 1}, [true, true, true]],
-    [{"kind": "Circle", "c": {"x": 0.5, "y": 0}, "r": 1}, [true, true, true]]
+    [
+      {
+        "kind": "Circle",
+        "c": {
+          "x": -0.5,
+          "y": 0
+        },
+        "r": 1
+      },
+      [
+        true,
+        true,
+        true
+      ]
+    ],
+    [
+      {
+        "kind": "Circle",
+        "c": {
+          "x": 0,
+          "y": 0.866
+        },
+        "r": 1
+      },
+      [
+        true,
+        true,
+        true
+      ]
+    ],
+    [
+      {
+        "kind": "Circle",
+        "c": {
+          "x": 0.5,
+          "y": 0
+        },
+        "r": 1
+      },
+      [
+        true,
+        true,
+        true
+      ]
+    ]
   ],
   "targets": {
     "0**": 35,
@@ -16,6 +58,7 @@
     "012": 1
   },
   "expected": {
-    "max_error": 0.05
+    "max_error": 0.05,
+    "golden_trace": "traces/fizz-buzz-bazz.json"
   }
 }

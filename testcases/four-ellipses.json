@@ -2,10 +2,82 @@
   "name": "four-ellipses",
   "description": "4-ellipse symmetric Venn diagram layout",
   "inputs": [
-    [{"kind": "XYRR", "c": {"x": 0.447, "y": 1.789}, "r": {"x": 1, "y": 2}}, [true, true, true, true]],
-    [{"kind": "XYRR", "c": {"x": 1.447, "y": 1.789}, "r": {"x": 1, "y": 2}}, [true, true, true, true]],
-    [{"kind": "XYRR", "c": {"x": 1.789, "y": 1.447}, "r": {"x": 2, "y": 1}}, [true, true, true, true]],
-    [{"kind": "XYRR", "c": {"x": 1.789, "y": 0.447}, "r": {"x": 2, "y": 1}}, [true, true, true, true]]
+    [
+      {
+        "kind": "XYRR",
+        "c": {
+          "x": 0.447,
+          "y": 1.789
+        },
+        "r": {
+          "x": 1,
+          "y": 2
+        }
+      },
+      [
+        true,
+        true,
+        true,
+        true
+      ]
+    ],
+    [
+      {
+        "kind": "XYRR",
+        "c": {
+          "x": 1.447,
+          "y": 1.789
+        },
+        "r": {
+          "x": 1,
+          "y": 2
+        }
+      },
+      [
+        true,
+        true,
+        true,
+        true
+      ]
+    ],
+    [
+      {
+        "kind": "XYRR",
+        "c": {
+          "x": 1.789,
+          "y": 1.447
+        },
+        "r": {
+          "x": 2,
+          "y": 1
+        }
+      },
+      [
+        true,
+        true,
+        true,
+        true
+      ]
+    ],
+    [
+      {
+        "kind": "XYRR",
+        "c": {
+          "x": 1.789,
+          "y": 0.447
+        },
+        "r": {
+          "x": 2,
+          "y": 1
+        }
+      },
+      [
+        true,
+        true,
+        true,
+        true
+      ]
+    ]
   ],
   "targets": {
     "0---": 1,
@@ -25,6 +97,7 @@
     "0123": 0.1
   },
   "expected": {
-    "max_error": 0.1
+    "max_error": 0.1,
+    "golden_trace": "traces/four-ellipses.json"
   }
 }

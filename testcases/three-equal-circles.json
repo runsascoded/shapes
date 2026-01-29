@@ -2,9 +2,51 @@
   "name": "three-equal-circles",
   "description": "Classic 3-circle Venn with equal areas and equal pairwise overlaps",
   "inputs": [
-    [{"kind": "Circle", "c": {"x": -0.5, "y": 0}, "r": 1}, [true, true, true]],
-    [{"kind": "Circle", "c": {"x": 0, "y": 0.866}, "r": 1}, [true, true, true]],
-    [{"kind": "Circle", "c": {"x": 0.5, "y": 0}, "r": 1}, [true, true, true]]
+    [
+      {
+        "kind": "Circle",
+        "c": {
+          "x": -0.5,
+          "y": 0
+        },
+        "r": 1
+      },
+      [
+        true,
+        true,
+        true
+      ]
+    ],
+    [
+      {
+        "kind": "Circle",
+        "c": {
+          "x": 0,
+          "y": 0.866
+        },
+        "r": 1
+      },
+      [
+        true,
+        true,
+        true
+      ]
+    ],
+    [
+      {
+        "kind": "Circle",
+        "c": {
+          "x": 0.5,
+          "y": 0
+        },
+        "r": 1
+      },
+      [
+        true,
+        true,
+        true
+      ]
+    ]
   ],
   "targets": {
     "0**": 3.14159265,
@@ -16,6 +58,7 @@
     "012": 0.704771
   },
   "expected": {
-    "max_error": 0.01
+    "max_error": 0.01,
+    "golden_trace": "traces/three-equal-circles.json"
   }
 }

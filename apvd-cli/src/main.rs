@@ -69,6 +69,11 @@ enum Commands {
         #[arg(short = 'H', long)]
         history: bool,
 
+        /// Include sparse checkpoints only (steps 0, 100, 500, 1000, best, final)
+        /// Smaller output but sufficient for reproducibility verification
+        #[arg(short = 'C', long)]
+        checkpoints: bool,
+
         /// Render SVG of final result to this file
         #[arg(long)]
         svg: Option<String>,
@@ -129,6 +134,10 @@ enum Commands {
         /// Save traces for failed tests to this directory
         #[arg(long)]
         save_failed: Option<String>,
+
+        /// Strict mode: verify checkpoint errors exactly match golden trace
+        #[arg(short = 'S', long)]
+        strict: bool,
 
         /// Verbose output
         #[arg(short, long)]
@@ -241,9 +250,10 @@ fn main() {
             robust,
             quiet,
             history,
+            checkpoints,
             svg,
         } => {
-            if let Err(e) = run_train(shapes, targets, max_steps, learning_rate, parallel, output, robust, quiet, history, svg) {
+            if let Err(e) = run_train(shapes, targets, max_steps, learning_rate, parallel, output, robust, quiet, history, checkpoints, svg) {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
@@ -274,9 +284,10 @@ fn main() {
             files,
             max_steps,
             save_failed,
+            strict,
             verbose,
         } => {
-            if let Err(e) = run_tests(files, max_steps, save_failed, verbose) {
+            if let Err(e) = run_tests(files, max_steps, save_failed, strict, verbose) {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
@@ -304,6 +315,7 @@ fn run_train(
     robust: bool,
     quiet: bool,
     include_history: bool,
+    include_checkpoints: bool,
     svg_output: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let start_time = Instant::now();
@@ -324,7 +336,9 @@ fn run_train(
         eprintln!("  max_steps: {}, learning_rate: {}", max_steps, learning_rate);
         eprintln!("  optimizer: {}", if robust { "robust (Adam + clipping)" } else { "standard GD" });
         if include_history {
-            eprintln!("  history: enabled");
+            eprintln!("  history: enabled (full)");
+        } else if include_checkpoints {
+            eprintln!("  history: enabled (checkpoints only)");
         }
     }
 
@@ -373,24 +387,40 @@ fn run_train(
                 .collect();
 
             // Build history if requested
-            let history = if include_history {
+            let history = if include_history || include_checkpoints {
+                // Checkpoint steps: 0, 100, 500, 1000, best, final
+                let checkpoint_indices: std::collections::HashSet<usize> = if include_checkpoints {
+                    let mut indices: std::collections::HashSet<usize> = [0, 100, 500, 1000]
+                        .iter()
+                        .filter(|&&i| i < model.steps.len())
+                        .copied()
+                        .collect();
+                    indices.insert(model.min_idx); // best step
+                    indices.insert(model.steps.len() - 1); // final step
+                    indices
+                } else {
+                    (0..model.steps.len()).collect() // all steps
+                };
+
                 let mut min_so_far = f64::INFINITY;
                 Some(
-                    model.steps.iter().enumerate().map(|(idx, step)| {
-                        let error = step.error.v();
-                        let is_best = if error < min_so_far {
-                            min_so_far = error;
-                            Some(true)
-                        } else {
-                            None
-                        };
-                        TraceStep {
-                            step_idx: idx,
-                            error,
-                            shapes: step.shapes.iter().map(|s| serde_json::to_value(s).unwrap()).collect(),
-                            is_best,
-                        }
-                    }).collect()
+                    model.steps.iter().enumerate()
+                        .filter(|(idx, _)| checkpoint_indices.contains(idx))
+                        .map(|(idx, step)| {
+                            let error = step.error.v();
+                            let is_best = if error < min_so_far {
+                                min_so_far = error;
+                                Some(true)
+                            } else {
+                                None
+                            };
+                            TraceStep {
+                                step_idx: idx,
+                                error,
+                                shapes: step.shapes.iter().map(|s| serde_json::to_value(s).unwrap()).collect(),
+                                is_best,
+                            }
+                        }).collect()
                 )
             } else {
                 None
@@ -623,6 +653,7 @@ fn run_tests(
     files: Vec<String>,
     max_steps: usize,
     save_failed: Option<String>,
+    strict: bool,
     verbose: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Expand glob patterns
@@ -632,7 +663,10 @@ fn run_tests(
         return Err("No test files found".into());
     }
 
-    eprintln!("Running {} test case(s)...\n", test_files.len());
+    eprintln!("Running {} test case(s){}...\n",
+        test_files.len(),
+        if strict { " (strict mode)" } else { "" }
+    );
 
     let mut passed = 0;
     let mut failed = 0;
@@ -646,11 +680,30 @@ fn run_tests(
         let test_case: TestCase = serde_json::from_str(&json_content)
             .map_err(|e| format!("Failed to parse '{}': {}", file_path, e))?;
 
+        // Load golden trace if strict mode and trace exists
+        let golden_trace: Option<TrainingSession> = if strict {
+            if let Some(ref expected) = test_case.expected {
+                if let Some(ref trace_path) = expected.golden_trace {
+                    let trace_content = std::fs::read_to_string(trace_path)
+                        .map_err(|e| format!("Failed to read golden trace '{}': {}", trace_path, e))?;
+                    Some(serde_json::from_str(&trace_content)
+                        .map_err(|e| format!("Failed to parse golden trace '{}': {}", trace_path, e))?)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         if verbose {
-            eprintln!("Running: {} ({} shapes, {} targets)",
+            eprintln!("Running: {} ({} shapes, {} targets{})",
                 test_case.name,
                 test_case.inputs.len(),
-                test_case.targets.len()
+                test_case.targets.len(),
+                if golden_trace.is_some() { ", with golden trace" } else { "" }
             );
         }
 
@@ -665,17 +718,56 @@ fn run_tests(
         let elapsed_ms = start.elapsed().as_millis();
         let final_error = model.min_error;
 
-        // Check against expected
+        // Check against expected max error
         let max_error = test_case.expected.as_ref().and_then(|e| e.max_error);
-        let test_passed = max_error.map_or(true, |me| final_error <= me);
+        let mut test_passed = max_error.map_or(true, |me| final_error <= me);
+
+        // Strict mode: verify against golden trace checkpoints
+        let mut strict_failures: Vec<String> = Vec::new();
+        if strict {
+            if let Some(ref golden) = golden_trace {
+                if let Some(ref golden_history) = golden.traces[0].history {
+                    for checkpoint in golden_history {
+                        let step_idx = checkpoint.step_idx;
+                        if step_idx < model.steps.len() {
+                            let actual_error = model.steps[step_idx].error.v();
+                            let expected_error = checkpoint.error;
+                            // Allow tiny floating-point tolerance
+                            let diff = (actual_error - expected_error).abs();
+                            let rel_diff = if expected_error != 0.0 {
+                                diff / expected_error.abs()
+                            } else {
+                                diff
+                            };
+                            if rel_diff > 1e-12 && diff > 1e-15 {
+                                strict_failures.push(format!(
+                                    "step {}: expected {:.15e}, got {:.15e} (diff: {:.6e})",
+                                    step_idx, expected_error, actual_error, diff
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+            if !strict_failures.is_empty() {
+                test_passed = false;
+            }
+        }
 
         if test_passed {
             passed += 1;
             eprintln!("  PASS: {} (error: {:.6e}, {}ms)", test_case.name, final_error, elapsed_ms);
         } else {
             failed += 1;
-            eprintln!("  FAIL: {} (error: {:.6e}, expected <= {:.6e}, {}ms)",
-                test_case.name, final_error, max_error.unwrap(), elapsed_ms);
+            if !strict_failures.is_empty() {
+                eprintln!("  FAIL: {} (strict verification failed, {}ms)", test_case.name, elapsed_ms);
+                for failure in &strict_failures {
+                    eprintln!("         {}", failure);
+                }
+            } else {
+                eprintln!("  FAIL: {} (error: {:.6e}, expected <= {:.6e}, {}ms)",
+                    test_case.name, final_error, max_error.unwrap(), elapsed_ms);
+            }
 
             // Save failed trace if requested
             if let Some(ref save_dir) = save_failed {
