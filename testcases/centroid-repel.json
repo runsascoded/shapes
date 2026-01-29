@@ -1,0 +1,42 @@
+{
+  "name": "centroid-repel",
+  "description": "3-circle with one large circle and two small ones, demonstrating centroid repulsion",
+  "inputs": [
+    [
+      {
+        "kind": "Circle",
+        "c": { "x": -0.5, "y": 0 },
+        "r": 1
+      },
+      [true, true, true]
+    ],
+    [
+      {
+        "kind": "Circle",
+        "c": { "x": 0, "y": 0.866 },
+        "r": 1
+      },
+      [true, true, true]
+    ],
+    [
+      {
+        "kind": "Circle",
+        "c": { "x": 0.5, "y": 0 },
+        "r": 1
+      },
+      [true, true, true]
+    ]
+  ],
+  "targets": {
+    "0**": 3.0,
+    "*1*": 1.0,
+    "**2": 1.0,
+    "01*": 0.3,
+    "0*2": 0.3,
+    "*12": 0.3,
+    "012": 0.1
+  },
+  "expected": {
+    "max_error": 0.05
+  }
+}

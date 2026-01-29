@@ -1,0 +1,42 @@
+{
+  "name": "benfred-circles",
+  "description": "BenFred circles example: 3 circles with asymmetric overlaps",
+  "inputs": [
+    [
+      {
+        "kind": "Circle",
+        "c": { "x": -0.5, "y": 0 },
+        "r": 1
+      },
+      [true, true, true]
+    ],
+    [
+      {
+        "kind": "Circle",
+        "c": { "x": 0, "y": 0.866 },
+        "r": 1
+      },
+      [true, true, true]
+    ],
+    [
+      {
+        "kind": "Circle",
+        "c": { "x": 0.5, "y": 0 },
+        "r": 1
+      },
+      [true, true, true]
+    ]
+  ],
+  "targets": {
+    "0**": 16,
+    "*1*": 16,
+    "**2": 12,
+    "01*": 4,
+    "0*2": 4,
+    "*12": 3,
+    "012": 2
+  },
+  "expected": {
+    "max_error": 0.05
+  }
+}

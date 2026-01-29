@@ -1,0 +1,105 @@
+{
+  "description": "Initial shape layouts for training. Each layout is an array of shapes.",
+  "layouts": {
+    "three-circles": {
+      "description": "Classic 3-circle triangular arrangement",
+      "shapes": [
+        { "kind": "Circle", "c": { "x": -0.5, "y": 0 }, "r": 1 },
+        { "kind": "Circle", "c": { "x": 0, "y": 0.866 }, "r": 1 },
+        { "kind": "Circle", "c": { "x": 0.5, "y": 0 }, "r": 1 }
+      ]
+    },
+    "three-circles-flexible": {
+      "description": "3-circle arrangement using XYRRT for full flexibility",
+      "shapes": [
+        { "kind": "XYRRT", "c": { "x": -0.5, "y": 0 }, "r": { "x": 1, "y": 1 }, "t": 0 },
+        { "kind": "XYRRT", "c": { "x": 0, "y": 0.866 }, "r": { "x": 1, "y": 1 }, "t": 0 },
+        { "kind": "XYRRT", "c": { "x": 0.5, "y": 0 }, "r": { "x": 1, "y": 1 }, "t": 0 }
+      ]
+    },
+    "four-circles": {
+      "description": "4 circles in diamond arrangement",
+      "shapes": [
+        { "kind": "Circle", "c": { "x": -0.5, "y": 0 }, "r": 1 },
+        { "kind": "Circle", "c": { "x": 0, "y": 0.866 }, "r": 1 },
+        { "kind": "Circle", "c": { "x": 0.5, "y": 0 }, "r": 1 },
+        { "kind": "Circle", "c": { "x": 0, "y": -0.866 }, "r": 1 }
+      ]
+    },
+    "four-circles-flexible": {
+      "description": "4 circles in diamond using XYRRT for full flexibility",
+      "shapes": [
+        { "kind": "XYRRT", "c": { "x": -0.5, "y": 0 }, "r": { "x": 1, "y": 1 }, "t": 0 },
+        { "kind": "XYRRT", "c": { "x": 0, "y": 0.866 }, "r": { "x": 1, "y": 1 }, "t": 0 },
+        { "kind": "XYRRT", "c": { "x": 0.5, "y": 0 }, "r": { "x": 1, "y": 1 }, "t": 0 },
+        { "kind": "XYRRT", "c": { "x": 0, "y": -0.866 }, "r": { "x": 1, "y": 1 }, "t": 0 }
+      ]
+    },
+    "four-ellipses": {
+      "description": "4-ellipse symmetric Venn layout (2 vertical + 2 horizontal)",
+      "shapes": [
+        { "kind": "XYRR", "c": { "x": 0.447, "y": 1.789 }, "r": { "x": 1, "y": 2 } },
+        { "kind": "XYRR", "c": { "x": 1.447, "y": 1.789 }, "r": { "x": 1, "y": 2 } },
+        { "kind": "XYRR", "c": { "x": 1.789, "y": 1.447 }, "r": { "x": 2, "y": 1 } },
+        { "kind": "XYRR", "c": { "x": 1.789, "y": 0.447 }, "r": { "x": 2, "y": 1 } }
+      ]
+    },
+    "four-ellipses-rotated": {
+      "description": "4-ellipse layout rotated 45 degrees",
+      "shapes": [
+        { "kind": "XYRRT", "c": { "x": -0.949, "y": 0.949 }, "r": { "x": 1, "y": 2 }, "t": 0.785 },
+        { "kind": "XYRRT", "c": { "x": 0.0, "y": 2.045 }, "r": { "x": 1, "y": 2 }, "t": 0.785 },
+        { "kind": "XYRRT", "c": { "x": 0.242, "y": 2.287 }, "r": { "x": 2, "y": 1 }, "t": 0.785 },
+        { "kind": "XYRRT", "c": { "x": 0.949, "y": 0.949 }, "r": { "x": 2, "y": 1 }, "t": 0.785 }
+      ]
+    },
+    "disjoint": {
+      "description": "4 non-overlapping ellipses in corners",
+      "shapes": [
+        { "kind": "XYRRT", "c": { "x": 0, "y": 0 }, "r": { "x": 1, "y": 1 }, "t": 0 },
+        { "kind": "XYRRT", "c": { "x": 3, "y": 0 }, "r": { "x": 1, "y": 1 }, "t": 0 },
+        { "kind": "XYRRT", "c": { "x": 3, "y": 3 }, "r": { "x": 1, "y": 1 }, "t": 0 },
+        { "kind": "XYRRT", "c": { "x": 0, "y": 3 }, "r": { "x": 1, "y": 1 }, "t": 0 }
+      ]
+    },
+    "nested": {
+      "description": "4 nested ellipses (concentric with slight offset)",
+      "shapes": [
+        { "kind": "XYRRT", "c": { "x": 0, "y": 0 }, "r": { "x": 1, "y": 1 }, "t": 0 },
+        { "kind": "XYRRT", "c": { "x": 0.5, "y": 0 }, "r": { "x": 2, "y": 2 }, "t": 0 },
+        { "kind": "XYRRT", "c": { "x": 1, "y": 0 }, "r": { "x": 3, "y": 3 }, "t": 0 },
+        { "kind": "XYRRT", "c": { "x": 1.5, "y": 0 }, "r": { "x": 4, "y": 4 }, "t": 0 }
+      ]
+    },
+    "symmetric-lattice": {
+      "description": "4 ellipses in square lattice arrangement",
+      "shapes": [
+        { "kind": "XYRRT", "c": { "x": 0, "y": 0 }, "r": { "x": 1, "y": 1 }, "t": 0 },
+        { "kind": "XYRRT", "c": { "x": 1, "y": 0 }, "r": { "x": 1, "y": 1 }, "t": 0 },
+        { "kind": "XYRRT", "c": { "x": 1, "y": 1 }, "r": { "x": 1, "y": 1 }, "t": 0 },
+        { "kind": "XYRRT", "c": { "x": 0, "y": 1 }, "r": { "x": 1, "y": 1 }, "t": 0 }
+      ]
+    },
+    "two-circles": {
+      "description": "Simple 2-circle Venn",
+      "shapes": [
+        { "kind": "Circle", "c": { "x": 0, "y": 0 }, "r": 1 },
+        { "kind": "Circle", "c": { "x": 1, "y": 0 }, "r": 1 }
+      ]
+    },
+    "two-over-one": {
+      "description": "Tall ellipse with two circles above it",
+      "shapes": [
+        { "kind": "XYRR", "c": { "x": 0, "y": 0 }, "r": { "x": 1, "y": 3 } },
+        { "kind": "Circle", "c": { "x": 0.5, "y": 1 }, "r": 1 },
+        { "kind": "Circle", "c": { "x": -0.5, "y": 1 }, "r": 1 }
+      ]
+    }
+  },
+  "trainable_presets": {
+    "all": "All coordinates trainable",
+    "center-only": "Only center coordinates trainable (x, y)",
+    "radius-only": "Only radius coordinates trainable",
+    "none": "No coordinates trainable (fixed shape)"
+  }
+}

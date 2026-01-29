@@ -1,0 +1,58 @@
+{
+  "name": "mpower",
+  "description": "MPower genomic study: KRAS, STK11, KEAP1, TP53 mutations (West HJ et al 2022)",
+  "inputs": [
+    [
+      {
+        "kind": "XYRR",
+        "c": { "x": 0.447, "y": 1.789 },
+        "r": { "x": 1, "y": 2 }
+      },
+      [true, true, true, true]
+    ],
+    [
+      {
+        "kind": "XYRR",
+        "c": { "x": 1.447, "y": 1.789 },
+        "r": { "x": 1, "y": 2 }
+      },
+      [true, true, true, true]
+    ],
+    [
+      {
+        "kind": "XYRR",
+        "c": { "x": 1.789, "y": 1.447 },
+        "r": { "x": 2, "y": 1 }
+      },
+      [true, true, true, true]
+    ],
+    [
+      {
+        "kind": "XYRR",
+        "c": { "x": 1.789, "y": 0.447 },
+        "r": { "x": 2, "y": 1 }
+      },
+      [true, true, true, true]
+    ]
+  ],
+  "targets": {
+    "0---": 42,
+    "-1--": 15,
+    "--2-": 10,
+    "---3": 182,
+    "01--": 16,
+    "0-2-": 10,
+    "0--3": 60,
+    "-12-": 12,
+    "-1-3": 23,
+    "--23": 44,
+    "012-": 25,
+    "01-3": 13,
+    "0-23": 13,
+    "-123": 18,
+    "0123": 11
+  },
+  "expected": {
+    "max_error": 0.1
+  }
+}
