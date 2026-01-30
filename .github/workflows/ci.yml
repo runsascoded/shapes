@@ -45,3 +45,35 @@ jobs:
         uses: runsascoded/npm-dist@v1.1
         with:
           prebuilt_dir: apvd-wasm/pkg
+
+  build-client:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: client/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: cd client && pnpm install
+
+      - name: Build TypeScript
+        run: cd client && pnpm build
+
+      - name: Push dist branch
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: runsascoded/npm-dist@v1.1
+        with:
+          dir: client
+          dist_branch: client-dist

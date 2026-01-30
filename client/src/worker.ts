@@ -42,7 +42,7 @@ interface TrainingSession {
   stopped: boolean;
 
   // Step history for time-travel (keyframes only if tiered)
-  history: Array<{ stepIndex: number; error: number; shapes: unknown }>;
+  history: Array<{ stepIndex: number; error: number; shapes: Shape[] }>;
   btdSteps: number[];
   tieredConfig?: TieredConfig;
 
