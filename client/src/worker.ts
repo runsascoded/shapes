@@ -17,7 +17,11 @@ import type {
   TrainingResult,
   TraceInfo,
   StepState,
+  StepStateWithGeometry,
+  StepGeometry,
   Shape,
+  InputSpec,
+  TargetsMap,
   TieredConfig,
 } from "./types";
 
@@ -318,11 +322,179 @@ function handleGetTraceInfo(id: string, handleId: string): void {
   respond({ id, type: "result", payload: traceInfo });
 }
 
+/**
+ * Extract geometry from a WASM step object.
+ * The WASM step contains regions, edges, points, etc. that we format into StepGeometry.
+ */
+function extractGeometry(wasmStep: unknown, targets: unknown): StepGeometry {
+  const step = wasmStep as {
+    shapes: Shape[];
+    regions?: Array<{ key: string; area: { v: number }; edges?: unknown[] }>;
+    points?: Array<{ p: { x: number; y: number }; shape0: number; shape1: number; theta0: number; theta1: number }>;
+    components?: Array<{ key: string; points: unknown[]; edges: unknown[]; regions: unknown[] }>;
+    total_area?: { v: number };
+    errors?: { regions?: Record<string, { actual: number; target: number; delta: number }> };
+    error: { v: number };
+  };
+
+  // Extract regions with their areas
+  const regions = (step.regions ?? []).map(r => ({
+    key: r.key,
+    area: r.area?.v ?? 0,
+    edges: [],
+  }));
+
+  // Extract intersection points
+  const points = (step.points ?? []).map(p => ({
+    p: p.p,
+    shape0: p.shape0,
+    shape1: p.shape1,
+    theta0: p.theta0,
+    theta1: p.theta1,
+  }));
+
+  // Extract components if available
+  const components = (step.components ?? []).map(c => ({
+    key: c.key,
+    points: c.points as never[],
+    edges: c.edges as never[],
+    regions: c.regions as never[],
+  }));
+
+  // Build error breakdown
+  const targetMap = targets as TargetsMap;
+  const errors: Record<string, { actual: number; target: number; delta: number; errorContribution: number }> = {};
+
+  for (const region of regions) {
+    const target = targetMap[region.key] ?? 0;
+    const actual = region.area;
+    const delta = actual - target;
+    errors[region.key] = {
+      actual,
+      target,
+      delta,
+      errorContribution: delta * delta,
+    };
+  }
+
+  return {
+    components,
+    totalArea: step.total_area?.v ?? 0,
+    errors,
+    points,
+    regions,
+  };
+}
+
+// Handle createModel request (for server branch compatibility)
+async function handleCreateModel(id: string, inputs: InputSpec[], targets: TargetsMap): Promise<void> {
+  await initWasm();
+
+  try {
+    const wasmStep = wasm!.make_step(inputs, targets);
+    const step = wasmStep as { shapes: Shape[]; error: { v: number } };
+
+    const geometry = extractGeometry(wasmStep, targets);
+
+    const result: StepStateWithGeometry = {
+      stepIndex: 0,
+      error: step.error.v,
+      shapes: step.shapes,
+      isKeyframe: true,
+      geometry,
+    };
+
+    respond({ id, type: "result", payload: result });
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    respond({ id, type: "error", payload: { message: errorMessage } });
+  }
+}
+
+// Handle getStepWithGeometry request (rich step data for display)
+async function handleGetStepWithGeometry(id: string, handleId: string, stepIndex: number): Promise<void> {
+  await initWasm();
+
+  const session = sessions.get(handleId);
+  if (!session) {
+    respond({ id, type: "error", payload: { message: `Session ${handleId} not found` } });
+    return;
+  }
+
+  const bucketSize = session.tieredConfig?.bucketSize ?? 1024;
+
+  try {
+    // Find shapes for this step (from history or recompute)
+    let shapes: Shape[];
+    let isKeyframe = false;
+    let recomputedFrom: number | undefined;
+
+    const exactEntry = session.history.find(h => h.stepIndex === stepIndex);
+    if (exactEntry) {
+      shapes = exactEntry.shapes as Shape[];
+      isKeyframe = true;
+    } else {
+      // Recompute from nearest keyframe
+      const kf = nearestKeyframe(stepIndex, bucketSize);
+      const keyframeEntry = session.history.find(h => h.stepIndex === kf);
+
+      if (!keyframeEntry) {
+        respond({ id, type: "error", payload: { message: `No keyframe found for step ${stepIndex}` } });
+        return;
+      }
+
+      let wasmStep = wasm!.make_step(
+        (keyframeEntry.shapes as Shape[]).map((s: Shape) => [s, Array(s.kind === "Circle" ? 3 : s.kind === "XYRR" ? 4 : 5).fill(true)]),
+        session.targets
+      );
+
+      const learningRate = session.params?.learningRate ?? 0.05;
+      for (let i = keyframeEntry.stepIndex; i < stepIndex; i++) {
+        wasmStep = wasm!.step(wasmStep, learningRate);
+      }
+
+      shapes = (wasmStep as { shapes: Shape[] }).shapes;
+      recomputedFrom = kf;
+    }
+
+    // Now compute full geometry by calling make_step with current shapes
+    const inputs: InputSpec[] = shapes.map((s: Shape) => [
+      s,
+      Array(s.kind === "Circle" ? 3 : s.kind === "XYRR" ? 4 : s.kind === "XYRRT" ? 5 : (s as { vertices: unknown[] }).vertices.length * 2).fill(true),
+    ]);
+    const wasmStep = wasm!.make_step(inputs, session.targets);
+    const step = wasmStep as { shapes: Shape[]; error: { v: number } };
+    const geometry = extractGeometry(wasmStep, session.targets);
+
+    const result: StepStateWithGeometry = {
+      stepIndex,
+      error: step.error.v,
+      shapes: step.shapes,
+      isKeyframe,
+      ...(recomputedFrom !== undefined && { recomputedFrom }),
+      geometry,
+    };
+
+    respond({ id, type: "result", payload: result });
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    respond({ id, type: "error", payload: { message: errorMessage } });
+  }
+}
+
 // Message handler
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   const { id, type, payload } = event.data;
 
   switch (type) {
+    case "createModel":
+      await handleCreateModel(
+        id,
+        (payload as { inputs: InputSpec[]; targets: TargetsMap }).inputs,
+        (payload as { inputs: InputSpec[]; targets: TargetsMap }).targets
+      );
+      break;
+
     case "train":
       await handleTrain(id, payload as TrainingRequest);
       break;
@@ -333,6 +505,10 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 
     case "getStep":
       await handleGetStep(id, (payload as { handleId: string; stepIndex: number }).handleId, (payload as { handleId: string; stepIndex: number }).stepIndex);
+      break;
+
+    case "getStepWithGeometry":
+      await handleGetStepWithGeometry(id, (payload as { handleId: string; stepIndex: number }).handleId, (payload as { handleId: string; stepIndex: number }).stepIndex);
       break;
 
     case "getTraceInfo":

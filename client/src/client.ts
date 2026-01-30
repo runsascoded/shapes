@@ -11,11 +11,14 @@ import type {
   TrainingHandle,
   ProgressUpdate,
   StepState,
+  StepStateWithGeometry,
   TraceInfo,
   Unsubscribe,
   TransportConfig,
   WorkerRequest,
   WorkerResponse,
+  InputSpec,
+  TargetsMap,
 } from "./types";
 
 // ============================================================================
@@ -78,6 +81,10 @@ export class WorkerTrainingClient implements TrainingClient {
     });
   }
 
+  async createModel(inputs: InputSpec[], targets: TargetsMap): Promise<StepStateWithGeometry> {
+    return this.sendRequest<StepStateWithGeometry>("createModel", { inputs, targets });
+  }
+
   async startTraining(request: TrainingRequest): Promise<TrainingHandle> {
     const result = await this.sendRequest<{ handle: TrainingHandle }>("train", request);
     return result.handle;
@@ -96,6 +103,10 @@ export class WorkerTrainingClient implements TrainingClient {
 
   async getStep(handle: TrainingHandle, stepIndex: number): Promise<StepState> {
     return this.sendRequest<StepState>("getStep", { handleId: handle.id, stepIndex });
+  }
+
+  async getStepWithGeometry(handle: TrainingHandle, stepIndex: number): Promise<StepStateWithGeometry> {
+    return this.sendRequest<StepStateWithGeometry>("getStepWithGeometry", { handleId: handle.id, stepIndex });
   }
 
   async getTraceInfo(handle: TrainingHandle): Promise<TraceInfo> {
@@ -211,6 +222,10 @@ export class WebSocketTrainingClient implements TrainingClient {
     });
   }
 
+  async createModel(inputs: InputSpec[], targets: TargetsMap): Promise<StepStateWithGeometry> {
+    return this.sendRequest<StepStateWithGeometry>("createModel", { inputs, targets });
+  }
+
   async startTraining(request: TrainingRequest): Promise<TrainingHandle> {
     return this.sendRequest<TrainingHandle>("train", request);
   }
@@ -228,6 +243,10 @@ export class WebSocketTrainingClient implements TrainingClient {
 
   async getStep(handle: TrainingHandle, stepIndex: number): Promise<StepState> {
     return this.sendRequest<StepState>("getStep", { handleId: handle.id, stepIndex });
+  }
+
+  async getStepWithGeometry(handle: TrainingHandle, stepIndex: number): Promise<StepStateWithGeometry> {
+    return this.sendRequest<StepStateWithGeometry>("getStepWithGeometry", { handleId: handle.id, stepIndex });
   }
 
   async getTraceInfo(handle: TrainingHandle): Promise<TraceInfo> {

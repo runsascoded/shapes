@@ -157,12 +157,109 @@ export interface StepState {
 }
 
 // ============================================================================
+// Geometry Types (for rich step data)
+// ============================================================================
+
+/** A point where two shape boundaries intersect */
+export interface IntersectionPoint {
+  /** Coordinates */
+  p: Point;
+  /** Index of first shape */
+  shape0: number;
+  /** Index of second shape */
+  shape1: number;
+  /** Theta on first shape's boundary */
+  theta0: number;
+  /** Theta on second shape's boundary */
+  theta1: number;
+}
+
+/** An edge segment along a shape boundary */
+export interface Edge {
+  /** Shape index this edge belongs to */
+  shapeIndex: number;
+  /** Start point */
+  start: Point;
+  /** End point */
+  end: Point;
+  /** Start theta on shape boundary */
+  startTheta: number;
+  /** End theta on shape boundary */
+  endTheta: number;
+  /** Which side of the edge is "inside" the region */
+  interiorSide: "left" | "right";
+}
+
+/** A computed region (intersection of sets) */
+export interface Region {
+  /** Region key (e.g., "01*" for in sets 0 and 1, any for set 2) */
+  key: string;
+  /** Computed area */
+  area: number;
+  /** Target area (if specified) */
+  target?: number;
+  /** Boundary edges forming this region */
+  edges: Edge[];
+  /** Centroid of the region */
+  centroid?: Point;
+}
+
+/** Error info for a single region */
+export interface RegionError {
+  /** Computed area */
+  actual: number;
+  /** Target area */
+  target: number;
+  /** Difference (actual - target) */
+  delta: number;
+  /** Contribution to total error */
+  errorContribution: number;
+}
+
+/** A connected component of the diagram */
+export interface Component {
+  /** Unique key for this component */
+  key: string;
+  /** Intersection points in this component */
+  points: IntersectionPoint[];
+  /** Edges in this component */
+  edges: Edge[];
+  /** Regions in this component */
+  regions: Region[];
+}
+
+/** Full geometric data for a step */
+export interface StepGeometry {
+  /** Connected components of the diagram */
+  components: Component[];
+  /** Total area of all shapes */
+  totalArea: number;
+  /** Per-region error breakdown */
+  errors: Record<string, RegionError>;
+  /** All intersection points */
+  points: IntersectionPoint[];
+  /** All regions (flattened from components) */
+  regions: Region[];
+}
+
+/** Step state with full geometric data */
+export interface StepStateWithGeometry extends StepState {
+  geometry: StepGeometry;
+}
+
+// ============================================================================
 // Client Interface
 // ============================================================================
 
 export type Unsubscribe = () => void;
 
 export interface TrainingClient {
+  /**
+   * Create initial model without training (server branch needs this).
+   * Returns step 0 with full geometry for initial display.
+   */
+  createModel(inputs: InputSpec[], targets: TargetsMap): Promise<StepStateWithGeometry>;
+
   /** Start training with given inputs and targets */
   startTraining(request: TrainingRequest): Promise<TrainingHandle>;
 
@@ -172,8 +269,14 @@ export interface TrainingClient {
   /** Stop training early */
   stopTraining(handle: TrainingHandle): Promise<void>;
 
-  /** Get a specific step's state (for time-travel scrubbing) */
+  /** Get a specific step's state (for time-travel scrubbing) - lightweight, no geometry */
   getStep(handle: TrainingHandle, stepIndex: number): Promise<StepState>;
+
+  /**
+   * Get step with full geometric data (regions, edges, intersection points).
+   * Use this for displaying a step; more expensive than getStep().
+   */
+  getStepWithGeometry(handle: TrainingHandle, stepIndex: number): Promise<StepStateWithGeometry>;
 
   /** Get trace metadata (BTD indices, total steps, etc.) */
   getTraceInfo(handle: TrainingHandle): Promise<TraceInfo>;
@@ -206,7 +309,7 @@ export type TransportConfig = WorkerTransportConfig | WebSocketTransportConfig;
 
 export interface WorkerRequest {
   id: string;
-  type: "train" | "stop" | "getStep" | "getTraceInfo";
+  type: "createModel" | "train" | "stop" | "getStep" | "getStepWithGeometry" | "getTraceInfo";
   payload: unknown;
 }
 

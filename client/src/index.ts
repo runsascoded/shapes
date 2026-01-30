@@ -73,6 +73,15 @@ export type {
   TieredConfig,
   StepState,
 
+  // Geometry types (rich step data)
+  IntersectionPoint,
+  Edge,
+  Region,
+  RegionError,
+  Component,
+  StepGeometry,
+  StepStateWithGeometry,
+
   // Client interface
   TrainingClient,
   Unsubscribe,
