@@ -34,6 +34,7 @@ pub trait Arg
 + Display
 + Add<Output = Self>
 + Sub<Output = Self>
++ PartialEq
 {}
 impl Arg for f64 {}
 impl Arg for i64 {}
@@ -146,10 +147,25 @@ impl<D: Arg> Targets<D>
         }
 
         let all_key = "*".repeat(n);
-        let total_area =
-            *all
-            .get(&all_key)
-            .unwrap_or_else(|| panic!("{} not found among {} keys", all_key, all.len()));
+        let none_key = "-".repeat(n);
+
+        // Compute total_area as sum of non-"---" exclusive targets.
+        // The "---" region (outside all shapes) can be negative when working with
+        // exclusive targets, which would make "***" zero or negative, causing
+        // division by zero in error calculations.
+        // Instead, compute total_area as the actual union area (sum of positive exclusives).
+        let total_area: D = all.iter()
+            .filter(|(k, _)| !k.contains('*') && *k != &none_key)
+            .map(|(_, v)| *v)
+            .fold(D::zero(&D::zero(all.values().next().unwrap())), |acc, v| acc + v);
+
+        // If total_area is still zero (all targets are zero), use the "***" key as fallback
+        let total_area = if total_area == D::zero(&total_area) {
+            *all.get(&all_key)
+                .unwrap_or_else(|| panic!("{} not found among {} keys", all_key, all.len()))
+        } else {
+            total_area
+        };
 
         Targets {
             all,
