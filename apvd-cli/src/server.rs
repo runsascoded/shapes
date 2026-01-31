@@ -3,9 +3,7 @@
 //! The server accepts WebSocket connections and handles training requests,
 //! streaming step updates back to the client.
 //!
-//! Supports two protocols:
-//! 1. Legacy tag-based: `{"type": "StartTraining", ...}`
-//! 2. JSON-RPC style: `{"id": "req_1", "method": "createModel", "params": {...}}`
+//! Uses JSON-RPC protocol: `{"id": "req_1", "method": "createModel", "params": {...}}`
 
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -32,38 +30,6 @@ use apvd_core::{InputSpec, Model, Step, TargetsMap, regions};
 #[derive(Clone)]
 pub struct ServerConfig {
     pub parallel: usize,
-}
-
-/// Messages from client to server
-#[derive(Debug, Deserialize)]
-#[serde(tag = "type")]
-pub enum ClientMessage {
-    /// Start training with given shapes and targets
-    StartTraining {
-        shapes: Vec<InputSpec>,
-        targets: TargetsMap<f64>,
-        #[serde(default = "default_max_steps")]
-        max_steps: usize,
-        #[serde(default = "default_learning_rate")]
-        learning_rate: f64,
-        #[serde(default)]
-        robust: bool,
-        /// Number of parallel variants to train (overrides server config if provided)
-        #[serde(default)]
-        parallel: Option<usize>,
-    },
-    /// Stop current training
-    StopTraining,
-    /// Ping to keep connection alive
-    Ping,
-}
-
-fn default_max_steps() -> usize {
-    1000
-}
-
-fn default_learning_rate() -> f64 {
-    0.05
 }
 
 // ============================================================================
@@ -96,7 +62,6 @@ struct JsonRpcError {
 }
 
 /// JSON-RPC notification (no id, server-initiated)
-#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 struct JsonRpcNotification {
     method: String,
@@ -129,38 +94,31 @@ struct RegionInfo {
     error: f64,
 }
 
-/// Messages from server to client
-#[derive(Debug, Clone, Serialize)]
-#[serde(tag = "type")]
-pub enum ServerMessage {
-    /// Training step update (from best variant when running parallel)
-    StepUpdate {
-        step_idx: usize,
-        error: f64,
-        min_error: f64,
-        min_step: usize,
-        shapes: Vec<serde_json::Value>,
-        converged: bool,
-        /// Which variant this update is from (0 if single training)
-        #[serde(skip_serializing_if = "Option::is_none")]
-        variant_id: Option<usize>,
-    },
-    /// Training completed
-    TrainingComplete {
-        total_steps: usize,
-        final_error: f64,
-        min_error: f64,
-        min_step: usize,
-        /// Permutation used for best result (if parallel training)
-        #[serde(skip_serializing_if = "Option::is_none")]
-        best_permutation: Option<Vec<usize>>,
-    },
-    /// Error occurred
-    Error { message: String },
-    /// Training was stopped
-    Stopped,
-    /// Pong response
-    Pong,
+/// Progress update for streaming training progress
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProgressUpdate {
+    handle_id: String,
+    #[serde(rename = "type")]
+    update_type: String, // "progress", "complete", or "error"
+    current_step: usize,
+    total_steps: usize,
+    error: f64,
+    min_error: f64,
+    min_step: usize,
+    shapes: Vec<serde_json::Value>,
+    elapsed_ms: u64,
+    converged: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error_message: Option<String>,
+}
+
+/// Training handle returned when training starts
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TrainingHandle {
+    id: String,
+    started_at: u64,
 }
 
 /// Shared state for a training session
@@ -224,18 +182,11 @@ async fn ws_handler(
     ws.on_upgrade(move |socket| handle_socket(socket, config))
 }
 
-/// Outbound message - can be legacy ServerMessage or raw JSON for JSON-RPC
-#[derive(Debug)]
-enum OutboundMessage {
-    Legacy(ServerMessage),
-    Json(String),
-}
-
 async fn handle_socket(socket: WebSocket, config: Arc<ServerConfig>) {
     let (mut sender, mut receiver) = socket.split();
 
     // Channel for sending messages back to the client
-    let (tx, mut rx) = mpsc::channel::<OutboundMessage>(100);
+    let (tx, mut rx) = mpsc::channel::<String>(100);
 
     // Current training session (if any)
     let current_session: Arc<std::sync::Mutex<Option<Arc<TrainingSession>>>> =
@@ -243,11 +194,7 @@ async fn handle_socket(socket: WebSocket, config: Arc<ServerConfig>) {
 
     // Task to forward messages to WebSocket
     let send_task = tokio::spawn(async move {
-        while let Some(msg) = rx.recv().await {
-            let json = match msg {
-                OutboundMessage::Legacy(m) => serde_json::to_string(&m).unwrap(),
-                OutboundMessage::Json(s) => s,
-            };
+        while let Some(json) = rx.recv().await {
             if sender.send(Message::Text(json)).await.is_err() {
                 break;
             }
@@ -262,90 +209,25 @@ async fn handle_socket(socket: WebSocket, config: Arc<ServerConfig>) {
         };
         match msg {
             Message::Text(text) => {
-                // Try JSON-RPC format first (has "id" and "method" fields)
-                if let Ok(rpc_req) = serde_json::from_str::<JsonRpcRequest>(&text) {
-                    let response = handle_json_rpc(&rpc_req, &config).await;
-                    let json = serde_json::to_string(&response).unwrap();
-                    let _ = tx.send(OutboundMessage::Json(json)).await;
-                    continue;
-                }
-
-                // Fall back to legacy tag-based protocol
-                let client_msg: Result<ClientMessage, _> = serde_json::from_str(&text);
-                match client_msg {
-                    Ok(ClientMessage::StartTraining {
-                        shapes,
-                        targets,
-                        max_steps,
-                        learning_rate,
-                        robust,
-                        parallel,
-                    }) => {
-                        // Create new session
-                        let session = Arc::new(TrainingSession::new());
-                        {
-                            let mut current = current_session.lock().unwrap();
-                            // Stop any existing training
-                            if let Some(old_session) = current.take() {
-                                old_session.request_stop();
-                            }
-                            *current = Some(session.clone());
-                        }
-
-                        let tx = tx.clone();
-                        let num_parallel = parallel.unwrap_or(config.parallel);
-
-                        // Run training in a blocking task
-                        tokio::task::spawn_blocking(move || {
-                            if num_parallel > 1 {
-                                run_parallel_training(
-                                    shapes,
-                                    targets,
-                                    max_steps,
-                                    learning_rate,
-                                    robust,
-                                    num_parallel,
-                                    session,
-                                    tx,
-                                );
-                            } else {
-                                run_single_training(
-                                    shapes,
-                                    targets,
-                                    max_steps,
-                                    learning_rate,
-                                    robust,
-                                    session,
-                                    tx,
-                                );
-                            }
-                        });
-                    }
-                    Ok(ClientMessage::StopTraining) => {
-                        let has_session = {
-                            let mut current = current_session.lock().unwrap();
-                            if let Some(session) = current.take() {
-                                session.request_stop();
-                                true
-                            } else {
-                                false
-                            }
-                        };
-                        if has_session {
-                            let _ = tx.send(OutboundMessage::Legacy(ServerMessage::Stopped)).await;
-                        } else {
-                            let _ = tx.send(OutboundMessage::Legacy(ServerMessage::Error {
-                                message: "No training in progress".to_string(),
-                            })).await;
-                        }
-                    }
-                    Ok(ClientMessage::Ping) => {
-                        let _ = tx.send(OutboundMessage::Legacy(ServerMessage::Pong)).await;
+                // Parse as JSON-RPC request
+                match serde_json::from_str::<JsonRpcRequest>(&text) {
+                    Ok(rpc_req) => {
+                        let response = handle_json_rpc(&rpc_req, &config, &tx, &current_session).await;
+                        let json = serde_json::to_string(&response).unwrap();
+                        let _ = tx.send(json).await;
                     }
                     Err(e) => {
-                        let _ = tx.send(OutboundMessage::Legacy(ServerMessage::Error {
-                            message: format!("Invalid message: {}", e),
-                        })).await;
+                        // Send JSON-RPC parse error
+                        let error_response = JsonRpcResponse {
+                            id: "".to_string(),
+                            result: None,
+                            error: Some(JsonRpcError {
+                                code: -32700,
+                                message: format!("Parse error: {}", e),
+                            }),
+                        };
+                        let json = serde_json::to_string(&error_response).unwrap();
+                        let _ = tx.send(json).await;
                     }
                 }
             }
@@ -370,7 +252,12 @@ async fn handle_socket(socket: WebSocket, config: Arc<ServerConfig>) {
 // JSON-RPC Handler
 // ============================================================================
 
-async fn handle_json_rpc(req: &JsonRpcRequest, _config: &ServerConfig) -> JsonRpcResponse {
+async fn handle_json_rpc(
+    req: &JsonRpcRequest,
+    config: &ServerConfig,
+    tx: &mpsc::Sender<String>,
+    current_session: &Arc<std::sync::Mutex<Option<Arc<TrainingSession>>>>,
+) -> JsonRpcResponse {
     match req.method.as_str() {
         "getVersion" => JsonRpcResponse {
             id: req.id.clone(),
@@ -403,6 +290,29 @@ async fn handle_json_rpc(req: &JsonRpcRequest, _config: &ServerConfig) -> JsonRp
                             message: format!("Internal error: {}", msg),
                         }),
                     }
+                }
+            }
+        },
+        "train" => {
+            handle_train(&req.id, &req.params, config, tx.clone(), current_session.clone()).await
+        },
+        "stop" => {
+            let mut current = current_session.lock().unwrap();
+            if let Some(session) = current.take() {
+                session.request_stop();
+                JsonRpcResponse {
+                    id: req.id.clone(),
+                    result: Some(serde_json::json!({"stopped": true})),
+                    error: None,
+                }
+            } else {
+                JsonRpcResponse {
+                    id: req.id.clone(),
+                    result: None,
+                    error: Some(JsonRpcError {
+                        code: -32000,
+                        message: "No training in progress".to_string(),
+                    }),
                 }
             }
         },
@@ -525,6 +435,122 @@ fn handle_create_model(id: &str, params: &Value) -> JsonRpcResponse {
     }
 }
 
+/// Handle train RPC - starts training and streams progress updates
+async fn handle_train(
+    id: &str,
+    params: &Value,
+    config: &ServerConfig,
+    tx: mpsc::Sender<String>,
+    current_session: Arc<std::sync::Mutex<Option<Arc<TrainingSession>>>>,
+) -> JsonRpcResponse {
+    // Parse parameters
+    let inputs: Vec<InputSpec> = match params.get("inputs") {
+        Some(v) => match serde_json::from_value(v.clone()) {
+            Ok(i) => i,
+            Err(e) => return JsonRpcResponse {
+                id: id.to_string(),
+                result: None,
+                error: Some(JsonRpcError {
+                    code: -32602,
+                    message: format!("Invalid inputs: {}", e),
+                }),
+            },
+        },
+        None => return JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32602,
+                message: "Missing 'inputs' parameter".to_string(),
+            }),
+        },
+    };
+
+    let targets: TargetsMap<f64> = match params.get("targets") {
+        Some(v) => match serde_json::from_value(v.clone()) {
+            Ok(t) => t,
+            Err(e) => return JsonRpcResponse {
+                id: id.to_string(),
+                result: None,
+                error: Some(JsonRpcError {
+                    code: -32602,
+                    message: format!("Invalid targets: {}", e),
+                }),
+            },
+        },
+        None => return JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32602,
+                message: "Missing 'targets' parameter".to_string(),
+            }),
+        },
+    };
+
+    let max_steps = params.get("maxSteps")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(1000) as usize;
+    let learning_rate = params.get("learningRate")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.05);
+    let robust = params.get("robust")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let num_parallel = params.get("parallel")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as usize)
+        .unwrap_or(config.parallel);
+
+    // Generate unique handle ID
+    let handle_id = format!("train_{}", std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis());
+    let started_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+
+    // Create new session
+    let session = Arc::new(TrainingSession::new());
+    {
+        let mut current = current_session.lock().unwrap();
+        // Stop any existing training
+        if let Some(old_session) = current.take() {
+            old_session.request_stop();
+        }
+        *current = Some(session.clone());
+    }
+
+    let handle_id_clone = handle_id.clone();
+
+    // Run training in background
+    tokio::task::spawn_blocking(move || {
+        if num_parallel > 1 {
+            run_parallel_training(
+                inputs, targets, max_steps, learning_rate, robust,
+                num_parallel, session, tx, handle_id_clone,
+            );
+        } else {
+            run_single_training(
+                inputs, targets, max_steps, learning_rate, robust,
+                session, tx, handle_id_clone,
+            );
+        }
+    });
+
+    // Return handle immediately
+    JsonRpcResponse {
+        id: id.to_string(),
+        result: Some(serde_json::to_value(TrainingHandle {
+            id: handle_id,
+            started_at,
+        }).unwrap()),
+        error: None,
+    }
+}
+
 fn run_single_training(
     shapes: Vec<InputSpec>,
     targets: TargetsMap<f64>,
@@ -532,22 +558,23 @@ fn run_single_training(
     learning_rate: f64,
     robust: bool,
     session: Arc<TrainingSession>,
-    tx: mpsc::Sender<OutboundMessage>,
+    tx: mpsc::Sender<String>,
+    handle_id: String,
 ) {
+    let start_time = std::time::Instant::now();
+
     // Create model
     let model_result = Model::new(shapes, targets.clone());
     let mut model = match model_result {
         Ok(m) => m,
         Err(e) => {
-            let _ = tx.blocking_send(OutboundMessage::Legacy(ServerMessage::Error {
-                message: format!("Failed to create model: {}", e),
-            }));
+            send_progress_notification(&tx, &handle_id, "error", 0, max_steps, 0.0, 0.0, 0, vec![], start_time.elapsed().as_millis() as u64, false, Some(e.to_string()));
             return;
         }
     };
 
     // Send initial step
-    send_step_update(&tx, &model, 0, None);
+    send_progress_update(&tx, &handle_id, &model, 0, max_steps, start_time);
 
     // Training loop
     for step_idx in 0..max_steps {
@@ -574,9 +601,7 @@ fn run_single_training(
             Ok(step) => {
                 let err = step.error.v();
                 if err.is_nan() {
-                    let _ = tx.blocking_send(OutboundMessage::Legacy(ServerMessage::Error {
-                        message: "NaN error encountered".to_string(),
-                    }));
+                    send_progress_notification(&tx, &handle_id, "error", step_idx, max_steps, err, model.min_error, model.min_idx, vec![], start_time.elapsed().as_millis() as u64, false, Some("NaN error encountered".to_string()));
                     break;
                 }
 
@@ -590,13 +615,11 @@ fn run_single_training(
 
                 // Send update every 10 steps or on significant changes
                 if step_idx % 10 == 0 || step_idx < 20 {
-                    send_step_update(&tx, &model, step_idx + 1, None);
+                    send_progress_update(&tx, &handle_id, &model, step_idx + 1, max_steps, start_time);
                 }
             }
             Err(e) => {
-                let _ = tx.blocking_send(OutboundMessage::Legacy(ServerMessage::Error {
-                    message: format!("Step failed: {}", e),
-                }));
+                send_progress_notification(&tx, &handle_id, "error", step_idx, max_steps, 0.0, model.min_error, model.min_idx, vec![], start_time.elapsed().as_millis() as u64, false, Some(format!("Step failed: {}", e)));
                 break;
             }
         }
@@ -606,15 +629,8 @@ fn run_single_training(
         return;
     }
 
-    // Send final update
-    let final_step = model.steps.last().unwrap();
-    let _ = tx.blocking_send(OutboundMessage::Legacy(ServerMessage::TrainingComplete {
-        total_steps: model.steps.len(),
-        final_error: final_step.error.v(),
-        min_error: model.min_error,
-        min_step: model.min_idx,
-        best_permutation: None,
-    }));
+    // Send completion
+    send_progress_update_with_type(&tx, &handle_id, &model, model.steps.len() - 1, max_steps, start_time, "complete");
 }
 
 fn run_parallel_training(
@@ -625,8 +641,10 @@ fn run_parallel_training(
     robust: bool,
     num_parallel: usize,
     session: Arc<TrainingSession>,
-    tx: mpsc::Sender<OutboundMessage>,
+    tx: mpsc::Sender<String>,
+    handle_id: String,
 ) {
+    let start_time = std::time::Instant::now();
     let num_shapes = shapes.len();
     let permutations = generate_permutations(num_shapes, num_parallel);
 
@@ -689,7 +707,7 @@ fn run_parallel_training(
                     if session.update_best(variant_id, err) {
                         // Send update (only from best variant)
                         if step_idx % 10 == 0 || step_idx < 20 {
-                            send_step_update(&tx, &model, step_idx + 1, Some(variant_id));
+                            send_progress_update(&tx, &handle_id, &model, step_idx + 1, max_steps, start_time);
                         }
                     }
                 }
@@ -711,27 +729,33 @@ fn run_parallel_training(
 
     // Send final result
     let best = best_result.lock().unwrap();
-    if let Some((permutation, model)) = best.as_ref() {
-        let final_step = model.steps.last().unwrap();
-        let _ = tx.blocking_send(OutboundMessage::Legacy(ServerMessage::TrainingComplete {
-            total_steps: model.steps.len(),
-            final_error: final_step.error.v(),
-            min_error: model.min_error,
-            min_step: model.min_idx,
-            best_permutation: Some(permutation.clone()),
-        }));
+    if let Some((_permutation, model)) = best.as_ref() {
+        send_progress_update_with_type(&tx, &handle_id, model, model.steps.len() - 1, max_steps, start_time, "complete");
     } else {
-        let _ = tx.blocking_send(OutboundMessage::Legacy(ServerMessage::Error {
-            message: "All training variants failed".to_string(),
-        }));
+        send_progress_notification(&tx, &handle_id, "error", 0, max_steps, 0.0, 0.0, 0, vec![], start_time.elapsed().as_millis() as u64, false, Some("All training variants failed".to_string()));
     }
 }
 
-fn send_step_update(
-    tx: &mpsc::Sender<OutboundMessage>,
+/// Send a progress notification as JSON-RPC
+fn send_progress_update(
+    tx: &mpsc::Sender<String>,
+    handle_id: &str,
     model: &Model,
     step_idx: usize,
-    variant_id: Option<usize>,
+    total_steps: usize,
+    start_time: std::time::Instant,
+) {
+    send_progress_update_with_type(tx, handle_id, model, step_idx, total_steps, start_time, "progress");
+}
+
+fn send_progress_update_with_type(
+    tx: &mpsc::Sender<String>,
+    handle_id: &str,
+    model: &Model,
+    step_idx: usize,
+    total_steps: usize,
+    start_time: std::time::Instant,
+    update_type: &str,
 ) {
     let step = model.steps.last().unwrap();
     let shapes: Vec<serde_json::Value> = step
@@ -740,15 +764,54 @@ fn send_step_update(
         .map(|s| serde_json::to_value(s).unwrap())
         .collect();
 
-    let _ = tx.blocking_send(OutboundMessage::Legacy(ServerMessage::StepUpdate {
+    send_progress_notification(
+        tx,
+        handle_id,
+        update_type,
         step_idx,
-        error: step.error.v(),
-        min_error: model.min_error,
-        min_step: model.min_idx,
+        total_steps,
+        step.error.v(),
+        model.min_error,
+        model.min_idx,
         shapes,
-        converged: step.converged,
-        variant_id,
-    }));
+        start_time.elapsed().as_millis() as u64,
+        step.converged,
+        None,
+    );
+}
+
+fn send_progress_notification(
+    tx: &mpsc::Sender<String>,
+    handle_id: &str,
+    update_type: &str,
+    current_step: usize,
+    total_steps: usize,
+    error: f64,
+    min_error: f64,
+    min_step: usize,
+    shapes: Vec<serde_json::Value>,
+    elapsed_ms: u64,
+    converged: bool,
+    error_message: Option<String>,
+) {
+    let update = ProgressUpdate {
+        handle_id: handle_id.to_string(),
+        update_type: update_type.to_string(),
+        current_step,
+        total_steps,
+        error,
+        min_error,
+        min_step,
+        shapes,
+        elapsed_ms,
+        converged,
+        error_message,
+    };
+    let notification = JsonRpcNotification {
+        method: "progress".to_string(),
+        params: serde_json::to_value(update).unwrap(),
+    };
+    let _ = tx.blocking_send(serde_json::to_string(&notification).unwrap());
 }
 
 /// Generate shape permutations for parallel training.
