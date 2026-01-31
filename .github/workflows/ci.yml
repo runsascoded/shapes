@@ -22,7 +22,7 @@ jobs:
       - run: cargo test -- --nocapture
 
   build-wasm:
-    needs: test
+    needs: [test, build-client]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -33,13 +33,46 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: jetli/wasm-pack-action@v0.4.0
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
       - name: Build WASM
         run: cd apvd-wasm && wasm-pack build --target web
 
-      - name: Add directory to package.json repository
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build TypeScript wrapper
+        run: cd apvd-wasm/ts && pnpm build
+
+      - name: Update package.json exports
         run: |
+          # TypeScript already compiled to pkg via tsconfig outDir
+          # Update package.json to include the new exports
           cd apvd-wasm/pkg
-          jq '.repository.directory = "apvd-wasm/pkg"' package.json > tmp.json && mv tmp.json package.json
+          jq '.repository.directory = "apvd-wasm/pkg" |
+              .exports = {
+                ".": {
+                  "types": "./apvd_wasm.d.ts",
+                  "default": "./apvd_wasm.js"
+                },
+                "./client": {
+                  "types": "./index.d.ts",
+                  "default": "./index.js"
+                },
+                "./worker": {
+                  "types": "./worker.d.ts",
+                  "default": "./worker.js"
+                }
+              } |
+              .peerDependencies = { "@apvd/client": "*" } |
+              .peerDependenciesMeta = { "@apvd/client": { "optional": true } }' package.json > tmp.json && mv tmp.json package.json
 
       - name: Push dist branch (main)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
