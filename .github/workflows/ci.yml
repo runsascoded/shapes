@@ -22,6 +22,7 @@ jobs:
       - run: cargo test -- --nocapture
 
   build-wasm:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -47,6 +48,7 @@ jobs:
           prebuilt_dir: apvd-wasm/pkg
 
   build-client:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: write
