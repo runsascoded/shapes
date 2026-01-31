@@ -41,11 +41,18 @@ jobs:
           cd apvd-wasm/pkg
           jq '.repository.directory = "apvd-wasm/pkg"' package.json > tmp.json && mv tmp.json package.json
 
-      - name: Push dist branch
+      - name: Push dist branch (main)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         uses: runsascoded/npm-dist@v1.1
         with:
           prebuilt_dir: apvd-wasm/pkg
+
+      - name: Push dist branch (PR)
+        if: github.event_name == 'pull_request'
+        uses: runsascoded/npm-dist@v1.1
+        with:
+          prebuilt_dir: apvd-wasm/pkg
+          dist_branch: dist-${{ github.head_ref }}
 
   build-client:
     needs: test
@@ -73,9 +80,16 @@ jobs:
       - name: Build TypeScript
         run: cd client && pnpm build
 
-      - name: Push dist branch
+      - name: Push dist branch (main)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         uses: runsascoded/npm-dist@v1.1
         with:
           dir: client
           dist_branch: client-dist
+
+      - name: Push dist branch (PR)
+        if: github.event_name == 'pull_request'
+        uses: runsascoded/npm-dist@v1.1
+        with:
+          dir: client
+          dist_branch: client-dist-${{ github.head_ref }}
