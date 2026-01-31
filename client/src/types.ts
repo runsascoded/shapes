@@ -299,6 +299,16 @@ export interface WebSocketTransportConfig {
   transport: "websocket";
   /** WebSocket URL (e.g., "ws://localhost:8080") */
   url: string;
+  /** Expected server SHA for version validation */
+  expectedSha?: string;
+  /** Behavior on version mismatch: "warn" (default), "error", or "ignore" */
+  versionMismatch?: "warn" | "error" | "ignore";
+}
+
+/** Server version info returned by getVersion RPC */
+export interface VersionInfo {
+  sha: string;
+  version: string;
 }
 
 export type TransportConfig = WorkerTransportConfig | WebSocketTransportConfig;

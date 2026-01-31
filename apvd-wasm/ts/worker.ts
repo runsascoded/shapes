@@ -23,7 +23,7 @@ import type {
   InputSpec,
   TargetsMap,
   TieredConfig,
-} from "./types";
+} from "@apvd/client";
 
 // WASM module will be imported dynamically
 let wasm: typeof import("apvd-wasm") | null = null;

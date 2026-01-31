@@ -1,17 +1,17 @@
 /**
- * @apvd/client - Training client for area-proportional Venn diagrams
+ * @apvd/client - Training client types and WebSocket transport
  *
- * This package provides a unified TrainingClient interface that works with
- * either a Worker transport (WASM in browser) or WebSocket transport
- * (native Rust server via `apvd serve`).
+ * This package provides:
+ * - Core types for the TrainingClient interface
+ * - WebSocketTrainingClient for connecting to native Rust server (apvd serve)
+ *
+ * For WASM/Worker-based training in the browser, use the apvd-wasm package
+ * which provides WorkerTrainingClient.
  *
  * @example
  * import { createTrainingClient } from "@apvd/client";
  *
- * // Create client with Worker transport (default)
- * const client = createTrainingClient({ transport: "worker" });
- *
- * // Or with WebSocket transport
+ * // Create client with WebSocket transport
  * const client = createTrainingClient({
  *   transport: "websocket",
  *   url: "ws://localhost:8080"
@@ -90,11 +90,17 @@ export type {
   TransportConfig,
   WorkerTransportConfig,
   WebSocketTransportConfig,
+
+  // Version info
+  VersionInfo,
+
+  // Worker message types (for apvd-wasm)
+  WorkerRequest,
+  WorkerResponse,
 } from "./types";
 
 // Re-export client implementations
 export {
   createTrainingClient,
-  WorkerTrainingClient,
   WebSocketTrainingClient,
 } from "./client";

@@ -1,0 +1,16 @@
+{
+  "name": "apvd-wasm-ts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc"
+  },
+  "peerDependencies": {
+    "@apvd/client": "*"
+  },
+  "devDependencies": {
+    "@apvd/client": "workspace:*",
+    "typescript": "^5.9.3"
+  }
+}

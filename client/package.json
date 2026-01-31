@@ -1,7 +1,7 @@
 {
   "name": "@apvd/client",
   "version": "0.1.0",
-  "description": "Training client for area-proportional Venn diagrams",
+  "description": "Training client types and WebSocket transport for area-proportional Venn diagrams",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -14,10 +14,6 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
-    },
-    "./worker": {
-      "import": "./dist/worker.js",
-      "types": "./dist/worker.d.ts"
     }
   },
   "scripts": {
@@ -29,14 +25,6 @@
     "dist",
     "src"
   ],
-  "peerDependencies": {
-    "apvd-wasm": "*"
-  },
-  "peerDependenciesMeta": {
-    "apvd-wasm": {
-      "optional": true
-    }
-  },
   "devDependencies": {
     "typescript": "^5.9.3"
   }
