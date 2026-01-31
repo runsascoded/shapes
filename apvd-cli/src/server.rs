@@ -2,6 +2,10 @@
 //!
 //! The server accepts WebSocket connections and handles training requests,
 //! streaming step updates back to the client.
+//!
+//! Supports two protocols:
+//! 1. Legacy tag-based: `{"type": "StartTraining", ...}`
+//! 2. JSON-RPC style: `{"id": "req_1", "method": "createModel", "params": {...}}`
 
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -19,9 +23,10 @@ use axum::{
 use futures_util::{SinkExt, StreamExt};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tokio::sync::mpsc;
 
-use apvd_core::{InputSpec, Model, TargetsMap};
+use apvd_core::{InputSpec, Model, Step, TargetsMap, regions};
 
 /// Server configuration
 #[derive(Clone)]
@@ -59,6 +64,69 @@ fn default_max_steps() -> usize {
 
 fn default_learning_rate() -> f64 {
     0.05
+}
+
+// ============================================================================
+// JSON-RPC Protocol Types
+// ============================================================================
+
+/// JSON-RPC request message
+#[derive(Debug, Deserialize)]
+struct JsonRpcRequest {
+    id: String,
+    method: String,
+    #[serde(default)]
+    params: Value,
+}
+
+/// JSON-RPC response message
+#[derive(Debug, Serialize)]
+struct JsonRpcResponse {
+    id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    result: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<JsonRpcError>,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonRpcError {
+    code: i32,
+    message: String,
+}
+
+/// JSON-RPC notification (no id, server-initiated)
+#[allow(dead_code)]
+#[derive(Debug, Serialize)]
+struct JsonRpcNotification {
+    method: String,
+    params: Value,
+}
+
+/// Step state with geometry for frontend display
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StepStateWithGeometry {
+    step_index: usize,
+    error: f64,
+    shapes: Vec<Value>,
+    is_keyframe: bool,
+    geometry: StepGeometry,
+}
+
+#[derive(Debug, Serialize)]
+struct StepGeometry {
+    components: Vec<regions::Component>,
+    regions: Vec<RegionInfo>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RegionInfo {
+    key: String,
+    area: f64,
+    target_area: Option<f64>,
+    error: f64,
 }
 
 /// Messages from server to client
@@ -156,11 +224,18 @@ async fn ws_handler(
     ws.on_upgrade(move |socket| handle_socket(socket, config))
 }
 
+/// Outbound message - can be legacy ServerMessage or raw JSON for JSON-RPC
+#[derive(Debug)]
+enum OutboundMessage {
+    Legacy(ServerMessage),
+    Json(String),
+}
+
 async fn handle_socket(socket: WebSocket, config: Arc<ServerConfig>) {
     let (mut sender, mut receiver) = socket.split();
 
     // Channel for sending messages back to the client
-    let (tx, mut rx) = mpsc::channel::<ServerMessage>(100);
+    let (tx, mut rx) = mpsc::channel::<OutboundMessage>(100);
 
     // Current training session (if any)
     let current_session: Arc<std::sync::Mutex<Option<Arc<TrainingSession>>>> =
@@ -169,7 +244,10 @@ async fn handle_socket(socket: WebSocket, config: Arc<ServerConfig>) {
     // Task to forward messages to WebSocket
     let send_task = tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
-            let json = serde_json::to_string(&msg).unwrap();
+            let json = match msg {
+                OutboundMessage::Legacy(m) => serde_json::to_string(&m).unwrap(),
+                OutboundMessage::Json(s) => s,
+            };
             if sender.send(Message::Text(json)).await.is_err() {
                 break;
             }
@@ -184,6 +262,15 @@ async fn handle_socket(socket: WebSocket, config: Arc<ServerConfig>) {
         };
         match msg {
             Message::Text(text) => {
+                // Try JSON-RPC format first (has "id" and "method" fields)
+                if let Ok(rpc_req) = serde_json::from_str::<JsonRpcRequest>(&text) {
+                    let response = handle_json_rpc(&rpc_req, &config).await;
+                    let json = serde_json::to_string(&response).unwrap();
+                    let _ = tx.send(OutboundMessage::Json(json)).await;
+                    continue;
+                }
+
+                // Fall back to legacy tag-based protocol
                 let client_msg: Result<ClientMessage, _> = serde_json::from_str(&text);
                 match client_msg {
                     Ok(ClientMessage::StartTraining {
@@ -245,20 +332,20 @@ async fn handle_socket(socket: WebSocket, config: Arc<ServerConfig>) {
                             }
                         };
                         if has_session {
-                            let _ = tx.send(ServerMessage::Stopped).await;
+                            let _ = tx.send(OutboundMessage::Legacy(ServerMessage::Stopped)).await;
                         } else {
-                            let _ = tx.send(ServerMessage::Error {
+                            let _ = tx.send(OutboundMessage::Legacy(ServerMessage::Error {
                                 message: "No training in progress".to_string(),
-                            }).await;
+                            })).await;
                         }
                     }
                     Ok(ClientMessage::Ping) => {
-                        let _ = tx.send(ServerMessage::Pong).await;
+                        let _ = tx.send(OutboundMessage::Legacy(ServerMessage::Pong)).await;
                     }
                     Err(e) => {
-                        let _ = tx.send(ServerMessage::Error {
+                        let _ = tx.send(OutboundMessage::Legacy(ServerMessage::Error {
                             message: format!("Invalid message: {}", e),
-                        }).await;
+                        })).await;
                     }
                 }
             }
@@ -279,6 +366,126 @@ async fn handle_socket(socket: WebSocket, config: Arc<ServerConfig>) {
     let _ = send_task.await;
 }
 
+// ============================================================================
+// JSON-RPC Handler
+// ============================================================================
+
+async fn handle_json_rpc(req: &JsonRpcRequest, _config: &ServerConfig) -> JsonRpcResponse {
+    match req.method.as_str() {
+        "createModel" => handle_create_model(&req.id, &req.params),
+        "ping" => JsonRpcResponse {
+            id: req.id.clone(),
+            result: Some(serde_json::json!({"pong": true})),
+            error: None,
+        },
+        _ => JsonRpcResponse {
+            id: req.id.clone(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32601,
+                message: format!("Method not found: {}", req.method),
+            }),
+        },
+    }
+}
+
+/// Handle createModel RPC - creates initial step with full geometry
+fn handle_create_model(id: &str, params: &Value) -> JsonRpcResponse {
+    // Parse inputs and targets from params
+    let inputs: Vec<InputSpec> = match params.get("inputs") {
+        Some(v) => match serde_json::from_value(v.clone()) {
+            Ok(i) => i,
+            Err(e) => return JsonRpcResponse {
+                id: id.to_string(),
+                result: None,
+                error: Some(JsonRpcError {
+                    code: -32602,
+                    message: format!("Invalid inputs: {}", e),
+                }),
+            },
+        },
+        None => return JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32602,
+                message: "Missing 'inputs' parameter".to_string(),
+            }),
+        },
+    };
+
+    let targets: TargetsMap<f64> = match params.get("targets") {
+        Some(v) => match serde_json::from_value(v.clone()) {
+            Ok(t) => t,
+            Err(e) => return JsonRpcResponse {
+                id: id.to_string(),
+                result: None,
+                error: Some(JsonRpcError {
+                    code: -32602,
+                    message: format!("Invalid targets: {}", e),
+                }),
+            },
+        },
+        None => return JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32602,
+                message: "Missing 'targets' parameter".to_string(),
+            }),
+        },
+    };
+
+    // Create the step
+    let step = match Step::new(inputs, targets.clone().into()) {
+        Ok(s) => s,
+        Err(e) => return JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32000,
+                message: format!("Failed to create model: {}", e),
+            }),
+        },
+    };
+
+    // Extract geometry from step
+    let shapes: Vec<Value> = step.shapes.iter()
+        .map(|s| serde_json::to_value(s).unwrap())
+        .collect();
+
+    // Build region info with errors
+    let mut region_infos: Vec<RegionInfo> = Vec::new();
+    for component in &step.components {
+        for region in &component.regions {
+            let error_info = step.errors.get(&region.key);
+            region_infos.push(RegionInfo {
+                key: region.key.clone(),
+                area: region.area,
+                target_area: error_info.map(|e| e.target_area),
+                error: error_info.map(|e| e.error.v()).unwrap_or(0.0),
+            });
+        }
+    }
+
+    let result = StepStateWithGeometry {
+        step_index: 0,
+        error: step.error.v(),
+        shapes,
+        is_keyframe: true,
+        geometry: StepGeometry {
+            components: step.components.clone(),
+            regions: region_infos,
+        },
+    };
+
+    JsonRpcResponse {
+        id: id.to_string(),
+        result: Some(serde_json::to_value(result).unwrap()),
+        error: None,
+    }
+}
+
 fn run_single_training(
     shapes: Vec<InputSpec>,
     targets: TargetsMap<f64>,
@@ -286,16 +493,16 @@ fn run_single_training(
     learning_rate: f64,
     robust: bool,
     session: Arc<TrainingSession>,
-    tx: mpsc::Sender<ServerMessage>,
+    tx: mpsc::Sender<OutboundMessage>,
 ) {
     // Create model
     let model_result = Model::new(shapes, targets.clone());
     let mut model = match model_result {
         Ok(m) => m,
         Err(e) => {
-            let _ = tx.blocking_send(ServerMessage::Error {
+            let _ = tx.blocking_send(OutboundMessage::Legacy(ServerMessage::Error {
                 message: format!("Failed to create model: {}", e),
-            });
+            }));
             return;
         }
     };
@@ -328,9 +535,9 @@ fn run_single_training(
             Ok(step) => {
                 let err = step.error.v();
                 if err.is_nan() {
-                    let _ = tx.blocking_send(ServerMessage::Error {
+                    let _ = tx.blocking_send(OutboundMessage::Legacy(ServerMessage::Error {
                         message: "NaN error encountered".to_string(),
-                    });
+                    }));
                     break;
                 }
 
@@ -348,9 +555,9 @@ fn run_single_training(
                 }
             }
             Err(e) => {
-                let _ = tx.blocking_send(ServerMessage::Error {
+                let _ = tx.blocking_send(OutboundMessage::Legacy(ServerMessage::Error {
                     message: format!("Step failed: {}", e),
-                });
+                }));
                 break;
             }
         }
@@ -362,13 +569,13 @@ fn run_single_training(
 
     // Send final update
     let final_step = model.steps.last().unwrap();
-    let _ = tx.blocking_send(ServerMessage::TrainingComplete {
+    let _ = tx.blocking_send(OutboundMessage::Legacy(ServerMessage::TrainingComplete {
         total_steps: model.steps.len(),
         final_error: final_step.error.v(),
         min_error: model.min_error,
         min_step: model.min_idx,
         best_permutation: None,
-    });
+    }));
 }
 
 fn run_parallel_training(
@@ -379,7 +586,7 @@ fn run_parallel_training(
     robust: bool,
     num_parallel: usize,
     session: Arc<TrainingSession>,
-    tx: mpsc::Sender<ServerMessage>,
+    tx: mpsc::Sender<OutboundMessage>,
 ) {
     let num_shapes = shapes.len();
     let permutations = generate_permutations(num_shapes, num_parallel);
@@ -467,22 +674,22 @@ fn run_parallel_training(
     let best = best_result.lock().unwrap();
     if let Some((permutation, model)) = best.as_ref() {
         let final_step = model.steps.last().unwrap();
-        let _ = tx.blocking_send(ServerMessage::TrainingComplete {
+        let _ = tx.blocking_send(OutboundMessage::Legacy(ServerMessage::TrainingComplete {
             total_steps: model.steps.len(),
             final_error: final_step.error.v(),
             min_error: model.min_error,
             min_step: model.min_idx,
             best_permutation: Some(permutation.clone()),
-        });
+        }));
     } else {
-        let _ = tx.blocking_send(ServerMessage::Error {
+        let _ = tx.blocking_send(OutboundMessage::Legacy(ServerMessage::Error {
             message: "All training variants failed".to_string(),
-        });
+        }));
     }
 }
 
 fn send_step_update(
-    tx: &mpsc::Sender<ServerMessage>,
+    tx: &mpsc::Sender<OutboundMessage>,
     model: &Model,
     step_idx: usize,
     variant_id: Option<usize>,
@@ -494,7 +701,7 @@ fn send_step_update(
         .map(|s| serde_json::to_value(s).unwrap())
         .collect();
 
-    let _ = tx.blocking_send(ServerMessage::StepUpdate {
+    let _ = tx.blocking_send(OutboundMessage::Legacy(ServerMessage::StepUpdate {
         step_idx,
         error: step.error.v(),
         min_error: model.min_error,
@@ -502,7 +709,7 @@ fn send_step_update(
         shapes,
         converged: step.converged,
         variant_id,
-    });
+    }));
 }
 
 /// Generate shape permutations for parallel training.
