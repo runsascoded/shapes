@@ -372,7 +372,40 @@ async fn handle_socket(socket: WebSocket, config: Arc<ServerConfig>) {
 
 async fn handle_json_rpc(req: &JsonRpcRequest, _config: &ServerConfig) -> JsonRpcResponse {
     match req.method.as_str() {
-        "createModel" => handle_create_model(&req.id, &req.params),
+        "getVersion" => JsonRpcResponse {
+            id: req.id.clone(),
+            result: Some(serde_json::json!({
+                "sha": option_env!("APVD_BUILD_SHA").unwrap_or("dev"),
+                "version": env!("CARGO_PKG_VERSION"),
+            })),
+            error: None,
+        },
+        "createModel" => {
+            // Catch panics in createModel to return proper error responses
+            match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                handle_create_model(&req.id, &req.params)
+            })) {
+                Ok(response) => response,
+                Err(panic_info) => {
+                    let msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
+                        s.to_string()
+                    } else if let Some(s) = panic_info.downcast_ref::<String>() {
+                        s.clone()
+                    } else {
+                        "Unknown panic".to_string()
+                    };
+                    eprintln!("createModel panic: {}", msg);
+                    JsonRpcResponse {
+                        id: req.id.clone(),
+                        result: None,
+                        error: Some(JsonRpcError {
+                            code: -32000,
+                            message: format!("Internal error: {}", msg),
+                        }),
+                    }
+                }
+            }
+        },
         "ping" => JsonRpcResponse {
             id: req.id.clone(),
             result: Some(serde_json::json!({"pong": true})),
@@ -436,6 +469,9 @@ fn handle_create_model(id: &str, params: &Value) -> JsonRpcResponse {
         },
     };
 
+    // Debug: log received inputs and targets
+    eprintln!("createModel: received {} inputs, targets: {:?}", inputs.len(), targets);
+
     // Create the step
     let step = match Step::new(inputs, targets.clone().into()) {
         Ok(s) => s,
@@ -468,9 +504,12 @@ fn handle_create_model(id: &str, params: &Value) -> JsonRpcResponse {
         }
     }
 
+    let error_val = step.error.v();
+    eprintln!("createModel: computed error = {}, is_nan = {}", error_val, error_val.is_nan());
+
     let result = StepStateWithGeometry {
         step_index: 0,
-        error: step.error.v(),
+        error: error_val,
         shapes,
         is_keyframe: true,
         geometry: StepGeometry {
