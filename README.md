@@ -15,8 +15,9 @@ Rust library for computing differentiable shape intersections with automatic dif
 ```
 shapes/
 ├── apvd-core/     # Core computation library (platform-agnostic)
-├── apvd-wasm/     # WASM bindings for browser
-└── apvd-cli/      # Native CLI and WebSocket server
+├── apvd-wasm/     # WASM bindings + WorkerTrainingClient for browser
+├── apvd-cli/      # Native CLI and WebSocket server
+└── client/        # @apvd/client - TypeScript types + WebSocketTrainingClient
 ```
 
 ## Installation
@@ -29,6 +30,16 @@ cd apvd-wasm && wasm-pack build --target web
 
 Output: `apvd-wasm/pkg/`
 
+### TypeScript Client
+
+```bash
+# Build @apvd/client (types + WebSocketTrainingClient)
+cd client && pnpm build
+
+# Build apvd-wasm TypeScript (WorkerTrainingClient)
+cd apvd-wasm/ts && pnpm build
+```
+
 ### Native CLI
 
 ```bash
@@ -39,7 +50,42 @@ Output: `target/release/apvd`
 
 ## Usage
 
-### WASM API
+### TypeScript Client API
+
+Two packages provide a unified `TrainingClient` interface:
+
+- **`@apvd/client`**: Types + `WebSocketTrainingClient` (connects to `apvd serve`)
+- **`apvd-wasm`**: WASM + `WorkerTrainingClient` (runs training in Web Worker)
+
+```typescript
+// WebSocket transport (native Rust server)
+import { createTrainingClient } from "@apvd/client";
+
+const client = createTrainingClient({
+  transport: "websocket",
+  url: "ws://localhost:8080"
+});
+
+// Worker transport (WASM in browser) - use apvd-wasm package
+import { createWorkerTrainingClient } from "apvd-wasm/client";
+
+const client = createWorkerTrainingClient();
+
+// Both clients share the same API
+const handle = await client.startTraining({
+  inputs: [
+    [{ kind: "Circle", c: { x: 0, y: 0 }, r: 1 }, [true, true, true]],
+    [{ kind: "Circle", c: { x: 1, y: 0 }, r: 1 }, [true, true, true]],
+  ],
+  targets: { "0*": 3, "*1": 5, "01": 1 },
+});
+
+client.onProgress((update) => {
+  console.log(`Step ${update.currentStep}, error: ${update.error}`);
+});
+```
+
+### Low-level WASM API
 
 ```javascript
 import init, { make_model, train_robust, step, is_converged } from 'apvd-wasm';

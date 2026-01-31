@@ -191,21 +191,21 @@ interface RegionError {
 ### `static` branch (WASM Worker)
 - Worker already has WASM, just needs to serialize geometry in `getStepWithGeometry()`
 - Frontend removes direct WASM calls, uses client API exclusively
-- Removes `apvd-wasm` from frontend bundle (only Worker has it)
+- Uses `WorkerTrainingClient` from `apvd-wasm` package
 
 ### `server` branch (WebSocket)
 - Server computes geometry using native Rust
-- Frontend has no WASM dependency at all
-- Same client API, different transport
-- **Current state**: `apvd-wasm` removed, local types created, but stub functions throw. Needs:
+- Frontend has no WASM dependency at all - uses `@apvd/client` only
+- Uses `WebSocketTrainingClient` from `@apvd/client` package
+- **Current state**: Needs:
   1. `createModel(inputs, targets)` RPC → returns initial Step with geometry
   2. `train(model, params)` or streaming progress → returns Steps with geometry
   3. Server implementation in `shapes` crate
 
 ### Shared Code
-- `@apvd/client` package works for both
-- Type definitions shared
-- Frontend visualization code unchanged
+- Types from `@apvd/client` are shared by both transports
+- `apvd-wasm` uses `import type` from `@apvd/client` for type compatibility
+- Frontend visualization code unchanged - works with either client
 
 ## Migration Path
 

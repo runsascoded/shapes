@@ -2,9 +2,20 @@
 
 The frontend uses a unified API to interact with either:
 1. **WebSocket RPC backend** (Rust server via `apvd serve`)
-2. **WASM Worker** (shapes-wasm compiled to WebAssembly, running in a Web Worker)
+2. **WASM Worker** (apvd-wasm compiled to WebAssembly, running in a Web Worker)
 
-Both backends implement the same interface. The frontend doesn't need to know which transport it's using.
+Both backends implement the same `TrainingClient` interface.
+
+## Package Structure
+
+Two npm packages provide the TypeScript client:
+
+| Package | Contents | Use Case |
+|---------|----------|----------|
+| `@apvd/client` | Types + `WebSocketTrainingClient` | Server-side, Node.js, or WebSocket-only frontends |
+| `apvd-wasm` | WASM + `WorkerTrainingClient` | Browser frontends using WASM in Web Worker |
+
+The packages are split so that `@apvd/client` has no WASM dependencies and can be used in environments without browser APIs (e.g., server-side rendering, Node.js).
 
 ## Architecture
 
@@ -283,19 +294,18 @@ interface TrainingError {
 ## Example Usage
 
 ```typescript
+// WebSocket transport (native Rust server)
 import { createTrainingClient } from "@apvd/client";
 
-// Create client with WebSocket transport
 const client = createTrainingClient({
   transport: "websocket",
   url: "ws://localhost:8080",
 });
 
-// Or with Worker transport
-const client = createTrainingClient({
-  transport: "worker",
-  wasmUrl: "/shapes.wasm",
-});
+// Worker transport (WASM in browser) - use apvd-wasm package
+import { createWorkerTrainingClient } from "apvd-wasm/client";
+
+const client = createWorkerTrainingClient();
 
 // Start training
 const handle = await client.startTraining({
@@ -328,10 +338,14 @@ unsubscribe();
 
 ## Implementation Notes
 
-1. **Same API, different transports**: The frontend code doesn't change between WebSocket and Worker modes. Only the transport configuration differs.
+1. **Same API, different transports**: Both `WebSocketTrainingClient` and `WorkerTrainingClient` implement the same `TrainingClient` interface. Frontend code can switch between them by changing only the import.
 
-2. **Regeneration, not replay**: The backend always recomputes requested steps from keyframes. There's no "replay" mode that reads from stored history. This keeps the API simple and deterministic.
+2. **Package split**: `@apvd/client` contains types and WebSocket client only; `apvd-wasm` contains WASM and Worker client. This allows `@apvd/client` to be used in Node.js or SSR contexts without WASM dependencies.
 
-3. **Compression**: Trace files on disk use gzip compression (18-25x reduction). The API returns uncompressed JSON; compression is a storage concern.
+3. **Migration from old API**: The old `createTrainingClient({ transport: "worker" })` from `@apvd/client` no longer works. Use `createWorkerTrainingClient()` from `apvd-wasm/client` instead.
 
-4. **Parallel training**: When `parallel > 1`, the backend trains multiple permutations. Progress updates show the best-so-far across all variants. Final result is the best variant.
+4. **Regeneration, not replay**: The backend always recomputes requested steps from keyframes. There's no "replay" mode that reads from stored history. This keeps the API simple and deterministic.
+
+5. **Compression**: Trace files on disk use gzip compression (18-25x reduction). The API returns uncompressed JSON; compression is a storage concern.
+
+6. **Parallel training**: When `parallel > 1`, the backend trains multiple permutations. Progress updates show the best-so-far across all variants. Final result is the best variant.

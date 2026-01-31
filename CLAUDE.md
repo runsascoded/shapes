@@ -9,8 +9,12 @@ Rust library for computing shape intersections with automatic differentiation. U
 ```
 shapes/
 ├── apvd-core/     # Core computation library (platform-agnostic)
-├── apvd-wasm/     # WASM bindings for browser
-└── apvd-cli/      # Native CLI and WebSocket server
+├── apvd-wasm/     # WASM bindings + WorkerTrainingClient for browser
+│   ├── src/       # Rust WASM bindings
+│   ├── pkg/       # wasm-pack output (apvd-wasm npm package)
+│   └── ts/        # TypeScript client (WorkerTrainingClient)
+├── apvd-cli/      # Native CLI and WebSocket server
+└── client/        # @apvd/client TypeScript package (types + WebSocketTrainingClient)
 ```
 
 ## Build
@@ -18,6 +22,10 @@ shapes/
 ```bash
 # WASM (for browser)
 cd apvd-wasm && wasm-pack build --target web   # Output: apvd-wasm/pkg/
+
+# TypeScript packages
+cd client && pnpm build                        # @apvd/client
+cd apvd-wasm/ts && pnpm build                  # apvd-wasm TypeScript
 
 # Native CLI
 cargo build -p apvd-cli --release              # Output: target/release/apvd
@@ -79,6 +87,37 @@ apvd serve -p 8080
 **Math** (`math/`):
 - `polynomial/`: Quadratic, cubic, quartic solvers
 - `dual.rs`: Forward-mode AD wrapper around `num_dual::DualDVec64`
+
+### TypeScript Packages
+
+**`@apvd/client`** (`client/`):
+- Core types: `TrainingClient`, `TrainingRequest`, `ProgressUpdate`, `StepState`, etc.
+- `WebSocketTrainingClient`: Connects to native Rust server via WebSocket
+- `createTrainingClient({ transport: "websocket", url })`: Factory function
+
+**`apvd-wasm`** (`apvd-wasm/ts/`):
+- `WorkerTrainingClient`: Runs training in Web Worker using WASM
+- `createWorkerTrainingClient()`: Factory function
+- Uses `import type` from `@apvd/client` for shared types
+
+**Package Split Rationale**:
+- `@apvd/client` has no WASM dependencies, can be used in Node.js or server-side rendering
+- `apvd-wasm` contains WASM and Worker code, browser-only
+
+**Migration for Existing Code**:
+```typescript
+// OLD (no longer works):
+import { createTrainingClient } from "@apvd/client";
+const client = createTrainingClient({ transport: "worker", wasmUrl: "..." });
+
+// NEW (use apvd-wasm for Worker transport):
+import { createWorkerTrainingClient } from "apvd-wasm/client";
+const client = createWorkerTrainingClient();
+
+// WebSocket transport unchanged:
+import { createTrainingClient } from "@apvd/client";
+const client = createTrainingClient({ transport: "websocket", url: "ws://..." });
+```
 
 ### WASM Exports (`apvd-wasm/src/lib.rs`)
 - `make_model(inputs, targets)`: Create optimization model
