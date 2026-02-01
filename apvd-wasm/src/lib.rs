@@ -6,6 +6,7 @@
 use apvd_core::{
     Model, Step, Targets, TargetsMap, InputSpec, XYRR, D,
     shape::Shape,
+    TieredConfig, seek_from_keyframe,
 };
 use log::{info, error};
 use tsify::declare;
@@ -264,4 +265,97 @@ pub fn xyrr_unit(xyrr: JsValue) -> JsValue {
     let xyrr: XYRR<D> = serde_wasm_bindgen::from_value(xyrr).unwrap();
     let points = xyrr.unit_intersections();
     serde_wasm_bindgen::to_value(&points).unwrap()
+}
+
+// ============================================================================
+// Tiered Keyframe Storage
+// ============================================================================
+
+/// Creates a tiered keyframe configuration.
+///
+/// Tiered storage achieves O(log N) storage for N steps while maintaining
+/// bounded seek time via recomputation from keyframes.
+///
+/// # Arguments
+/// * `bucket_size` - Optional bucket size B (default: 1024). Tier 0 has 2B
+///   samples, other tiers have B samples.
+///
+/// # Returns
+/// A [`TieredConfig`] for determining which steps are keyframes.
+#[wasm_bindgen]
+pub fn make_tiered_config(bucket_size: Option<usize>) -> JsValue {
+    let config = TieredConfig::new(bucket_size);
+    serde_wasm_bindgen::to_value(&config).unwrap()
+}
+
+/// Check if a step should be stored as a keyframe.
+///
+/// # Arguments
+/// * `config` - Tiered configuration from [`make_tiered_config`].
+/// * `step_idx` - Step index to check.
+///
+/// # Returns
+/// True if this step should be stored as a keyframe.
+#[wasm_bindgen]
+pub fn tiered_is_keyframe(config: JsValue, step_idx: usize) -> bool {
+    let config: TieredConfig = serde_wasm_bindgen::from_value(config).unwrap();
+    config.is_keyframe(step_idx)
+}
+
+/// Find the nearest keyframe at or before a step.
+///
+/// # Arguments
+/// * `config` - Tiered configuration from [`make_tiered_config`].
+/// * `step_idx` - Target step index.
+///
+/// # Returns
+/// Index of the nearest keyframe ≤ step_idx.
+#[wasm_bindgen]
+pub fn tiered_nearest_keyframe(config: JsValue, step_idx: usize) -> usize {
+    let config: TieredConfig = serde_wasm_bindgen::from_value(config).unwrap();
+    config.nearest_keyframe(step_idx)
+}
+
+/// Seek to a target step by recomputing from a keyframe.
+///
+/// Given a keyframe step, recomputes forward to reach the target step.
+/// This enables random access to any step with bounded recomputation.
+///
+/// # Arguments
+/// * `keyframe` - The stored keyframe step.
+/// * `keyframe_idx` - Index of the keyframe.
+/// * `target_idx` - Target step index to seek to.
+/// * `learning_rate` - Learning rate for recomputation steps.
+///
+/// # Returns
+/// The step at target_idx, or throws if recomputation fails.
+#[wasm_bindgen]
+pub fn tiered_seek(
+    keyframe: JsValue,
+    keyframe_idx: usize,
+    target_idx: usize,
+    learning_rate: f64,
+) -> Result<JsValue, JsValue> {
+    let keyframe: Step = serde_wasm_bindgen::from_value(keyframe)
+        .map_err(|e| JsValue::from_str(&format!("Failed to parse keyframe: {}", e)))?;
+
+    let result = seek_from_keyframe(&keyframe, keyframe_idx, target_idx, learning_rate)
+        .map_err(|e| JsValue::from_str(&e))?;
+
+    serde_wasm_bindgen::to_value(&result)
+        .map_err(|e| JsValue::from_str(&format!("Failed to serialize result: {}", e)))
+}
+
+/// Calculate keyframe count for N steps.
+///
+/// # Arguments
+/// * `config` - Tiered configuration.
+/// * `total_steps` - Total number of steps.
+///
+/// # Returns
+/// Number of keyframes needed to store total_steps.
+#[wasm_bindgen]
+pub fn tiered_keyframe_count(config: JsValue, total_steps: usize) -> usize {
+    let config: TieredConfig = serde_wasm_bindgen::from_value(config).unwrap();
+    config.keyframe_count(total_steps)
 }
