@@ -24,7 +24,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use apvd_core::{InputSpec, Model, Step, TargetsMap, regions};
+use apvd_core::{
+    InputSpec, Model, Step, TargetsMap, regions,
+    TraceStorage, StorageStrategy, create_storage,
+};
 
 /// Server configuration
 #[derive(Clone)]
@@ -129,14 +132,20 @@ struct TrainingSession {
     best_error: std::sync::Mutex<f64>,
     /// Which variant currently has best error
     best_variant: AtomicUsize,
+    /// Trace storage for steps (tiered by default)
+    storage: std::sync::Mutex<Box<dyn TraceStorage>>,
+    /// Learning rate used for training (needed for recomputation)
+    learning_rate: f64,
 }
 
 impl TrainingSession {
-    fn new() -> Self {
+    fn new(learning_rate: f64, storage_strategy: StorageStrategy) -> Self {
         Self {
             stop_requested: AtomicBool::new(false),
             best_error: std::sync::Mutex::new(f64::INFINITY),
             best_variant: AtomicUsize::new(0),
+            storage: std::sync::Mutex::new(create_storage(storage_strategy, None)),
+            learning_rate,
         }
     }
 
@@ -157,6 +166,24 @@ impl TrainingSession {
         } else {
             false
         }
+    }
+
+    /// Record a step in the trace storage.
+    fn record_step(&self, index: usize, step: Step, error: f64) {
+        let mut storage = self.storage.lock().unwrap();
+        storage.record(index, step, error);
+    }
+
+    /// Get a step from storage (may recompute from keyframe).
+    fn get_step(&self, index: usize) -> Result<Step, String> {
+        let storage = self.storage.lock().unwrap();
+        storage.get(index, self.learning_rate)
+    }
+
+    /// Get storage metadata.
+    fn get_metadata(&self) -> apvd_core::trace::TraceMetadata {
+        let storage = self.storage.lock().unwrap();
+        storage.metadata()
     }
 }
 
@@ -312,6 +339,81 @@ async fn handle_json_rpc(
                     error: Some(JsonRpcError {
                         code: -32000,
                         message: "No training in progress".to_string(),
+                    }),
+                }
+            }
+        },
+        "getStep" => {
+            let current = current_session.lock().unwrap();
+            if let Some(session) = current.as_ref() {
+                let step_idx = req.params.get("stepIndex")
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v as usize);
+
+                match step_idx {
+                    Some(idx) => {
+                        match session.get_step(idx) {
+                            Ok(step) => {
+                                let shapes: Vec<serde_json::Value> = step.shapes.iter()
+                                    .map(|s| serde_json::to_value(s).unwrap())
+                                    .collect();
+                                JsonRpcResponse {
+                                    id: req.id.clone(),
+                                    result: Some(serde_json::json!({
+                                        "stepIndex": idx,
+                                        "error": step.error.v(),
+                                        "shapes": shapes,
+                                        "converged": step.converged,
+                                    })),
+                                    error: None,
+                                }
+                            }
+                            Err(e) => JsonRpcResponse {
+                                id: req.id.clone(),
+                                result: None,
+                                error: Some(JsonRpcError {
+                                    code: -32000,
+                                    message: e,
+                                }),
+                            },
+                        }
+                    }
+                    None => JsonRpcResponse {
+                        id: req.id.clone(),
+                        result: None,
+                        error: Some(JsonRpcError {
+                            code: -32602,
+                            message: "Missing 'stepIndex' parameter".to_string(),
+                        }),
+                    },
+                }
+            } else {
+                JsonRpcResponse {
+                    id: req.id.clone(),
+                    result: None,
+                    error: Some(JsonRpcError {
+                        code: -32000,
+                        message: "No training session".to_string(),
+                    }),
+                }
+            }
+        },
+        "getMetadata" => {
+            let current = current_session.lock().unwrap();
+            if let Some(session) = current.as_ref() {
+                let metadata = session.get_metadata();
+                JsonRpcResponse {
+                    id: req.id.clone(),
+                    result: Some(serde_json::to_value(metadata).unwrap()),
+                    error: None,
+                }
+            } else {
+                JsonRpcResponse {
+                    id: req.id.clone(),
+                    result: None,
+                    error: Some(JsonRpcError {
+                        code: -32000,
+                        message: "No training session".to_string(),
                     }),
                 }
             }
@@ -501,6 +603,15 @@ async fn handle_train(
         .and_then(|v| v.as_u64())
         .map(|v| v as usize)
         .unwrap_or(config.parallel);
+    let storage_strategy = params.get("storageStrategy")
+        .and_then(|v| v.as_str())
+        .map(|s| match s {
+            "dense" => StorageStrategy::Dense,
+            "btd" => StorageStrategy::Btd,
+            "hybrid" => StorageStrategy::Hybrid,
+            _ => StorageStrategy::Tiered,
+        })
+        .unwrap_or(StorageStrategy::Tiered);
 
     // Generate unique handle ID
     let handle_id = format!("train_{}", std::time::SystemTime::now()
@@ -513,7 +624,7 @@ async fn handle_train(
         .as_millis() as u64;
 
     // Create new session
-    let session = Arc::new(TrainingSession::new());
+    let session = Arc::new(TrainingSession::new(learning_rate, storage_strategy));
     {
         let mut current = current_session.lock().unwrap();
         // Stop any existing training
@@ -573,7 +684,9 @@ fn run_single_training(
         }
     };
 
-    // Send initial step
+    // Record and send initial step
+    let initial_step = model.steps.last().unwrap();
+    session.record_step(0, initial_step.clone(), initial_step.error.v());
     send_progress_update(&tx, &handle_id, &model, 0, max_steps, start_time);
 
     // Training loop
@@ -605,9 +718,13 @@ fn run_single_training(
                     break;
                 }
 
+                // Record step in trace storage
+                let new_step_idx = model.steps.len();
+                session.record_step(new_step_idx, step.clone(), err);
+
                 // Update min tracking
                 if err < model.min_error {
-                    model.min_idx = model.steps.len();
+                    model.min_idx = new_step_idx;
                     model.min_error = err;
                 }
 
@@ -696,20 +813,24 @@ fn run_parallel_training(
                         break;
                     }
 
+                    let new_step_idx = model.steps.len();
+
                     if err < model.min_error {
-                        model.min_idx = model.steps.len();
+                        model.min_idx = new_step_idx;
                         model.min_error = err;
                     }
 
-                    model.steps.push(step);
-
                     // Check if this is now the best variant
                     if session.update_best(variant_id, err) {
+                        // Record step from best variant
+                        session.record_step(new_step_idx, step.clone(), err);
                         // Send update (only from best variant)
                         if step_idx % 10 == 0 || step_idx < 20 {
                             send_progress_update(&tx, &handle_id, &model, step_idx + 1, max_steps, start_time);
                         }
                     }
+
+                    model.steps.push(step);
                 }
                 Err(_) => break,
             }

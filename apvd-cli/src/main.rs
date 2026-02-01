@@ -21,7 +21,7 @@ use clap::{Parser, Subcommand};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use apvd_core::{Model, InputSpec, TargetsMap};
+use apvd_core::{Model, InputSpec, TargetsMap, TieredConfig};
 use render::{render_svg, RenderConfig};
 
 #[derive(Parser)]
@@ -207,55 +207,6 @@ struct TraceStep {
     /// Whether this was a "best to date" step
     #[serde(skip_serializing_if = "Option::is_none")]
     is_best: Option<bool>,
-}
-
-/// Tiered keyframe configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct TieredConfig {
-    /// Bucket size (B): Tier 0 has 2B samples, other tiers have B samples
-    bucket_size: usize,
-}
-
-impl TieredConfig {
-    const DEFAULT_BUCKET_SIZE: usize = 1024;  // Power of 2, ~15:1 compression at 100k steps
-
-    fn new(bucket_size: Option<usize>) -> Self {
-        Self {
-            bucket_size: bucket_size.unwrap_or(Self::DEFAULT_BUCKET_SIZE),
-        }
-    }
-
-    /// Which tier contains this step
-    fn tier(&self, step: usize) -> usize {
-        let b = self.bucket_size;
-        if step < 2 * b { 0 }
-        else { (step / b).ilog2() as usize }
-    }
-
-    /// Resolution (decimation factor) for this tier
-    /// Tier 0: 1, Tier 1: 2, Tier 2: 4, Tier n: 2^n
-    fn resolution(&self, tier: usize) -> usize {
-        1 << tier
-    }
-
-    /// Check if this step should be stored as a keyframe
-    fn is_keyframe(&self, step: usize) -> bool {
-        let tier = self.tier(step);
-        let res = self.resolution(tier);
-        step % res == 0
-    }
-
-    /// First step index of this tier
-    fn tier_start(&self, tier: usize) -> usize {
-        if tier == 0 { 0 } else { self.bucket_size << tier }
-    }
-
-    /// Find the nearest keyframe at or before this step
-    fn nearest_keyframe(&self, step: usize) -> usize {
-        let tier = self.tier(step);
-        let res = self.resolution(tier);
-        (step / res) * res
-    }
 }
 
 /// A training trace (single permutation run)
