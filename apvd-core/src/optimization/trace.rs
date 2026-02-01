@@ -483,23 +483,195 @@ impl TraceStorage for HybridStorage {
     }
 }
 
+// ============================================================================
+// Tiered LRU Storage - Recent steps at full resolution, older steps sparse
+// ============================================================================
+
+/// Tiered LRU storage: recent steps at full resolution, older steps progressively sparser.
+///
+/// Unlike `TieredStorage` which uses absolute step indices, this uses "age"
+/// (distance from current step) to determine tier. As training progresses,
+/// older steps are compacted.
+///
+/// Tier structure (based on age = current_step - step_index):
+/// - Tier 0: age 0 to 2B-1 (most recent 2B steps, full resolution)
+/// - Tier 1: age 2B to 4B-1 (next 2B steps, keep every 2nd)
+/// - Tier 2: age 4B to 8B-1 (next 4B steps, keep every 4th)
+/// - Tier n: age 2^n*B to 2^(n+1)*B-1 (keep every 2^n-th)
+#[derive(Debug, Clone)]
+pub struct TieredLruStorage {
+    bucket_size: usize,
+    /// All stored steps (keyed by step index)
+    steps: BTreeMap<usize, Step>,
+    /// Current step count (determines age of all steps)
+    total_steps: usize,
+    min_error: f64,
+    min_index: usize,
+    btd_indices: BTreeSet<usize>,
+}
+
+impl TieredLruStorage {
+    pub const DEFAULT_BUCKET_SIZE: usize = 1024;
+
+    pub fn new(bucket_size: Option<usize>) -> Self {
+        Self {
+            bucket_size: bucket_size.unwrap_or(Self::DEFAULT_BUCKET_SIZE),
+            steps: BTreeMap::new(),
+            total_steps: 0,
+            min_error: f64::INFINITY,
+            min_index: 0,
+            btd_indices: BTreeSet::new(),
+        }
+    }
+
+    /// Calculate tier based on age (distance from current step).
+    fn tier_for_age(&self, age: usize) -> usize {
+        let b = self.bucket_size;
+        if age < 2 * b {
+            0
+        } else {
+            (age / b).ilog2() as usize
+        }
+    }
+
+    /// Resolution (keep every Nth step) for a tier.
+    fn resolution(&self, tier: usize) -> usize {
+        1 << tier
+    }
+
+    /// Check if a step should be kept given its current age.
+    fn should_keep(&self, step_idx: usize, age: usize) -> bool {
+        let tier = self.tier_for_age(age);
+        let res = self.resolution(tier);
+        // Keep if step_idx is divisible by resolution
+        step_idx % res == 0
+    }
+
+    /// Find the nearest kept step at or before the given index.
+    fn nearest_kept(&self, index: usize) -> Option<usize> {
+        // Find the largest stored index <= target
+        self.steps.range(..=index).next_back().map(|(k, _)| *k)
+    }
+
+    /// Compact storage by dropping steps that no longer qualify as keyframes.
+    fn compact(&mut self) {
+        if self.total_steps == 0 {
+            return;
+        }
+
+        let current = self.total_steps - 1;
+        let mut to_remove = Vec::new();
+
+        for &step_idx in self.steps.keys() {
+            let age = current - step_idx;
+            if !self.should_keep(step_idx, age) {
+                // Don't remove BTD steps
+                if !self.btd_indices.contains(&step_idx) {
+                    to_remove.push(step_idx);
+                }
+            }
+        }
+
+        for idx in to_remove {
+            self.steps.remove(&idx);
+        }
+    }
+}
+
+impl TraceStorage for TieredLruStorage {
+    fn record(&mut self, index: usize, step: Step, error: f64) {
+        self.total_steps = self.total_steps.max(index + 1);
+
+        // Track best-to-date
+        if error < self.min_error {
+            self.min_error = error;
+            self.min_index = index;
+            self.btd_indices.insert(index);
+        }
+
+        // Always store the new step (it's in tier 0 with age 0)
+        self.steps.insert(index, step);
+
+        // Compact old steps that have aged into sparser tiers
+        self.compact();
+    }
+
+    fn get(&self, index: usize, learning_rate: f64) -> Result<Step, String> {
+        if index >= self.total_steps {
+            return Err(format!("Step {} not yet recorded (total: {})", index, self.total_steps));
+        }
+
+        // Check if directly stored
+        if let Some(step) = self.steps.get(&index) {
+            return Ok(step.clone());
+        }
+
+        // Find nearest stored step and recompute forward
+        let nearest_idx = self.nearest_kept(index)
+            .ok_or_else(|| format!("No keyframe found for step {}", index))?;
+
+        let keyframe = self.steps.get(&nearest_idx)
+            .ok_or_else(|| format!("Keyframe {} not in storage", nearest_idx))?;
+
+        super::tiered::seek_from_keyframe(keyframe, nearest_idx, index, learning_rate)
+    }
+
+    fn is_stored(&self, index: usize) -> bool {
+        self.steps.contains_key(&index)
+    }
+
+    fn len(&self) -> usize {
+        self.total_steps
+    }
+
+    fn stored_count(&self) -> usize {
+        self.steps.len()
+    }
+
+    fn stored_indices(&self) -> Vec<usize> {
+        self.steps.keys().cloned().collect()
+    }
+
+    fn min_error(&self) -> f64 {
+        self.min_error
+    }
+
+    fn min_index(&self) -> usize {
+        self.min_index
+    }
+
+    fn metadata(&self) -> TraceMetadata {
+        TraceMetadata {
+            total_steps: self.total_steps,
+            stored_steps: self.steps.len(),
+            strategy: "tiered-lru".to_string(),
+            min_index: self.min_index,
+            min_error: self.min_error,
+            btd_indices: Some(self.btd_indices.iter().cloned().collect()),
+        }
+    }
+}
+
 /// Storage strategy enum for easy configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
 #[serde(rename_all = "lowercase")]
 pub enum StorageStrategy {
     /// Store every step.
     Dense,
-    /// Store tiered keyframes only.
+    /// Store tiered keyframes only (absolute indices, old scheme).
     Tiered,
     /// Store only best-to-date steps.
     Btd,
     /// Store tiered keyframes + BTD steps.
     Hybrid,
+    /// Tiered LRU: recent at full resolution, older progressively sparser (recommended).
+    #[serde(rename = "tiered-lru")]
+    TieredLru,
 }
 
 impl Default for StorageStrategy {
     fn default() -> Self {
-        Self::Tiered
+        Self::TieredLru
     }
 }
 
@@ -510,6 +682,7 @@ pub fn create_storage(strategy: StorageStrategy, bucket_size: Option<usize>) -> 
         StorageStrategy::Tiered => Box::new(TieredStorage::new(TieredConfig::new(bucket_size))),
         StorageStrategy::Btd => Box::new(BtdStorage::new()),
         StorageStrategy::Hybrid => Box::new(HybridStorage::new(TieredConfig::new(bucket_size))),
+        StorageStrategy::TieredLru => Box::new(TieredLruStorage::new(bucket_size)),
     }
 }
 
@@ -525,7 +698,7 @@ mod tests {
 
     #[test]
     fn test_storage_strategy_default() {
-        assert_eq!(StorageStrategy::default(), StorageStrategy::Tiered);
+        assert_eq!(StorageStrategy::default(), StorageStrategy::TieredLru);
     }
 
     #[test]
@@ -542,5 +715,56 @@ mod tests {
         assert!(storage.config.is_keyframe(200));
         assert!(!storage.config.is_keyframe(201));
         assert!(storage.config.is_keyframe(202));
+    }
+
+    #[test]
+    fn test_tiered_lru_tier_for_age() {
+        let storage = TieredLruStorage::new(Some(100)); // B=100
+
+        // Tier 0: age 0 to 199 (most recent 2B steps)
+        assert_eq!(storage.tier_for_age(0), 0);
+        assert_eq!(storage.tier_for_age(50), 0);
+        assert_eq!(storage.tier_for_age(199), 0);
+
+        // Tier 1: age 200 to 399
+        assert_eq!(storage.tier_for_age(200), 1);
+        assert_eq!(storage.tier_for_age(399), 1);
+
+        // Tier 2: age 400 to 799
+        assert_eq!(storage.tier_for_age(400), 2);
+        assert_eq!(storage.tier_for_age(799), 2);
+    }
+
+    #[test]
+    fn test_tiered_lru_should_keep() {
+        let storage = TieredLruStorage::new(Some(100));
+
+        // In tier 0 (age < 200): keep all
+        assert!(storage.should_keep(0, 0));
+        assert!(storage.should_keep(1, 1));
+        assert!(storage.should_keep(99, 99));
+
+        // In tier 1 (age 200-399): keep every 2nd (even step indices)
+        assert!(storage.should_keep(0, 200));   // 0 % 2 == 0
+        assert!(!storage.should_keep(1, 201));  // 1 % 2 == 1
+        assert!(storage.should_keep(2, 202));   // 2 % 2 == 0
+        assert!(!storage.should_keep(3, 203));  // 3 % 2 == 1
+
+        // In tier 2 (age 400-799): keep every 4th
+        assert!(storage.should_keep(0, 400));   // 0 % 4 == 0
+        assert!(!storage.should_keep(1, 401));  // 1 % 4 == 1
+        assert!(!storage.should_keep(2, 402));  // 2 % 4 == 2
+        assert!(!storage.should_keep(3, 403));  // 3 % 4 == 3
+        assert!(storage.should_keep(4, 404));   // 4 % 4 == 0
+    }
+
+    #[test]
+    fn test_tiered_lru_resolution() {
+        let storage = TieredLruStorage::new(Some(100));
+
+        assert_eq!(storage.resolution(0), 1);
+        assert_eq!(storage.resolution(1), 2);
+        assert_eq!(storage.resolution(2), 4);
+        assert_eq!(storage.resolution(3), 8);
     }
 }

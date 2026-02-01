@@ -66,7 +66,7 @@ pub use step::Step;
 pub use targets::{Targets, TargetsMap};
 pub use tiered::{TieredConfig, seek_from_keyframe};
 pub use trace::{TraceStorage, TraceMetadata, StorageStrategy, create_storage};
-pub use trace::{DenseStorage, TieredStorage, BtdStorage, HybridStorage};
+pub use trace::{DenseStorage, TieredStorage, BtdStorage, HybridStorage, TieredLruStorage};
 pub use shape::{Shape, InputSpec};
 pub use ellipses::xyrr::XYRR;
 pub use polygon::Polygon;
