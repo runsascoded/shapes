@@ -3,7 +3,6 @@
 use std::fmt::Write;
 
 use apvd_core::shape::Shape;
-use apvd_core::D;
 
 /// SVG rendering configuration
 #[derive(Debug, Clone)]
@@ -51,11 +50,9 @@ const COLORS: &[&str] = &[
 ];
 
 /// Render shapes to SVG string
-pub fn render_svg(shapes: &[Shape<D>], config: &RenderConfig) -> String {
-    let shapes_f64: Vec<_> = shapes.iter().map(|s| s.v()).collect();
-
+pub fn render_svg(shapes: &[Shape<f64>], config: &RenderConfig) -> String {
     // Compute bounding box
-    let (min_x, max_x, min_y, max_y) = compute_bounds(&shapes_f64);
+    let (min_x, max_x, min_y, max_y) = compute_bounds(shapes);
 
     // Add padding
     let width = max_x - min_x;
@@ -85,7 +82,7 @@ pub fn render_svg(shapes: &[Shape<D>], config: &RenderConfig) -> String {
     ).unwrap();
 
     // Render each shape
-    for (idx, shape) in shapes_f64.iter().enumerate() {
+    for (idx, shape) in shapes.iter().enumerate() {
         let color = COLORS[idx % COLORS.len()];
         let fill = if config.fill {
             format!(r#"fill="{}" fill-opacity="{}""#, color, config.fill_opacity)
@@ -241,14 +238,14 @@ mod tests {
 
     #[test]
     fn test_render_circles() {
-        let shapes: Vec<Shape<D>> = vec![
+        let shapes: Vec<Shape<f64>> = vec![
             Shape::Circle(Circle {
-                c: R2 { x: 0.0.into(), y: 0.0.into() },
-                r: 1.0.into(),
+                c: R2 { x: 0.0, y: 0.0 },
+                r: 1.0,
             }),
             Shape::Circle(Circle {
-                c: R2 { x: 1.0.into(), y: 0.0.into() },
-                r: 1.0.into(),
+                c: R2 { x: 1.0, y: 0.0 },
+                r: 1.0,
             }),
         ];
 

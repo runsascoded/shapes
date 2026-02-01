@@ -566,8 +566,8 @@ fn run_train(
 
     // Render SVG if requested
     if let Some(svg_path) = svg_output {
-        // Parse final shapes back to Shape<D> for rendering
-        let shapes: Vec<apvd_core::shape::Shape<apvd_core::D>> = best.final_shapes.iter()
+        // Parse final shapes for rendering
+        let shapes: Vec<apvd_core::shape::Shape<f64>> = best.final_shapes.iter()
             .map(|v| serde_json::from_value(v.clone()).expect("Failed to parse shape"))
             .collect();
 
@@ -640,7 +640,7 @@ fn run_render(
     };
 
     // Parse shapes
-    let shapes: Vec<apvd_core::shape::Shape<apvd_core::D>> = shapes_json.iter()
+    let shapes: Vec<apvd_core::shape::Shape<f64>> = shapes_json.iter()
         .map(|v| serde_json::from_value(v.clone()).expect("Failed to parse shape"))
         .collect();
 
