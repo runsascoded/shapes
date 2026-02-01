@@ -23,6 +23,8 @@ pub use optimization::history;
 pub use optimization::model;
 pub use optimization::step;
 pub use optimization::targets;
+pub use optimization::tiered;
+pub use optimization::trace;
 
 pub use analysis::component;
 pub use analysis::contains;
@@ -62,6 +64,9 @@ pub use dual::D;
 pub use model::Model;
 pub use step::Step;
 pub use targets::{Targets, TargetsMap};
+pub use tiered::{TieredConfig, seek_from_keyframe};
+pub use trace::{TraceStorage, TraceMetadata, StorageStrategy, create_storage};
+pub use trace::{DenseStorage, TieredStorage, BtdStorage, HybridStorage};
 pub use shape::{Shape, InputSpec};
 pub use ellipses::xyrr::XYRR;
 pub use polygon::Polygon;
