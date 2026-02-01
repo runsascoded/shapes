@@ -607,13 +607,10 @@ async fn handle_train(
         .and_then(|v| v.as_str())
         .map(|s| match s {
             "dense" => StorageStrategy::Dense,
-            "tiered" => StorageStrategy::Tiered,
             "btd" => StorageStrategy::Btd,
-            "hybrid" => StorageStrategy::Hybrid,
-            "tiered-lru" => StorageStrategy::TieredLru,
-            _ => StorageStrategy::TieredLru,
+            _ => StorageStrategy::Tiered,
         })
-        .unwrap_or(StorageStrategy::TieredLru);
+        .unwrap_or(StorageStrategy::Tiered);
 
     // Generate unique handle ID
     let handle_id = format!("train_{}", std::time::SystemTime::now()

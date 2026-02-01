@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
 use super::step::Step;
-use super::tiered::TieredConfig;
 
 /// A stored step with its index and whether it's a keyframe.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -173,114 +172,6 @@ impl TraceStorage for DenseStorage {
 }
 
 // ============================================================================
-// Tiered Storage - Keyframes at progressively sparser intervals
-// ============================================================================
-
-/// Tiered keyframe storage with O(log N) space complexity.
-#[derive(Debug, Clone)]
-pub struct TieredStorage {
-    config: TieredConfig,
-    keyframes: BTreeMap<usize, Step>,
-    total_steps: usize,
-    min_error: f64,
-    min_index: usize,
-    btd_indices: BTreeSet<usize>,
-}
-
-impl TieredStorage {
-    pub fn new(config: TieredConfig) -> Self {
-        Self {
-            config,
-            keyframes: BTreeMap::new(),
-            total_steps: 0,
-            min_error: f64::INFINITY,
-            min_index: 0,
-            btd_indices: BTreeSet::new(),
-        }
-    }
-
-    pub fn with_default_config() -> Self {
-        Self::new(TieredConfig::default())
-    }
-
-    /// Get the tiered config.
-    pub fn config(&self) -> &TieredConfig {
-        &self.config
-    }
-}
-
-impl TraceStorage for TieredStorage {
-    fn record(&mut self, index: usize, step: Step, error: f64) {
-        self.total_steps = self.total_steps.max(index + 1);
-
-        // Track best-to-date
-        if error < self.min_error {
-            self.min_error = error;
-            self.min_index = index;
-            self.btd_indices.insert(index);
-        }
-
-        // Only store keyframes
-        if self.config.is_keyframe(index) {
-            self.keyframes.insert(index, step);
-        }
-    }
-
-    fn get(&self, index: usize, learning_rate: f64) -> Result<Step, String> {
-        // Check if directly stored
-        if let Some(step) = self.keyframes.get(&index) {
-            return Ok(step.clone());
-        }
-
-        // Find nearest keyframe and recompute
-        let keyframe_idx = self.config.nearest_keyframe(index);
-        let keyframe = self.keyframes.get(&keyframe_idx).ok_or_else(|| {
-            format!(
-                "Keyframe {} not found for step {}",
-                keyframe_idx, index
-            )
-        })?;
-
-        super::tiered::seek_from_keyframe(keyframe, keyframe_idx, index, learning_rate)
-    }
-
-    fn is_stored(&self, index: usize) -> bool {
-        self.keyframes.contains_key(&index)
-    }
-
-    fn len(&self) -> usize {
-        self.total_steps
-    }
-
-    fn stored_count(&self) -> usize {
-        self.keyframes.len()
-    }
-
-    fn stored_indices(&self) -> Vec<usize> {
-        self.keyframes.keys().cloned().collect()
-    }
-
-    fn min_error(&self) -> f64 {
-        self.min_error
-    }
-
-    fn min_index(&self) -> usize {
-        self.min_index
-    }
-
-    fn metadata(&self) -> TraceMetadata {
-        TraceMetadata {
-            total_steps: self.total_steps,
-            stored_steps: self.keyframes.len(),
-            strategy: "tiered".to_string(),
-            min_index: self.min_index,
-            min_error: self.min_error,
-            btd_indices: Some(self.btd_indices.iter().cloned().collect()),
-        }
-    }
-}
-
-// ============================================================================
 // BTD Storage - Only store "best to date" steps
 // ============================================================================
 
@@ -362,123 +253,6 @@ impl TraceStorage for BtdStorage {
             min_index: self.min_index,
             min_error: self.min_error,
             btd_indices: Some(self.steps.keys().cloned().collect()),
-        }
-    }
-}
-
-// ============================================================================
-// Hybrid Storage - Tiered keyframes + BTD steps
-// ============================================================================
-
-/// Hybrid storage combining tiered keyframes with BTD step tracking.
-///
-/// Stores:
-/// - All tiered keyframes (for efficient random seek)
-/// - All BTD steps (even if not keyframes, for quick access to best steps)
-#[derive(Debug, Clone)]
-pub struct HybridStorage {
-    config: TieredConfig,
-    keyframes: BTreeMap<usize, Step>,
-    btd_steps: BTreeMap<usize, Step>,
-    total_steps: usize,
-    min_error: f64,
-    min_index: usize,
-}
-
-impl HybridStorage {
-    pub fn new(config: TieredConfig) -> Self {
-        Self {
-            config,
-            keyframes: BTreeMap::new(),
-            btd_steps: BTreeMap::new(),
-            total_steps: 0,
-            min_error: f64::INFINITY,
-            min_index: 0,
-        }
-    }
-
-    pub fn with_default_config() -> Self {
-        Self::new(TieredConfig::default())
-    }
-}
-
-impl TraceStorage for HybridStorage {
-    fn record(&mut self, index: usize, step: Step, error: f64) {
-        self.total_steps = self.total_steps.max(index + 1);
-
-        // Store keyframes
-        if self.config.is_keyframe(index) {
-            self.keyframes.insert(index, step.clone());
-        }
-
-        // Store BTD steps
-        if error < self.min_error {
-            self.min_error = error;
-            self.min_index = index;
-            self.btd_steps.insert(index, step);
-        }
-    }
-
-    fn get(&self, index: usize, learning_rate: f64) -> Result<Step, String> {
-        // Check BTD steps first (they're "important" steps)
-        if let Some(step) = self.btd_steps.get(&index) {
-            return Ok(step.clone());
-        }
-
-        // Check keyframes
-        if let Some(step) = self.keyframes.get(&index) {
-            return Ok(step.clone());
-        }
-
-        // Recompute from nearest keyframe
-        let keyframe_idx = self.config.nearest_keyframe(index);
-        let keyframe = self.keyframes.get(&keyframe_idx).ok_or_else(|| {
-            format!(
-                "Keyframe {} not found for step {}",
-                keyframe_idx, index
-            )
-        })?;
-
-        super::tiered::seek_from_keyframe(keyframe, keyframe_idx, index, learning_rate)
-    }
-
-    fn is_stored(&self, index: usize) -> bool {
-        self.keyframes.contains_key(&index) || self.btd_steps.contains_key(&index)
-    }
-
-    fn len(&self) -> usize {
-        self.total_steps
-    }
-
-    fn stored_count(&self) -> usize {
-        // Count unique indices (some may be in both)
-        let mut indices: BTreeSet<usize> = self.keyframes.keys().cloned().collect();
-        indices.extend(self.btd_steps.keys().cloned());
-        indices.len()
-    }
-
-    fn stored_indices(&self) -> Vec<usize> {
-        let mut indices: BTreeSet<usize> = self.keyframes.keys().cloned().collect();
-        indices.extend(self.btd_steps.keys().cloned());
-        indices.into_iter().collect()
-    }
-
-    fn min_error(&self) -> f64 {
-        self.min_error
-    }
-
-    fn min_index(&self) -> usize {
-        self.min_index
-    }
-
-    fn metadata(&self) -> TraceMetadata {
-        TraceMetadata {
-            total_steps: self.total_steps,
-            stored_steps: self.stored_count(),
-            strategy: "hybrid".to_string(),
-            min_index: self.min_index,
-            min_error: self.min_error,
-            btd_indices: Some(self.btd_steps.keys().cloned().collect()),
         }
     }
 }
@@ -656,22 +430,17 @@ impl TraceStorage for TieredLruStorage {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
 #[serde(rename_all = "lowercase")]
 pub enum StorageStrategy {
-    /// Store every step.
+    /// Store every step (no compression).
     Dense,
-    /// Store tiered keyframes only (absolute indices, old scheme).
-    Tiered,
-    /// Store only best-to-date steps.
+    /// Store only best-to-date steps (new minimum errors).
     Btd,
-    /// Store tiered keyframes + BTD steps.
-    Hybrid,
-    /// Tiered LRU: recent at full resolution, older progressively sparser (recommended).
-    #[serde(rename = "tiered-lru")]
-    TieredLru,
+    /// Tiered: recent at full resolution, older progressively sparser (default).
+    Tiered,
 }
 
 impl Default for StorageStrategy {
     fn default() -> Self {
-        Self::TieredLru
+        Self::Tiered
     }
 }
 
@@ -679,10 +448,8 @@ impl Default for StorageStrategy {
 pub fn create_storage(strategy: StorageStrategy, bucket_size: Option<usize>) -> Box<dyn TraceStorage> {
     match strategy {
         StorageStrategy::Dense => Box::new(DenseStorage::new()),
-        StorageStrategy::Tiered => Box::new(TieredStorage::new(TieredConfig::new(bucket_size))),
         StorageStrategy::Btd => Box::new(BtdStorage::new()),
-        StorageStrategy::Hybrid => Box::new(HybridStorage::new(TieredConfig::new(bucket_size))),
-        StorageStrategy::TieredLru => Box::new(TieredLruStorage::new(bucket_size)),
+        StorageStrategy::Tiered => Box::new(TieredLruStorage::new(bucket_size)),
     }
 }
 
@@ -698,23 +465,7 @@ mod tests {
 
     #[test]
     fn test_storage_strategy_default() {
-        assert_eq!(StorageStrategy::default(), StorageStrategy::TieredLru);
-    }
-
-    #[test]
-    fn test_tiered_storage_keyframe_selection() {
-        let config = TieredConfig::new(Some(100));
-        let storage = TieredStorage::new(config);
-
-        // Tier 0: all steps are keyframes
-        assert!(storage.config.is_keyframe(0));
-        assert!(storage.config.is_keyframe(50));
-        assert!(storage.config.is_keyframe(199));
-
-        // Tier 1: every 2nd step
-        assert!(storage.config.is_keyframe(200));
-        assert!(!storage.config.is_keyframe(201));
-        assert!(storage.config.is_keyframe(202));
+        assert_eq!(StorageStrategy::default(), StorageStrategy::Tiered);
     }
 
     #[test]
