@@ -18,6 +18,8 @@ import type {
   WorkerResponse,
   InputSpec,
   TargetsMap,
+  BatchTrainingRequest,
+  BatchTrainingResult,
 } from "@apvd/client";
 
 export class WorkerTrainingClient implements TrainingClient {
@@ -78,6 +80,10 @@ export class WorkerTrainingClient implements TrainingClient {
 
   async createModel(inputs: InputSpec[], targets: TargetsMap): Promise<StepStateWithGeometry> {
     return this.sendRequest<StepStateWithGeometry>("createModel", { inputs, targets });
+  }
+
+  async trainBatch(request: BatchTrainingRequest): Promise<BatchTrainingResult> {
+    return this.sendRequest<BatchTrainingResult>("trainBatch", request);
   }
 
   async startTraining(request: TrainingRequest): Promise<TrainingHandle> {

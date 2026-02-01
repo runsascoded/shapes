@@ -248,6 +248,44 @@ export interface StepStateWithGeometry extends StepState {
 }
 
 // ============================================================================
+// Batch Training Types (stateless, on-demand step computation)
+// ============================================================================
+
+/** Request for stateless batch training */
+export interface BatchTrainingRequest {
+  /** Current shapes with trainability flags */
+  inputs: InputSpec[];
+  /** Target region sizes */
+  targets: TargetsMap;
+  /** Number of steps to compute */
+  numSteps: number;
+  /** Learning rate (default: 0.05) */
+  learningRate?: number;
+}
+
+/** A single step in a batch result */
+export interface BatchStep {
+  /** Relative index within this batch (0 to numSteps-1) */
+  stepIndex: number;
+  /** Error at this step */
+  error: number;
+  /** Shape coordinates at this step */
+  shapes: Shape[];
+}
+
+/** Result from batch training */
+export interface BatchTrainingResult {
+  /** All computed steps */
+  steps: BatchStep[];
+  /** Minimum error in this batch */
+  minError: number;
+  /** Index of step with minimum error (within batch) */
+  minStepIndex: number;
+  /** Final shapes (convenience for next batch input) */
+  finalShapes: Shape[];
+}
+
+// ============================================================================
 // Client Interface
 // ============================================================================
 
@@ -260,7 +298,19 @@ export interface TrainingClient {
    */
   createModel(inputs: InputSpec[], targets: TargetsMap): Promise<StepStateWithGeometry>;
 
-  /** Start training with given inputs and targets */
+  /**
+   * Compute a batch of training steps synchronously.
+   *
+   * Stateless request - takes current shapes and targets,
+   * returns shapes after numSteps gradient descent iterations.
+   * Use this for on-demand step computation when user clicks "advance" or "play".
+   *
+   * @param request - Batch training parameters
+   * @returns Promise resolving to batch results
+   */
+  trainBatch(request: BatchTrainingRequest): Promise<BatchTrainingResult>;
+
+  /** Start training with given inputs and targets (session-based, streaming) */
   startTraining(request: TrainingRequest): Promise<TrainingHandle>;
 
   /** Subscribe to training progress updates */
@@ -319,7 +369,7 @@ export type TransportConfig = WorkerTransportConfig | WebSocketTransportConfig;
 
 export interface WorkerRequest {
   id: string;
-  type: "createModel" | "train" | "stop" | "getStep" | "getStepWithGeometry" | "getTraceInfo";
+  type: "createModel" | "trainBatch" | "train" | "stop" | "getStep" | "getStepWithGeometry" | "getTraceInfo";
   payload: unknown;
 }
 

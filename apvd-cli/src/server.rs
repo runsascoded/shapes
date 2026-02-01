@@ -320,6 +320,9 @@ async fn handle_json_rpc(
                 }
             }
         },
+        "trainBatch" => {
+            handle_train_batch(&req.id, &req.params)
+        },
         "train" => {
             handle_train(&req.id, &req.params, config, tx.clone(), current_session.clone()).await
         },
@@ -503,10 +506,23 @@ fn handle_create_model(id: &str, params: &Value) -> JsonRpcResponse {
         .collect();
 
     // Build region info with errors
+    // Convert region key (e.g. "01") to exclusive key format (e.g. "01-") to look up in step.errors
+    let num_shapes = step.shapes.len();
+    let region_key_to_exclusive = |key: &str| -> String {
+        let included: std::collections::HashSet<char> = key.chars().collect();
+        (0..num_shapes)
+            .map(|i| {
+                let ch = char::from_digit(i as u32, 10).unwrap();
+                if included.contains(&ch) { ch } else { '-' }
+            })
+            .collect()
+    };
+
     let mut region_infos: Vec<RegionInfo> = Vec::new();
     for component in &step.components {
         for region in &component.regions {
-            let error_info = step.errors.get(&region.key);
+            let exclusive_key = region_key_to_exclusive(&region.key);
+            let error_info = step.errors.get(&exclusive_key);
             region_infos.push(RegionInfo {
                 key: region.key.clone(),
                 area: region.area,
@@ -533,6 +549,166 @@ fn handle_create_model(id: &str, params: &Value) -> JsonRpcResponse {
     JsonRpcResponse {
         id: id.to_string(),
         result: Some(serde_json::to_value(result).unwrap()),
+        error: None,
+    }
+}
+
+/// Handle trainBatch RPC - stateless batch training for on-demand step computation
+fn handle_train_batch(id: &str, params: &Value) -> JsonRpcResponse {
+    // Parse inputs
+    let inputs: Vec<InputSpec> = match params.get("inputs") {
+        Some(v) => match serde_json::from_value(v.clone()) {
+            Ok(i) => i,
+            Err(e) => return JsonRpcResponse {
+                id: id.to_string(),
+                result: None,
+                error: Some(JsonRpcError {
+                    code: -32602,
+                    message: format!("Invalid inputs: {}", e),
+                }),
+            },
+        },
+        None => return JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32602,
+                message: "Missing 'inputs' parameter".to_string(),
+            }),
+        },
+    };
+
+    // Parse targets
+    let targets: TargetsMap<f64> = match params.get("targets") {
+        Some(v) => match serde_json::from_value(v.clone()) {
+            Ok(t) => t,
+            Err(e) => return JsonRpcResponse {
+                id: id.to_string(),
+                result: None,
+                error: Some(JsonRpcError {
+                    code: -32602,
+                    message: format!("Invalid targets: {}", e),
+                }),
+            },
+        },
+        None => return JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32602,
+                message: "Missing 'targets' parameter".to_string(),
+            }),
+        },
+    };
+
+    // Parse numSteps (required)
+    let num_steps = match params.get("numSteps").and_then(|v| v.as_u64()) {
+        Some(n) => n as usize,
+        None => return JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32602,
+                message: "Missing 'numSteps' parameter".to_string(),
+            }),
+        },
+    };
+
+    // Parse optional learningRate
+    let learning_rate = params.get("learningRate")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.05);
+
+    // Create initial step
+    let mut current_step = match Step::new(inputs, targets.into()) {
+        Ok(s) => s,
+        Err(e) => return JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32000,
+                message: format!("Failed to create initial step: {}", e),
+            }),
+        },
+    };
+
+    // Collect all steps
+    let mut steps: Vec<Value> = Vec::with_capacity(num_steps);
+    let mut min_error = current_step.error.v();
+    let mut min_step_index = 0usize;
+
+    // Record initial step (step 0)
+    let initial_shapes: Vec<Value> = current_step.shapes.iter()
+        .map(|s| serde_json::to_value(s).unwrap())
+        .collect();
+    steps.push(serde_json::json!({
+        "stepIndex": 0,
+        "error": current_step.error.v(),
+        "shapes": initial_shapes,
+    }));
+
+    // Compute remaining steps
+    for i in 1..num_steps {
+        match current_step.step(learning_rate) {
+            Ok(next_step) => {
+                let error = next_step.error.v();
+
+                // Check for NaN
+                if error.is_nan() {
+                    return JsonRpcResponse {
+                        id: id.to_string(),
+                        result: None,
+                        error: Some(JsonRpcError {
+                            code: -32000,
+                            message: format!("NaN error at step {}", i),
+                        }),
+                    };
+                }
+
+                // Track minimum
+                if error < min_error {
+                    min_error = error;
+                    min_step_index = i;
+                }
+
+                // Record step
+                let shapes: Vec<Value> = next_step.shapes.iter()
+                    .map(|s| serde_json::to_value(s).unwrap())
+                    .collect();
+                steps.push(serde_json::json!({
+                    "stepIndex": i,
+                    "error": error,
+                    "shapes": shapes,
+                }));
+
+                current_step = next_step;
+            }
+            Err(e) => {
+                return JsonRpcResponse {
+                    id: id.to_string(),
+                    result: None,
+                    error: Some(JsonRpcError {
+                        code: -32000,
+                        message: format!("Step {} failed: {}", i, e),
+                    }),
+                };
+            }
+        }
+    }
+
+    // Build result
+    let final_shapes: Vec<Value> = current_step.shapes.iter()
+        .map(|s| serde_json::to_value(s).unwrap())
+        .collect();
+
+    JsonRpcResponse {
+        id: id.to_string(),
+        result: Some(serde_json::json!({
+            "steps": steps,
+            "minError": min_error,
+            "minStepIndex": min_step_index,
+            "finalShapes": final_shapes,
+        })),
         error: None,
     }
 }

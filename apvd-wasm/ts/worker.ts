@@ -23,6 +23,9 @@ import type {
   InputSpec,
   TargetsMap,
   TieredConfig,
+  BatchTrainingRequest,
+  BatchTrainingResult,
+  BatchStep,
 } from "@apvd/client";
 
 // WASM module will be imported dynamically
@@ -411,6 +414,70 @@ async function handleCreateModel(id: string, inputs: InputSpec[], targets: Targe
   }
 }
 
+// Handle trainBatch request (stateless, on-demand step computation)
+async function handleTrainBatch(id: string, request: BatchTrainingRequest): Promise<void> {
+  await initWasm();
+
+  const { inputs, targets, numSteps, learningRate = 0.05 } = request;
+
+  try {
+    // Create initial step
+    let wasmStep = wasm!.make_step(inputs, targets);
+    const steps: BatchStep[] = [];
+    let minError = (wasmStep as { error: { v: number } }).error.v;
+    let minStepIndex = 0;
+
+    // Record initial step (step 0)
+    steps.push({
+      stepIndex: 0,
+      error: (wasmStep as { error: { v: number } }).error.v,
+      shapes: JSON.parse(JSON.stringify((wasmStep as { shapes: Shape[] }).shapes)),
+    });
+
+    // Compute remaining steps
+    for (let i = 1; i < numSteps; i++) {
+      wasmStep = wasm!.step(wasmStep, learningRate);
+      const error = (wasmStep as { error: { v: number } }).error.v;
+
+      // Check for NaN
+      if (isNaN(error)) {
+        respond({ id, type: "error", payload: { message: `NaN error at step ${i}` } });
+        return;
+      }
+
+      // Track minimum
+      if (error < minError) {
+        minError = error;
+        minStepIndex = i;
+      }
+
+      // Record step
+      steps.push({
+        stepIndex: i,
+        error,
+        shapes: JSON.parse(JSON.stringify((wasmStep as { shapes: Shape[] }).shapes)),
+      });
+
+      // Yield periodically for responsiveness
+      if (i % 100 === 0) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+    }
+
+    const result: BatchTrainingResult = {
+      steps,
+      minError,
+      minStepIndex,
+      finalShapes: steps[steps.length - 1].shapes,
+    };
+
+    respond({ id, type: "result", payload: result });
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    respond({ id, type: "error", payload: { message: errorMessage } });
+  }
+}
+
 // Handle getStepWithGeometry request (rich step data for display)
 async function handleGetStepWithGeometry(id: string, handleId: string, stepIndex: number): Promise<void> {
   await initWasm();
@@ -497,6 +564,10 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 
     case "train":
       await handleTrain(id, payload as TrainingRequest);
+      break;
+
+    case "trainBatch":
+      await handleTrainBatch(id, payload as BatchTrainingRequest);
       break;
 
     case "stop":

@@ -64,6 +64,11 @@ export type {
   TrainingRequest,
   TrainingHandle,
 
+  // Batch training types (stateless, on-demand)
+  BatchTrainingRequest,
+  BatchStep,
+  BatchTrainingResult,
+
   // Progress/Result types
   ProgressUpdate,
   TrainingResult,
