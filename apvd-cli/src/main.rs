@@ -238,16 +238,16 @@ impl TieredConfig {
         1 << tier
     }
 
-    /// First step index of this tier
-    fn tier_start(&self, tier: usize) -> usize {
-        if tier == 0 { 0 } else { self.bucket_size << tier }
-    }
-
     /// Check if this step should be stored as a keyframe
     fn is_keyframe(&self, step: usize) -> bool {
         let tier = self.tier(step);
         let res = self.resolution(tier);
         step % res == 0
+    }
+
+    /// First step index of this tier
+    fn tier_start(&self, tier: usize) -> usize {
+        if tier == 0 { 0 } else { self.bucket_size << tier }
     }
 
     /// Find the nearest keyframe at or before this step
