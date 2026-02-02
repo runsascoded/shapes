@@ -1,0 +1,22 @@
+{
+  "name": "357-ellipses",
+  "description": "3 rotatable ellipses targeting Fizz-Buzz-Bazz proportions (35:21:15:7:5:3:1)",
+  "inputs": [
+    [{"kind": "XYRRT", "c": {"x": -0.5, "y": 0.0}, "r": {"x": 1.0, "y": 1.0}, "t": 0.0}, [true, true, true, true, true]],
+    [{"kind": "XYRRT", "c": {"x": 0.0, "y": 0.866}, "r": {"x": 1.0, "y": 1.0}, "t": 0.0}, [true, true, true, true, true]],
+    [{"kind": "XYRRT", "c": {"x": 0.5, "y": 0.0}, "r": {"x": 1.0, "y": 1.0}, "t": 0.0}, [true, true, true, true, true]]
+  ],
+  "targets": {
+    "0**": 35,
+    "*1*": 21,
+    "**2": 15,
+    "01*": 7,
+    "0*2": 5,
+    "*12": 3,
+    "012": 1
+  },
+  "expected": {
+    "max_error": 0.001,
+    "golden_trace": "357-ellipses.trace.json"
+  }
+}

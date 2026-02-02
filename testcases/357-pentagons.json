@@ -1,0 +1,40 @@
+{
+  "name": "357-pentagons",
+  "description": "3 regular pentagons targeting Fizz-Buzz-Bazz proportions (35:21:15:7:5:3:1)",
+  "inputs": [
+    [{"kind": "Polygon", "vertices": [
+      {"x": -0.5, "y": 1.0},
+      {"x": -1.45, "y": 0.31},
+      {"x": -1.09, "y": -0.81},
+      {"x": 0.09, "y": -0.81},
+      {"x": 0.45, "y": 0.31}
+    ]}, [true, true, true, true, true, true, true, true, true, true]],
+    [{"kind": "Polygon", "vertices": [
+      {"x": 0.866, "y": 1.5},
+      {"x": -0.084, "y": 0.81},
+      {"x": 0.28, "y": -0.31},
+      {"x": 1.45, "y": -0.31},
+      {"x": 1.81, "y": 0.81}
+    ]}, [true, true, true, true, true, true, true, true, true, true]],
+    [{"kind": "Polygon", "vertices": [
+      {"x": 0.5, "y": 0.0},
+      {"x": -0.45, "y": -0.69},
+      {"x": -0.09, "y": -1.81},
+      {"x": 1.09, "y": -1.81},
+      {"x": 1.45, "y": -0.69}
+    ]}, [true, true, true, true, true, true, true, true, true, true]]
+  ],
+  "targets": {
+    "0**": 35,
+    "*1*": 21,
+    "**2": 15,
+    "01*": 7,
+    "0*2": 5,
+    "*12": 3,
+    "012": 1
+  },
+  "expected": {
+    "max_error": 0.0001,
+    "golden_trace": "357-pentagons.trace.json"
+  }
+}
