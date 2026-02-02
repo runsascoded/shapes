@@ -659,7 +659,7 @@ fn handle_train_batch(id: &str, params: &Value) -> JsonRpcResponse {
     let mut sparkline_region_errors: std::collections::BTreeMap<String, Vec<f64>> = std::collections::BTreeMap::new();
 
     // Initialize region error vectors from initial step
-    for (key, err) in &current_step.errors {
+    for (key, _err) in &current_step.errors {
         sparkline_region_errors.insert(key.clone(), Vec::with_capacity(num_steps));
     }
 

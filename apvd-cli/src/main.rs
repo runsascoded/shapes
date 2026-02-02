@@ -8,6 +8,7 @@
 
 mod render;
 mod server;
+mod trace;
 
 use std::io::{self, Write};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -36,13 +37,21 @@ struct Cli {
 enum Commands {
     /// Train a model from the command line
     Train {
-        /// Input shapes (JSON file or inline JSON)
-        #[arg(short, long)]
-        shapes: String,
+        /// Config file (JSON with inputs and targets). Alternative to -s/-t.
+        #[arg(short, long, conflicts_with_all = ["shapes", "targets"])]
+        config: Option<String>,
 
-        /// Target areas (JSON file or inline JSON)
-        #[arg(short, long)]
-        targets: String,
+        /// Input shapes (JSON file or inline JSON). Use with -t.
+        #[arg(short, long, required_unless_present_any = ["config", "resume"])]
+        shapes: Option<String>,
+
+        /// Target areas (JSON file or inline JSON). Use with -s.
+        #[arg(short, long, required_unless_present_any = ["config", "resume"])]
+        targets: Option<String>,
+
+        /// Resume training from a trace file (continues from final shapes)
+        #[arg(short = 'r', long, conflicts_with_all = ["config", "shapes", "targets"])]
+        resume: Option<String>,
 
         /// Maximum training steps
         #[arg(short, long, default_value = "1000")]
@@ -171,6 +180,137 @@ enum Commands {
         #[arg(short, long, default_value = "3")]
         iterations: usize,
     },
+
+    /// Trace file operations (info, convert, diff, verify, benchmark, reconstruct)
+    Trace {
+        #[command(subcommand)]
+        command: TraceCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum TraceCommands {
+    /// Display trace metadata and statistics
+    Info {
+        /// Trace file to inspect
+        file: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Include per-keyframe details
+        #[arg(short, long)]
+        verbose: bool,
+    },
+
+    /// Verify trace integrity and reconstruction accuracy
+    Verify {
+        /// Trace file to verify
+        file: String,
+
+        /// Reconstruction tolerance (default: 1e-10)
+        #[arg(long, default_value = "1e-10")]
+        tolerance: f64,
+
+        /// Random steps to verify (default: 100)
+        #[arg(long, default_value = "100")]
+        samples: usize,
+
+        /// Verify every step (slow)
+        #[arg(long)]
+        exhaustive: bool,
+
+        /// Schema only, skip reconstruction
+        #[arg(long)]
+        quick: bool,
+    },
+
+    /// Benchmark recomputation performance
+    Benchmark {
+        /// Trace file to benchmark
+        file: String,
+
+        /// Random access samples (default: 1000)
+        #[arg(long, default_value = "1000")]
+        samples: usize,
+
+        /// Include sequential scan benchmark
+        #[arg(long)]
+        sequential: bool,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Reconstruct and output shapes at a specific step
+    Reconstruct {
+        /// Trace file
+        file: String,
+
+        /// Step index to reconstruct
+        step: usize,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Render to SVG file
+        #[arg(long)]
+        svg: Option<String>,
+    },
+
+    /// Convert trace between tiering configurations
+    Convert {
+        /// Input trace file
+        input: String,
+
+        /// Output file
+        #[arg(short, long)]
+        output: String,
+
+        /// Maximum BTD keyframes
+        #[arg(long)]
+        max_btd: Option<usize>,
+
+        /// Interval keyframe spacing (0 to disable)
+        #[arg(long)]
+        interval: Option<usize>,
+
+        /// Output as .json.gz
+        #[arg(long)]
+        compress: bool,
+
+        /// Overwrite existing output
+        #[arg(short, long)]
+        force: bool,
+    },
+
+    /// Compare two traces
+    Diff {
+        /// First trace file
+        file1: String,
+
+        /// Second trace file
+        file2: String,
+
+        /// Compare at specific step
+        #[arg(long)]
+        step: Option<usize>,
+
+        /// Difference tolerance (default: 1e-10)
+        #[arg(long, default_value = "1e-10")]
+        tolerance: f64,
+
+        /// Compare every step (slow)
+        #[arg(long)]
+        all_steps: bool,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 /// A test case definition loaded from JSON
@@ -260,8 +400,10 @@ fn main() {
 
     match cli.command {
         Commands::Train {
+            config,
             shapes,
             targets,
+            resume,
             max_steps,
             learning_rate,
             parallel,
@@ -274,7 +416,7 @@ fn main() {
             gzip,
             svg,
         } => {
-            if let Err(e) = run_train(shapes, targets, max_steps, learning_rate, parallel, output, robust, quiet, history, checkpoints, tiered, gzip, svg) {
+            if let Err(e) = run_train(config, shapes, targets, resume, max_steps, learning_rate, parallel, output, robust, quiet, history, checkpoints, tiered, gzip, svg) {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
@@ -323,12 +465,20 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        Commands::Trace { command } => {
+            if let Err(e) = run_trace_command(command) {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
     }
 }
 
 fn run_train(
-    shapes_arg: String,
-    targets_arg: String,
+    config_arg: Option<String>,
+    shapes_arg: Option<String>,
+    targets_arg: Option<String>,
+    resume_arg: Option<String>,
     max_steps: usize,
     learning_rate: f64,
     parallel: usize,
@@ -346,15 +496,65 @@ fn run_train(
     // Parse tiered config if specified
     let tiered_config = tiered.map(|opt_b| TieredConfig::new(opt_b));
 
-    // Parse shapes (from file or inline JSON)
-    let shapes_json = read_json_arg(&shapes_arg)?;
-    let inputs: Vec<InputSpec> = serde_json::from_str(&shapes_json)
-        .map_err(|e| format!("Failed to parse shapes JSON: {}", e))?;
+    // Parse inputs and targets from either resume trace, config file, or separate args
+    let (inputs, targets): (Vec<InputSpec>, TargetsMap<f64>) = if let Some(ref resume_path) = resume_arg {
+        // Resume from trace file
+        let trace_data = trace::load_trace(resume_path)?;
 
-    // Parse targets (from file or inline JSON)
-    let targets_json = read_json_arg(&targets_arg)?;
-    let targets: TargetsMap<f64> = serde_json::from_str(&targets_json)
-        .map_err(|e| format!("Failed to parse targets JSON: {}", e))?;
+        // Get inputs from the trace's final shapes (converted to f64)
+        let final_inputs = match &trace_data {
+            trace::TraceData::Train(t) => {
+                // Extract shapes from final_shapes (they're in Dual format, need to extract values)
+                let shapes: Vec<apvd_core::Shape<f64>> = t.best.final_shapes.iter()
+                    .map(|v| {
+                        // Parse as Shape<Dual> then extract values
+                        extract_shape_values(v)
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                // Convert to InputSpec (all coords trainable)
+                shapes.iter().map(|s| {
+                    let n = match s {
+                        apvd_core::Shape::Circle(_) => 3,
+                        apvd_core::Shape::XYRR(_) => 4,
+                        apvd_core::Shape::XYRRT(_) => 5,
+                        apvd_core::Shape::Polygon(p) => p.vertices.len() * 2,
+                    };
+                    (s.clone(), vec![true; n])
+                }).collect::<Vec<InputSpec>>()
+            }
+            trace::TraceData::V2(t) => {
+                // Use config inputs for now (V2 format has proper keyframes)
+                t.config.inputs.clone()
+            }
+        };
+
+        let targets = trace_data.targets().clone();
+        let resume_from_step = trace_data.total_steps();
+
+        if !quiet {
+            eprintln!("Resuming from {} at step {}", resume_path, resume_from_step);
+        }
+
+        (final_inputs, targets)
+    } else if let Some(config_path) = config_arg {
+        // Load from unified config file
+        let config_json = read_json_arg(&config_path)?;
+        let test_case: TestCase = serde_json::from_str(&config_json)
+            .map_err(|e| format!("Failed to parse config JSON: {}", e))?;
+        (test_case.inputs, test_case.targets)
+    } else {
+        // Load from separate shapes and targets args
+        let shapes_json = read_json_arg(shapes_arg.as_ref().ok_or("shapes argument required")?)?;
+        let inputs: Vec<InputSpec> = serde_json::from_str(&shapes_json)
+            .map_err(|e| format!("Failed to parse shapes JSON: {}", e))?;
+
+        let targets_json = read_json_arg(targets_arg.as_ref().ok_or("targets argument required")?)?;
+        let targets: TargetsMap<f64> = serde_json::from_str(&targets_json)
+            .map_err(|e| format!("Failed to parse targets JSON: {}", e))?;
+
+        (inputs, targets)
+    };
 
     let num_shapes = inputs.len();
     if !quiet {
@@ -668,6 +868,80 @@ fn read_json_arg(arg: &str) -> Result<String, Box<dyn std::error::Error>> {
         // Try to read as file
         std::fs::read_to_string(arg)
             .map_err(|e| format!("Failed to read file '{}': {}", arg, e).into())
+    }
+}
+
+/// Extract f64 shape from a JSON value that may be in Dual format.
+/// Dual format has {v: number, d: [...]} for each coordinate.
+fn extract_shape_values(value: &serde_json::Value) -> Result<apvd_core::Shape<f64>, Box<dyn std::error::Error>> {
+    // Helper to extract f64 from either plain number or Dual {v, d} object
+    fn extract_f64(v: &serde_json::Value) -> Result<f64, Box<dyn std::error::Error>> {
+        if let Some(n) = v.as_f64() {
+            Ok(n)
+        } else if let Some(obj) = v.as_object() {
+            if let Some(val) = obj.get("v") {
+                val.as_f64().ok_or_else(|| "Expected f64 for 'v' field".into())
+            } else {
+                Err("Expected 'v' field in Dual object".into())
+            }
+        } else {
+            Err("Expected f64 or Dual object".into())
+        }
+    }
+
+    let kind = value.get("kind")
+        .and_then(|k| k.as_str())
+        .ok_or("Missing 'kind' field")?;
+
+    match kind {
+        "Circle" => {
+            let c = value.get("c").ok_or("Missing 'c' field")?;
+            let x = extract_f64(c.get("x").ok_or("Missing c.x")?)?;
+            let y = extract_f64(c.get("y").ok_or("Missing c.y")?)?;
+            let r = extract_f64(value.get("r").ok_or("Missing 'r' field")?)?;
+            Ok(apvd_core::Shape::Circle(apvd_core::circle::Circle {
+                c: apvd_core::r2::R2 { x, y },
+                r,
+            }))
+        }
+        "XYRR" => {
+            let c = value.get("c").ok_or("Missing 'c' field")?;
+            let r = value.get("r").ok_or("Missing 'r' field")?;
+            let cx = extract_f64(c.get("x").ok_or("Missing c.x")?)?;
+            let cy = extract_f64(c.get("y").ok_or("Missing c.y")?)?;
+            let rx = extract_f64(r.get("x").ok_or("Missing r.x")?)?;
+            let ry = extract_f64(r.get("y").ok_or("Missing r.y")?)?;
+            Ok(apvd_core::Shape::XYRR(apvd_core::ellipses::xyrr::XYRR {
+                c: apvd_core::r2::R2 { x: cx, y: cy },
+                r: apvd_core::r2::R2 { x: rx, y: ry },
+            }))
+        }
+        "XYRRT" => {
+            let c = value.get("c").ok_or("Missing 'c' field")?;
+            let r = value.get("r").ok_or("Missing 'r' field")?;
+            let cx = extract_f64(c.get("x").ok_or("Missing c.x")?)?;
+            let cy = extract_f64(c.get("y").ok_or("Missing c.y")?)?;
+            let rx = extract_f64(r.get("x").ok_or("Missing r.x")?)?;
+            let ry = extract_f64(r.get("y").ok_or("Missing r.y")?)?;
+            let t = extract_f64(value.get("t").ok_or("Missing 't' field")?)?;
+            Ok(apvd_core::Shape::XYRRT(apvd_core::ellipses::xyrrt::XYRRT {
+                c: apvd_core::r2::R2 { x: cx, y: cy },
+                r: apvd_core::r2::R2 { x: rx, y: ry },
+                t,
+            }))
+        }
+        "Polygon" => {
+            let vertices = value.get("vertices")
+                .and_then(|v| v.as_array())
+                .ok_or("Missing 'vertices' array")?;
+            let verts: Result<Vec<apvd_core::r2::R2<f64>>, Box<dyn std::error::Error>> = vertices.iter().map(|v| {
+                let x = extract_f64(v.get("x").ok_or("Missing vertex x")?)?;
+                let y = extract_f64(v.get("y").ok_or("Missing vertex y")?)?;
+                Ok(apvd_core::r2::R2 { x, y })
+            }).collect();
+            Ok(apvd_core::Shape::Polygon(apvd_core::geometry::polygon::Polygon::new(verts?)))
+        }
+        _ => Err(format!("Unknown shape kind: {}", kind).into()),
     }
 }
 
@@ -987,6 +1261,285 @@ fn expand_file_patterns(patterns: &[String]) -> Result<Vec<String>, Box<dyn std:
 
     files.sort();
     Ok(files)
+}
+
+fn run_trace_command(command: TraceCommands) -> Result<(), Box<dyn std::error::Error>> {
+    match command {
+        TraceCommands::Info { file, json, verbose } => {
+            let trace_file = trace::load_trace(&file)?;
+            let stats = trace::compute_stats(&trace_file);
+
+            if json {
+                println!("{}", serde_json::to_string_pretty(&stats)?);
+            } else {
+                println!("Trace: {}", file);
+                println!("  Format: {}", stats.format);
+                println!("  Total steps: {}", stats.total_steps);
+                println!("  Min error: {:.6e} (step {})", stats.min_error, stats.min_step);
+                println!();
+
+                println!("Shapes:");
+                println!("  {} shape(s)", stats.num_shapes);
+                println!("  Types: {}", stats.shape_types.join(", "));
+                println!("  {} variables total", stats.total_variables);
+                println!();
+
+                println!("Keyframes:");
+                println!("  BTD keyframes: {}", stats.btd_keyframe_count);
+                println!("  Interval keyframes: {}", stats.interval_keyframe_count);
+                println!("  Total stored: {}", stats.total_keyframes);
+                println!();
+
+                if let Some(ref tiering) = stats.tiering {
+                    println!("Tiering:");
+                    println!("  Strategy: {}", tiering.strategy);
+                    println!("  Max BTD: {}", tiering.max_btd_keyframes);
+                    println!("  Interval spacing: {}", tiering.interval_spacing);
+                    println!();
+                }
+
+                println!("Recomputation:");
+                println!("  Max distance: {} steps", stats.max_recompute_distance);
+                println!("  Avg distance: {:.1} steps", stats.avg_recompute_distance);
+
+                if verbose {
+                    println!();
+                    println!("Keyframe details:");
+                    for kf in trace_file.keyframes() {
+                        let error_str = kf.error.map_or("(none)".to_string(), |e| format!("{:.6e}", e));
+                        println!("  Step {}: error {}", kf.step_index, error_str);
+                    }
+                }
+            }
+        }
+
+        TraceCommands::Verify { file, tolerance, samples, exhaustive, quick } => {
+            let trace_file = trace::load_trace(&file)?;
+            println!("Verifying {}...", file);
+
+            let result = trace::verify_trace(&trace_file, tolerance, samples, exhaustive, quick);
+
+            for warning in &result.warnings {
+                println!("  ! {}", warning);
+            }
+
+            for error in &result.errors {
+                println!("  x {}", error);
+            }
+
+            if result.samples_verified > 0 {
+                println!();
+                println!("Reconstruction verification ({} samples):", result.samples_verified);
+                println!("  Max error: {:.6e}", result.max_reconstruction_error);
+            }
+
+            println!();
+            if result.valid {
+                println!("Trace verified successfully.");
+            } else {
+                println!("Trace verification FAILED.");
+                std::process::exit(1);
+            }
+        }
+
+        TraceCommands::Benchmark { file, samples, sequential, json } => {
+            let trace_file = trace::load_trace(&file)?;
+
+            if !json {
+                eprintln!("Benchmarking {}...", file);
+            }
+
+            let result = trace::benchmark_trace(&trace_file, samples, sequential);
+
+            if json {
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            } else {
+                println!();
+                println!("Random access ({} samples):", result.random_access.samples);
+                println!("  Min: {:.2}ms (keyframe hit)", result.random_access.min_ms);
+                println!("  Max: {:.2}ms", result.random_access.max_ms);
+                println!("  Avg: {:.2}ms", result.random_access.avg_ms);
+                println!("  P50: {:.2}ms", result.random_access.p50_ms);
+                println!("  P95: {:.2}ms", result.random_access.p95_ms);
+                println!("  Keyframe hits: {}", result.random_access.keyframe_hits);
+
+                if let Some(ref seq) = result.sequential {
+                    println!();
+                    println!("Sequential scan (step 0 -> {}):", seq.total_steps);
+                    println!("  Total: {:.2}ms", seq.total_ms);
+                    println!("  Per step: {:.4}ms", seq.per_step_ms);
+                }
+            }
+        }
+
+        TraceCommands::Reconstruct { file, step, json, svg } => {
+            let trace_file = trace::load_trace(&file)?;
+
+            let start = std::time::Instant::now();
+            let (reconstructed, kf_step) = trace::reconstruct_step(&trace_file, step)?;
+            let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
+
+            if json {
+                let shapes: Vec<serde_json::Value> = reconstructed.shapes.iter()
+                    .map(|s| serde_json::to_value(s.v()).unwrap())
+                    .collect();
+                let output = serde_json::json!({
+                    "stepIndex": step,
+                    "error": reconstructed.error.v(),
+                    "shapes": shapes,
+                    "recomputedFrom": kf_step,
+                    "recomputeSteps": step - kf_step,
+                    "recomputeMs": elapsed_ms,
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            } else {
+                println!("Step {} (reconstructed from keyframe at {}):", step, kf_step);
+                println!("  Recomputation: {} steps, {:.2}ms", step - kf_step, elapsed_ms);
+                println!();
+                println!("Shapes:");
+                for (i, shape) in reconstructed.shapes.iter().enumerate() {
+                    let s = shape.v();
+                    match s {
+                        apvd_core::Shape::Circle(c) => {
+                            println!("  [{}] Circle: center=({:.4}, {:.4}), r={:.4}",
+                                i, c.c.x, c.c.y, c.r);
+                        }
+                        apvd_core::Shape::XYRR(e) => {
+                            println!("  [{}] XYRR: center=({:.4}, {:.4}), radii=({:.4}, {:.4})",
+                                i, e.c.x, e.c.y, e.r.x, e.r.y);
+                        }
+                        apvd_core::Shape::XYRRT(e) => {
+                            println!("  [{}] XYRRT: center=({:.4}, {:.4}), radii=({:.4}, {:.4}), theta={:.4}",
+                                i, e.c.x, e.c.y, e.r.x, e.r.y, e.t);
+                        }
+                        apvd_core::Shape::Polygon(p) => {
+                            println!("  [{}] Polygon: {} vertices", i, p.vertices.len());
+                        }
+                    }
+                }
+                println!();
+                println!("Error: {:.6e}", reconstructed.error.v());
+            }
+
+            if let Some(svg_path) = svg {
+                let shapes: Vec<apvd_core::Shape<f64>> = reconstructed.shapes.iter()
+                    .map(|s| s.v())
+                    .collect();
+                let config = RenderConfig::default();
+                let svg_content = render_svg(&shapes, &config);
+                std::fs::write(&svg_path, &svg_content)?;
+                eprintln!("SVG written to {}", svg_path);
+            }
+        }
+
+        TraceCommands::Convert { input, output, max_btd: _, interval: _, compress, force } => {
+            // Check if output exists
+            if !force && std::path::Path::new(&output).exists() {
+                return Err(format!("Output file '{}' already exists. Use --force to overwrite.", output).into());
+            }
+
+            // For now, just copy the file (with optional compression)
+            // Full conversion with re-tiering would require more implementation
+            eprintln!("Converting {}...", input);
+            eprintln!("Note: Re-tiering not yet implemented, copying file as-is.");
+
+            let content = std::fs::read_to_string(&input)?;
+
+            if compress || output.ends_with(".gz") {
+                let file = std::fs::File::create(&output)?;
+                let mut encoder = GzEncoder::new(file, Compression::default());
+                std::io::Write::write_all(&mut encoder, content.as_bytes())?;
+                encoder.finish()?;
+            } else {
+                std::fs::write(&output, content)?;
+            }
+
+            eprintln!("Written to {}", output);
+        }
+
+        TraceCommands::Diff { file1, file2, step: _, tolerance, all_steps: _, json } => {
+            let trace1 = trace::load_trace(&file1)?;
+            let trace2 = trace::load_trace(&file2)?;
+
+            if !json {
+                println!("Comparing traces...");
+                println!();
+            }
+
+            // Compare configs
+            let inputs1 = trace1.inputs();
+            let inputs2 = trace2.inputs();
+            let targets1 = trace1.targets();
+            let targets2 = trace2.targets();
+            let lr1 = trace1.learning_rate();
+            let lr2 = trace2.learning_rate();
+
+            let configs_match = inputs1.len() == inputs2.len()
+                && targets1 == targets2
+                && (lr1 - lr2).abs() < 1e-10;
+
+            // Compare steps
+            let steps1 = trace1.total_steps();
+            let steps2 = trace2.total_steps();
+            let steps_match = steps1 == steps2;
+
+            // Compare min error
+            let error1 = trace1.min_error();
+            let error2 = trace2.min_error();
+            let step1 = trace1.min_step();
+            let step2 = trace2.min_step();
+            let error_diff = (error1 - error2).abs();
+            let errors_match = error_diff < tolerance;
+
+            if json {
+                let output = serde_json::json!({
+                    "file1": file1,
+                    "file2": file2,
+                    "configsMatch": configs_match,
+                    "stepsMatch": steps_match,
+                    "file1Steps": steps1,
+                    "file2Steps": steps2,
+                    "file1MinError": error1,
+                    "file2MinError": error2,
+                    "errorDiff": error_diff,
+                    "errorsMatch": errors_match,
+                    "tolerance": tolerance,
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            } else {
+                println!("Config:");
+                println!("  Inputs: {} vs {} shapes {}",
+                    inputs1.len(),
+                    inputs2.len(),
+                    if inputs1.len() == inputs2.len() { "(match)" } else { "(DIFFER)" }
+                );
+                println!("  Targets: {}", if targets1 == targets2 { "identical" } else { "DIFFER" });
+                println!("  Learning rate: {} vs {} {}",
+                    lr1, lr2,
+                    if (lr1 - lr2).abs() < 1e-10 { "(identical)" } else { "(DIFFER)" }
+                );
+                println!();
+
+                println!("Steps:");
+                println!("  {}: {} steps", file1, steps1);
+                println!("  {}: {} steps", file2, steps2);
+                println!();
+
+                println!("Error convergence:");
+                println!("  {}: {:.6e} at step {}", file1, error1, step1);
+                println!("  {}: {:.6e} at step {}", file2, error2, step2);
+                println!("  Difference: {:.6e} {}", error_diff,
+                    if errors_match { "(within tolerance)" } else { "(EXCEEDS TOLERANCE)" }
+                );
+            }
+
+            if !errors_match && !json {
+                std::process::exit(1);
+            }
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
