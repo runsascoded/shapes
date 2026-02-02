@@ -67,6 +67,7 @@ pub use targets::{Targets, TargetsMap};
 pub use tiered::{TieredConfig, seek_from_keyframe};
 pub use trace::{TraceStorage, TraceMetadata, StorageStrategy, create_storage};
 pub use trace::{DenseStorage, BtdStorage, TieredLruStorage};
+pub use trace::{BtdEvenlySpacedStorage, BtdEvenlySpacedConfig, create_btd_evenly_spaced_storage};
 pub use shape::{Shape, InputSpec};
 pub use ellipses::xyrr::XYRR;
 pub use polygon::Polygon;
