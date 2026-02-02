@@ -273,6 +273,16 @@ export interface BatchStep {
   shapes: Shape[];
 }
 
+/** Sparkline data for visualization */
+export interface SparklineData {
+  /** Error values for each step in the batch */
+  errors: number[];
+  /** Gradient vectors for each step (gradients[stepIdx][varIdx]) */
+  gradients: number[][];
+  /** Per-region error values for each step (regionErrors[regionKey][stepIdx]) */
+  regionErrors: Record<string, number[]>;
+}
+
 /** Result from batch training */
 export interface BatchTrainingResult {
   /** All computed steps */
@@ -283,6 +293,8 @@ export interface BatchTrainingResult {
   minStepIndex: number;
   /** Final shapes (convenience for next batch input) */
   finalShapes: Shape[];
+  /** Sparkline-ready data for visualization */
+  sparklineData: SparklineData;
 }
 
 // ============================================================================

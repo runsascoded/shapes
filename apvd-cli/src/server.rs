@@ -27,7 +27,18 @@ use tokio::sync::mpsc;
 use apvd_core::{
     InputSpec, Model, Step, TargetsMap, regions,
     TraceStorage, StorageStrategy, create_storage,
+    Shape,
 };
+
+/// Check if a shape has any NaN coordinates
+fn shape_has_nan(shape: &Shape<f64>) -> bool {
+    match shape {
+        Shape::Circle(c) => c.c.x.is_nan() || c.c.y.is_nan() || c.r.is_nan(),
+        Shape::XYRR(e) => e.c.x.is_nan() || e.c.y.is_nan() || e.r.x.is_nan() || e.r.y.is_nan(),
+        Shape::XYRRT(e) => e.c.x.is_nan() || e.c.y.is_nan() || e.r.x.is_nan() || e.r.y.is_nan() || e.t.is_nan(),
+        Shape::Polygon(p) => p.vertices.iter().any(|v| v.x.is_nan() || v.y.is_nan()),
+    }
+}
 
 /// Server configuration
 #[derive(Clone)]
@@ -500,9 +511,9 @@ fn handle_create_model(id: &str, params: &Value) -> JsonRpcResponse {
         },
     };
 
-    // Extract geometry from step
+    // Extract geometry from step - convert Shape<Dual> to Shape<f64> for plain numbers
     let shapes: Vec<Value> = step.shapes.iter()
-        .map(|s| serde_json::to_value(s).unwrap())
+        .map(|s| serde_json::to_value(s.v()).unwrap())
         .collect();
 
     // Build region info with errors
@@ -619,6 +630,8 @@ fn handle_train_batch(id: &str, params: &Value) -> JsonRpcResponse {
         .and_then(|v| v.as_f64())
         .unwrap_or(0.05);
 
+    eprintln!("[trainBatch] Starting with {} steps, lr={}", num_steps, learning_rate);
+
     // Create initial step
     let mut current_step = match Step::new(inputs, targets.into()) {
         Ok(s) => s,
@@ -632,20 +645,42 @@ fn handle_train_batch(id: &str, params: &Value) -> JsonRpcResponse {
         },
     };
 
+    eprintln!("[trainBatch] Initial step created, error={}", current_step.error.v());
+
     // Collect all steps
     let mut steps: Vec<Value> = Vec::with_capacity(num_steps);
     let mut min_error = current_step.error.v();
     let mut min_step_index = 0usize;
 
+    // Collect sparkline data: errors and gradients for each step
+    let mut sparkline_errors: Vec<f64> = Vec::with_capacity(num_steps);
+    let mut sparkline_gradients: Vec<Vec<f64>> = Vec::with_capacity(num_steps);
+    // Region errors: key -> [error at step 0, error at step 1, ...]
+    let mut sparkline_region_errors: std::collections::BTreeMap<String, Vec<f64>> = std::collections::BTreeMap::new();
+
+    // Initialize region error vectors from initial step
+    for (key, err) in &current_step.errors {
+        sparkline_region_errors.insert(key.clone(), Vec::with_capacity(num_steps));
+    }
+
     // Record initial step (step 0)
+    // Convert Shape<Dual> to Shape<f64> before serializing to get plain numbers
     let initial_shapes: Vec<Value> = current_step.shapes.iter()
-        .map(|s| serde_json::to_value(s).unwrap())
+        .map(|s| serde_json::to_value(s.v()).unwrap())
         .collect();
     steps.push(serde_json::json!({
         "stepIndex": 0,
         "error": current_step.error.v(),
         "shapes": initial_shapes,
     }));
+    sparkline_errors.push(current_step.error.v());
+    sparkline_gradients.push(current_step.error.d().to_vec());
+    // Collect initial region errors
+    for (key, err) in &current_step.errors {
+        if let Some(vec) = sparkline_region_errors.get_mut(key) {
+            vec.push(err.error.v());
+        }
+    }
 
     // Compute remaining steps
     for i in 1..num_steps {
@@ -653,14 +688,26 @@ fn handle_train_batch(id: &str, params: &Value) -> JsonRpcResponse {
             Ok(next_step) => {
                 let error = next_step.error.v();
 
-                // Check for NaN
+                // Check for NaN in error or shape coordinates
                 if error.is_nan() {
+                    eprintln!("[trainBatch] NaN error detected at step {}", i);
                     return JsonRpcResponse {
                         id: id.to_string(),
                         result: None,
                         error: Some(JsonRpcError {
                             code: -32000,
                             message: format!("NaN error at step {}", i),
+                        }),
+                    };
+                }
+                if next_step.shapes.iter().any(|s| shape_has_nan(&s.v())) {
+                    eprintln!("[trainBatch] NaN in shapes detected at step {}", i);
+                    return JsonRpcResponse {
+                        id: id.to_string(),
+                        result: None,
+                        error: Some(JsonRpcError {
+                            code: -32000,
+                            message: format!("NaN in shape coordinates at step {}", i),
                         }),
                     };
                 }
@@ -671,15 +718,25 @@ fn handle_train_batch(id: &str, params: &Value) -> JsonRpcResponse {
                     min_step_index = i;
                 }
 
-                // Record step
+                // Record step - convert Shape<Dual> to Shape<f64> for plain numbers
                 let shapes: Vec<Value> = next_step.shapes.iter()
-                    .map(|s| serde_json::to_value(s).unwrap())
+                    .map(|s| serde_json::to_value(s.v()).unwrap())
                     .collect();
                 steps.push(serde_json::json!({
                     "stepIndex": i,
                     "error": error,
                     "shapes": shapes,
                 }));
+
+                // Collect sparkline data
+                sparkline_errors.push(error);
+                sparkline_gradients.push(next_step.error.d().to_vec());
+                // Collect region errors
+                for (key, err) in &next_step.errors {
+                    if let Some(vec) = sparkline_region_errors.get_mut(key) {
+                        vec.push(err.error.v());
+                    }
+                }
 
                 current_step = next_step;
             }
@@ -696,10 +753,12 @@ fn handle_train_batch(id: &str, params: &Value) -> JsonRpcResponse {
         }
     }
 
-    // Build result
+    // Build result - convert Shape<Dual> to Shape<f64> for plain numbers
     let final_shapes: Vec<Value> = current_step.shapes.iter()
-        .map(|s| serde_json::to_value(s).unwrap())
+        .map(|s| serde_json::to_value(s.v()).unwrap())
         .collect();
+
+    eprintln!("[trainBatch] Completed {} steps, minError={} at step {}", steps.len(), min_error, min_step_index);
 
     JsonRpcResponse {
         id: id.to_string(),
@@ -708,6 +767,11 @@ fn handle_train_batch(id: &str, params: &Value) -> JsonRpcResponse {
             "minError": min_error,
             "minStepIndex": min_step_index,
             "finalShapes": final_shapes,
+            "sparklineData": {
+                "errors": sparkline_errors,
+                "gradients": sparkline_gradients,
+                "regionErrors": sparkline_region_errors,
+            },
         })),
         error: None,
     }
