@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 
 use apvd_core::{Model, InputSpec, TargetsMap, TieredConfig};
 use render::{render_svg, RenderConfig};
+use trace::{TraceFileV2, TraceConfig, Keyframe, TieringConfig as TraceTieringConfig};
 
 #[derive(Parser)]
 #[command(name = "apvd")]
@@ -110,6 +111,10 @@ enum Commands {
         /// Number of parallel scene variants to train
         #[arg(long, default_value = "1")]
         parallel: usize,
+
+        /// Directory for persistent trace storage
+        #[arg(long, default_value = ".apvd/traces")]
+        storage_dir: String,
     },
 
     /// Render shapes to SVG
@@ -379,7 +384,7 @@ struct TrainingTrace {
     tiered_config: Option<TieredConfig>,
 }
 
-/// Combined output for all training variants (a "session")
+/// Combined output for all training variants (a "session") - DEPRECATED, use V2 format
 #[derive(Debug, Serialize, Deserialize)]
 struct TrainingSession {
     /// Input shapes specification
@@ -392,6 +397,68 @@ struct TrainingSession {
     traces: Vec<TrainingTrace>,
     /// Total wall-clock time in milliseconds
     total_time_ms: u64,
+}
+
+/// Convert TrainingTrace to V2 trace format.
+fn trace_to_v2(
+    inputs: &[InputSpec],
+    targets: &TargetsMap<f64>,
+    learning_rate: f64,
+    trace: &TrainingTrace,
+    tiered_config: Option<&TieredConfig>,
+) -> TraceFileV2 {
+    // Build keyframes from history if available
+    let (btd_keyframes, interval_keyframes) = if let Some(ref history) = trace.history {
+        // Separate BTD keyframes (is_best = true) from interval keyframes
+        let mut btd = Vec::new();
+        let mut interval = Vec::new();
+
+        for step in history {
+            let kf = Keyframe {
+                step_index: step.step_idx,
+                shapes: step.shapes.clone(),
+                error: Some(step.error),
+            };
+            if step.is_best == Some(true) {
+                btd.push(kf);
+            } else {
+                interval.push(kf);
+            }
+        }
+        (btd, interval)
+    } else {
+        // No history - create minimal keyframes from final shapes
+        let final_kf = Keyframe {
+            step_index: trace.total_steps.saturating_sub(1),
+            shapes: trace.final_shapes.clone(),
+            error: Some(trace.final_error),
+        };
+        // BTD: just the final (best) state
+        // Interval: empty (or just step 0 if we had it)
+        (vec![final_kf.clone()], vec![final_kf])
+    };
+
+    TraceFileV2 {
+        version: 2,
+        created: Some(format!("{:?}", std::time::SystemTime::now())),
+        config: TraceConfig {
+            inputs: inputs.to_vec(),
+            targets: targets.clone(),
+            learning_rate,
+            convergence_threshold: 1e-10,
+        },
+        btd_keyframes,
+        interval_keyframes,
+        total_steps: trace.total_steps,
+        min_error: trace.min_error,
+        min_step: trace.min_step,
+        tiering: tiered_config.map(|tc| TraceTieringConfig {
+            max_btd_keyframes: tc.bucket_size * 2, // Tier 0 size
+            interval_spacing: tc.bucket_size,
+            strategy: "btd-evenly-spaced".to_string(),
+        }),
+        errors: None, // Don't store full error array by default
+    }
 }
 
 fn main() {
@@ -421,8 +488,11 @@ fn main() {
                 std::process::exit(1);
             }
         }
-        Commands::Serve { port, parallel } => {
-            let config = server::ServerConfig { parallel };
+        Commands::Serve { port, parallel, storage_dir } => {
+            let config = server::ServerConfig {
+                parallel,
+                storage_dir: Some(std::path::PathBuf::from(storage_dir)),
+            };
             let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
             if let Err(e) = rt.block_on(server::run_server(port, config)) {
                 eprintln!("Server error: {}", e);
@@ -608,10 +678,11 @@ fn run_train(
 
             // Extract results
             let final_step = model.steps.last().unwrap();
+            // Convert Shape<Dual> to Shape<f64> for storage (don't need gradient derivatives)
             let final_shapes: Vec<serde_json::Value> = final_step
                 .shapes
                 .iter()
-                .map(|s| serde_json::to_value(s).unwrap())
+                .map(|s| serde_json::to_value(s.v()).unwrap())
                 .collect();
 
             // Collect BTD (Best To Date) step indices
@@ -667,7 +738,7 @@ fn run_train(
                             TraceStep {
                                 step_idx: idx,
                                 error,
-                                shapes: step.shapes.iter().map(|s| serde_json::to_value(s).unwrap()).collect(),
+                                shapes: step.shapes.iter().map(|s| serde_json::to_value(s.v()).unwrap()).collect(),
                                 is_best,
                             }
                         }).collect()
@@ -719,21 +790,11 @@ fn run_train(
         eprintln!("  total time: {}ms", total_time_ms);
     }
 
-    // Store inputs as JSON values for the session
-    let inputs_json: Vec<serde_json::Value> = inputs.iter()
-        .map(|i| serde_json::to_value(i).unwrap())
-        .collect();
+    // Convert best trace to V2 format
+    let v2_trace = trace_to_v2(&inputs, &targets, learning_rate, &best, tiered_config.as_ref());
 
-    let session = TrainingSession {
-        inputs: inputs_json,
-        targets: targets.clone(),
-        best: best.clone(),
-        traces: sorted_traces,
-        total_time_ms,
-    };
-
-    // Output results
-    let json_output = serde_json::to_string_pretty(&session)?;
+    // Output results in V2 format
+    let json_output = serde_json::to_string_pretty(&v2_trace)?;
     if let Some(output_path) = output {
         // Ensure .gz extension if gzip is enabled
         let output_path = if gzip && !output_path.ends_with(".gz") {
@@ -1122,8 +1183,9 @@ fn run_tests(
                 let trace_path = format!("{}/{}-failed.json", save_dir, test_case.name);
 
                 let final_step = model.steps.last().unwrap();
+                // Convert Shape<Dual> to Shape<f64> for storage
                 let final_shapes: Vec<serde_json::Value> = final_step.shapes.iter()
-                    .map(|s| serde_json::to_value(s).unwrap())
+                    .map(|s| serde_json::to_value(s.v()).unwrap())
                     .collect();
 
                 let trace = TrainingTrace {

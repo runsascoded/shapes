@@ -30,6 +30,8 @@ use apvd_core::{
     Shape,
 };
 
+use crate::trace::{TraceData, TraceFileV2, TrainResult};
+
 /// Check if a shape has any NaN coordinates
 fn shape_has_nan(shape: &Shape<f64>) -> bool {
     match shape {
@@ -44,6 +46,8 @@ fn shape_has_nan(shape: &Shape<f64>) -> bool {
 #[derive(Clone)]
 pub struct ServerConfig {
     pub parallel: usize,
+    /// Directory for persistent trace storage (None = in-memory only)
+    pub storage_dir: Option<std::path::PathBuf>,
 }
 
 // ============================================================================
@@ -135,6 +139,221 @@ struct TrainingHandle {
     started_at: u64,
 }
 
+/// Metadata for a saved trace
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SavedTraceMeta {
+    trace_id: String,
+    name: String,
+    saved_at: String,
+    total_steps: usize,
+    min_error: f64,
+    min_step: usize,
+    num_shapes: usize,
+    shape_types: Vec<String>,
+}
+
+/// A saved trace with full data
+struct SavedTrace {
+    meta: SavedTraceMeta,
+    data: TraceData,
+}
+
+/// Storage for saved traces (per-connection, optionally persistent)
+struct TraceStore {
+    traces: std::collections::HashMap<String, SavedTrace>,
+    counter: usize,
+    /// Optional directory for persistent storage
+    storage_dir: Option<std::path::PathBuf>,
+}
+
+impl TraceStore {
+    fn new() -> Self {
+        Self {
+            traces: std::collections::HashMap::new(),
+            counter: 0,
+            storage_dir: None,
+        }
+    }
+
+    /// Create a persistent store that saves to the given directory.
+    fn with_storage_dir(dir: std::path::PathBuf) -> Self {
+        // Ensure directory exists
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            eprintln!("Warning: Failed to create trace storage directory {:?}: {}", dir, e);
+        }
+
+        let mut store = Self {
+            traces: std::collections::HashMap::new(),
+            counter: 0,
+            storage_dir: Some(dir.clone()),
+        };
+
+        // Load existing traces from directory
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().map_or(false, |e| e == "json") {
+                    if let Ok(contents) = std::fs::read_to_string(&path) {
+                        if let Ok(saved) = serde_json::from_str::<SavedTraceFile>(&contents) {
+                            let trace_id = saved.meta.trace_id.clone();
+                            // Update counter to avoid ID collisions
+                            if let Some(num) = trace_id.strip_prefix("trace_").and_then(|s| s.parse::<usize>().ok()) {
+                                store.counter = store.counter.max(num);
+                            }
+                            // Convert to TraceData
+                            if let Ok(trace_data) = saved.to_trace_data() {
+                                store.traces.insert(trace_id, SavedTrace {
+                                    meta: saved.meta,
+                                    data: trace_data,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        eprintln!("Loaded {} traces from {:?}", store.traces.len(), dir);
+        store
+    }
+
+    fn generate_id(&mut self) -> String {
+        self.counter += 1;
+        format!("trace_{}", self.counter)
+    }
+
+    fn save(&mut self, data: TraceData, name: String) -> SavedTraceMeta {
+        let trace_id = self.generate_id();
+        let inputs = data.inputs();
+        let shape_types: Vec<String> = inputs.iter().map(|(s, _)| {
+            match s {
+                Shape::Circle(_) => "Circle".to_string(),
+                Shape::XYRR(_) => "XYRR".to_string(),
+                Shape::XYRRT(_) => "XYRRT".to_string(),
+                Shape::Polygon(p) => format!("Polygon({})", p.vertices.len()),
+            }
+        }).collect();
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        let meta = SavedTraceMeta {
+            trace_id: trace_id.clone(),
+            name,
+            saved_at: format!("{}", now),
+            total_steps: data.total_steps(),
+            min_error: data.min_error(),
+            min_step: data.min_step(),
+            num_shapes: inputs.len(),
+            shape_types,
+        };
+
+        // Persist to disk if storage_dir is set
+        if let Some(ref dir) = self.storage_dir {
+            let file_path = dir.join(format!("{}.json", trace_id));
+            let file_data = SavedTraceFile::from_trace_data(&meta, &data);
+            if let Ok(json) = serde_json::to_string_pretty(&file_data) {
+                if let Err(e) = std::fs::write(&file_path, json) {
+                    eprintln!("Warning: Failed to persist trace to {:?}: {}", file_path, e);
+                }
+            }
+        }
+
+        self.traces.insert(trace_id, SavedTrace {
+            meta: meta.clone(),
+            data,
+        });
+
+        meta
+    }
+
+    fn list(&self) -> Vec<SavedTraceMeta> {
+        self.traces.values().map(|t| t.meta.clone()).collect()
+    }
+
+    fn get(&self, trace_id: &str) -> Option<&SavedTrace> {
+        self.traces.get(trace_id)
+    }
+
+    fn rename(&mut self, trace_id: &str, name: String) -> Option<SavedTraceMeta> {
+        if let Some(trace) = self.traces.get_mut(trace_id) {
+            trace.meta.name = name.clone();
+
+            // Update on disk
+            if let Some(ref dir) = self.storage_dir {
+                let file_path = dir.join(format!("{}.json", trace_id));
+                let file_data = SavedTraceFile::from_trace_data(&trace.meta, &trace.data);
+                if let Ok(json) = serde_json::to_string_pretty(&file_data) {
+                    let _ = std::fs::write(&file_path, json);
+                }
+            }
+
+            Some(trace.meta.clone())
+        } else {
+            None
+        }
+    }
+
+    fn delete(&mut self, trace_id: &str) -> bool {
+        let removed = self.traces.remove(trace_id).is_some();
+
+        // Delete from disk
+        if removed {
+            if let Some(ref dir) = self.storage_dir {
+                let file_path = dir.join(format!("{}.json", trace_id));
+                let _ = std::fs::remove_file(file_path);
+            }
+        }
+
+        removed
+    }
+}
+
+/// File format for persisted traces (serializable version of SavedTrace)
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SavedTraceFile {
+    meta: SavedTraceMeta,
+    /// The trace data in V2 format (or converted to V2)
+    trace: crate::trace::TraceFileV2,
+}
+
+impl SavedTraceFile {
+    fn from_trace_data(meta: &SavedTraceMeta, data: &TraceData) -> Self {
+        let trace = match data {
+            TraceData::V2(v2) => v2.clone(),
+            TraceData::Train(train) => {
+                // Convert TrainResult to V2 format
+                let keyframes = data.keyframes();
+                crate::trace::TraceFileV2 {
+                    version: 2,
+                    created: Some(meta.saved_at.clone()),
+                    config: crate::trace::TraceConfig {
+                        inputs: train.inputs.clone(),
+                        targets: train.targets.clone(),
+                        learning_rate: 0.05, // default
+                        convergence_threshold: 1e-10,
+                    },
+                    btd_keyframes: keyframes,
+                    interval_keyframes: vec![],
+                    total_steps: train.best.total_steps,
+                    min_error: train.best.min_error,
+                    min_step: train.best.min_step,
+                    tiering: None,
+                    errors: None,
+                }
+            }
+        };
+        Self { meta: meta.clone(), trace }
+    }
+
+    fn to_trace_data(&self) -> Result<TraceData, String> {
+        Ok(TraceData::V2(self.trace.clone()))
+    }
+}
+
 /// Shared state for a training session
 struct TrainingSession {
     /// Flag to signal training should stop
@@ -147,16 +366,22 @@ struct TrainingSession {
     storage: std::sync::Mutex<Box<dyn TraceStorage>>,
     /// Learning rate used for training (needed for recomputation)
     learning_rate: f64,
+    /// Original inputs (for trace export)
+    inputs: Vec<InputSpec>,
+    /// Original targets (for trace export)
+    targets: TargetsMap<f64>,
 }
 
 impl TrainingSession {
-    fn new(learning_rate: f64, storage_strategy: StorageStrategy) -> Self {
+    fn new(inputs: Vec<InputSpec>, targets: TargetsMap<f64>, learning_rate: f64, storage_strategy: StorageStrategy) -> Self {
         Self {
             stop_requested: AtomicBool::new(false),
             best_error: std::sync::Mutex::new(f64::INFINITY),
             best_variant: AtomicUsize::new(0),
             storage: std::sync::Mutex::new(create_storage(storage_strategy, None)),
             learning_rate,
+            inputs,
+            targets,
         }
     }
 
@@ -230,6 +455,14 @@ async fn handle_socket(socket: WebSocket, config: Arc<ServerConfig>) {
     let current_session: Arc<std::sync::Mutex<Option<Arc<TrainingSession>>>> =
         Arc::new(std::sync::Mutex::new(None));
 
+    // Saved traces for this connection (persistent if storage_dir configured)
+    let trace_store: Arc<std::sync::Mutex<TraceStore>> = Arc::new(std::sync::Mutex::new(
+        match &config.storage_dir {
+            Some(dir) => TraceStore::with_storage_dir(dir.clone()),
+            None => TraceStore::new(),
+        }
+    ));
+
     // Task to forward messages to WebSocket
     let send_task = tokio::spawn(async move {
         while let Some(json) = rx.recv().await {
@@ -250,7 +483,7 @@ async fn handle_socket(socket: WebSocket, config: Arc<ServerConfig>) {
                 // Parse as JSON-RPC request
                 match serde_json::from_str::<JsonRpcRequest>(&text) {
                     Ok(rpc_req) => {
-                        let response = handle_json_rpc(&rpc_req, &config, &tx, &current_session).await;
+                        let response = handle_json_rpc(&rpc_req, &config, &tx, &current_session, &trace_store).await;
                         let json = serde_json::to_string(&response).unwrap();
                         let _ = tx.send(json).await;
                     }
@@ -295,6 +528,7 @@ async fn handle_json_rpc(
     config: &ServerConfig,
     tx: &mpsc::Sender<String>,
     current_session: &Arc<std::sync::Mutex<Option<Arc<TrainingSession>>>>,
+    trace_store: &Arc<std::sync::Mutex<TraceStore>>,
 ) -> JsonRpcResponse {
     match req.method.as_str() {
         "getVersion" => JsonRpcResponse {
@@ -436,6 +670,24 @@ async fn handle_json_rpc(
             id: req.id.clone(),
             result: Some(serde_json::json!({"pong": true})),
             error: None,
+        },
+        "loadTrace" => {
+            handle_load_trace(&req.id, &req.params, current_session, trace_store)
+        },
+        "saveTrace" => {
+            handle_save_trace(&req.id, &req.params, current_session, trace_store)
+        },
+        "listTraces" => {
+            handle_list_traces(&req.id, trace_store)
+        },
+        "renameTrace" => {
+            handle_rename_trace(&req.id, &req.params, trace_store)
+        },
+        "deleteTrace" => {
+            handle_delete_trace(&req.id, &req.params, trace_store)
+        },
+        "loadSavedTrace" => {
+            handle_load_saved_trace(&req.id, &req.params, current_session, trace_store)
         },
         _ => JsonRpcResponse {
             id: req.id.clone(),
@@ -863,7 +1115,7 @@ async fn handle_train(
         .as_millis() as u64;
 
     // Create new session
-    let session = Arc::new(TrainingSession::new(learning_rate, storage_strategy));
+    let session = Arc::new(TrainingSession::new(inputs.clone(), targets.clone(), learning_rate, storage_strategy));
     {
         let mut current = current_session.lock().unwrap();
         // Stop any existing training
@@ -897,6 +1149,688 @@ async fn handle_train(
             id: handle_id,
             started_at,
         }).unwrap()),
+        error: None,
+    }
+}
+
+/// Handle loadTrace RPC - loads a trace file and reconstructs model state.
+///
+/// This allows the server to load a previously saved trace and continue training
+/// from where it left off (though optimizer state like Adam momentum is not preserved).
+fn handle_load_trace(
+    id: &str,
+    params: &Value,
+    current_session: &Arc<std::sync::Mutex<Option<Arc<TrainingSession>>>>,
+    trace_store: &Arc<std::sync::Mutex<TraceStore>>,
+) -> JsonRpcResponse {
+    // Get optional name for the trace (from uploaded filename)
+    let trace_name = params.get("name")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| format!("trace-{}", std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()));
+
+    // Parse trace JSON from params
+    let trace_json = match params.get("trace") {
+        Some(v) => v.clone(),
+        None => return JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32602,
+                message: "Missing 'trace' parameter".to_string(),
+            }),
+        },
+    };
+
+    // Optional: which step to load (defaults to min_step for best result)
+    let load_step = params.get("step")
+        .and_then(|v| v.as_str())
+        .unwrap_or("best");
+
+    // Detect and parse trace format
+    let trace_data = if trace_json.get("version").is_some() && trace_json.get("config").is_some() {
+        // V2 format
+        match serde_json::from_value::<TraceFileV2>(trace_json) {
+            Ok(t) => TraceData::V2(t),
+            Err(e) => return JsonRpcResponse {
+                id: id.to_string(),
+                result: None,
+                error: Some(JsonRpcError {
+                    code: -32602,
+                    message: format!("Invalid V2 trace format: {}", e),
+                }),
+            },
+        }
+    } else if trace_json.get("inputs").is_some() && trace_json.get("traces").is_some() {
+        // Train output format
+        match serde_json::from_value::<TrainResult>(trace_json) {
+            Ok(t) => TraceData::Train(t),
+            Err(e) => return JsonRpcResponse {
+                id: id.to_string(),
+                result: None,
+                error: Some(JsonRpcError {
+                    code: -32602,
+                    message: format!("Invalid train output format: {}", e),
+                }),
+            },
+        }
+    } else {
+        return JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32602,
+                message: "Unknown trace format: expected V2 (version+config) or train output (inputs+traces)".to_string(),
+            }),
+        };
+    };
+
+    // Capture format name before potential move
+    let format_name = trace_data.format_name().to_string();
+
+    // Determine which step to load
+    let target_step = match load_step {
+        "best" => trace_data.min_step(),
+        "last" => trace_data.total_steps().saturating_sub(1),
+        "first" | "0" => 0,
+        s => match s.parse::<usize>() {
+            Ok(n) => n.min(trace_data.total_steps().saturating_sub(1)),
+            Err(_) => trace_data.min_step(),
+        },
+    };
+
+    // Get keyframes and find the one at or before target_step
+    let keyframes = trace_data.keyframes();
+    let keyframe = keyframes
+        .iter()
+        .filter(|k| k.step_index <= target_step)
+        .max_by_key(|k| k.step_index);
+
+    let (shapes_json, kf_step) = match keyframe {
+        Some(kf) => (kf.shapes.clone(), kf.step_index),
+        None => {
+            // No keyframe found, use first available or return error
+            if let Some(first) = keyframes.first() {
+                (first.shapes.clone(), first.step_index)
+            } else {
+                return JsonRpcResponse {
+                    id: id.to_string(),
+                    result: None,
+                    error: Some(JsonRpcError {
+                        code: -32000,
+                        message: "No keyframes found in trace".to_string(),
+                    }),
+                };
+            }
+        }
+    };
+
+    // Parse shapes from keyframe
+    let shapes: Vec<Shape<f64>> = match shapes_json
+        .iter()
+        .map(|v| serde_json::from_value(v.clone()))
+        .collect::<Result<Vec<_>, _>>()
+    {
+        Ok(s) => s,
+        Err(e) => return JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32000,
+                message: format!("Failed to parse shapes from keyframe: {}", e),
+            }),
+        },
+    };
+
+    // Convert to InputSpec (assume all coordinates trainable, matching original)
+    let inputs: Vec<InputSpec> = trace_data.inputs().clone();
+
+    // Update shapes in inputs to match loaded keyframe
+    let inputs_with_loaded_shapes: Vec<InputSpec> = inputs
+        .iter()
+        .zip(shapes.iter())
+        .map(|((_, trainable), shape)| (shape.clone(), trainable.clone()))
+        .collect();
+
+    let targets = trace_data.targets().clone();
+    let learning_rate = trace_data.learning_rate();
+
+    // Create initial step from loaded shapes
+    let step = match Step::new(inputs_with_loaded_shapes.clone(), targets.clone().into()) {
+        Ok(s) => s,
+        Err(e) => return JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32000,
+                message: format!("Failed to create step from loaded shapes: {}", e),
+            }),
+        },
+    };
+
+    // Recompute forward from keyframe to target step if needed
+    let mut current_step = step;
+    for _ in kf_step..target_step {
+        match current_step.step(learning_rate) {
+            Ok(next) => current_step = next,
+            Err(e) => return JsonRpcResponse {
+                id: id.to_string(),
+                result: None,
+                error: Some(JsonRpcError {
+                    code: -32000,
+                    message: format!("Failed to recompute to step {}: {}", target_step, e),
+                }),
+            },
+        }
+    }
+
+    // Create new training session
+    let session = Arc::new(TrainingSession::new(inputs.clone(), targets.clone(), learning_rate, StorageStrategy::Tiered));
+
+    // Record the loaded step
+    session.record_step(target_step, current_step.clone(), current_step.error.v());
+
+    // Also populate storage with keyframes from the trace for time-travel
+    for kf in &keyframes {
+        if kf.step_index != target_step {
+            // Parse shapes and create step for storage
+            if let Ok(kf_shapes) = kf.shapes
+                .iter()
+                .map(|v| serde_json::from_value::<Shape<f64>>(v.clone()))
+                .collect::<Result<Vec<_>, _>>()
+            {
+                let kf_inputs: Vec<InputSpec> = inputs
+                    .iter()
+                    .zip(kf_shapes.iter())
+                    .map(|((_, trainable), shape)| (shape.clone(), trainable.clone()))
+                    .collect();
+
+                if let Ok(kf_step_obj) = Step::new(kf_inputs, targets.clone().into()) {
+                    session.record_step(kf.step_index, kf_step_obj.clone(), kf.error.unwrap_or(kf_step_obj.error.v()));
+                }
+            }
+        }
+    }
+
+    // Install the session
+    {
+        let mut current = current_session.lock().unwrap();
+        if let Some(old_session) = current.take() {
+            old_session.request_stop();
+        }
+        *current = Some(session);
+    }
+
+    // Build response with geometry
+    let num_shapes = current_step.shapes.len();
+    let region_key_to_exclusive = |key: &str| -> String {
+        let included: std::collections::HashSet<char> = key.chars().collect();
+        (0..num_shapes)
+            .map(|i| {
+                let ch = char::from_digit(i as u32, 10).unwrap();
+                if included.contains(&ch) { ch } else { '-' }
+            })
+            .collect()
+    };
+
+    let mut region_infos: Vec<RegionInfo> = Vec::new();
+    for component in &current_step.components {
+        for region in &component.regions {
+            let exclusive_key = region_key_to_exclusive(&region.key);
+            let error_info = current_step.errors.get(&exclusive_key);
+            region_infos.push(RegionInfo {
+                key: region.key.clone(),
+                area: region.area,
+                target_area: error_info.map(|e| e.target_area),
+                error: error_info.map(|e| e.error.v()).unwrap_or(0.0),
+            });
+        }
+    }
+
+    let shapes_json: Vec<Value> = current_step.shapes.iter()
+        .map(|s| serde_json::to_value(s.v()).unwrap())
+        .collect();
+
+    // Auto-save the loaded trace
+    let saved_meta = {
+        let mut store = trace_store.lock().unwrap();
+        store.save(trace_data, trace_name)
+    };
+
+    let result = serde_json::json!({
+        "loaded": true,
+        "traceId": saved_meta.trace_id,
+        "format": format_name,
+        "loadedStep": target_step,
+        "totalSteps": saved_meta.total_steps,
+        "minStep": saved_meta.min_step,
+        "minError": saved_meta.min_error,
+        "keyframeCount": keyframes.len(),
+        "step": StepStateWithGeometry {
+            step_index: target_step,
+            error: current_step.error.v(),
+            shapes: shapes_json,
+            is_keyframe: true,
+            geometry: StepGeometry {
+                components: current_step.components.clone(),
+                regions: region_infos,
+            },
+        },
+    });
+
+    JsonRpcResponse {
+        id: id.to_string(),
+        result: Some(result),
+        error: None,
+    }
+}
+
+/// Handle saveTrace RPC - save current session's trace.
+fn handle_save_trace(
+    id: &str,
+    params: &Value,
+    current_session: &Arc<std::sync::Mutex<Option<Arc<TrainingSession>>>>,
+    trace_store: &Arc<std::sync::Mutex<TraceStore>>,
+) -> JsonRpcResponse {
+    let name = params.get("name")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| format!("trace-{}", std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()));
+
+    // Get current session
+    let current = current_session.lock().unwrap();
+    let session = match current.as_ref() {
+        Some(s) => s,
+        None => return JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32000,
+                message: "No active training session to save".to_string(),
+            }),
+        },
+    };
+
+    // Get session metadata
+    let metadata = session.get_metadata();
+    let min_step = metadata.min_index;
+    let min_error = metadata.min_error;
+    let total_steps = metadata.total_steps;
+
+    // Get the best step (min error) from storage
+    let best_step = match session.get_step(min_step) {
+        Ok(s) => s,
+        Err(e) => return JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32000,
+                message: format!("Failed to get best step: {}", e),
+            }),
+        },
+    };
+
+    // Build keyframe from best step
+    let shapes_json: Vec<Value> = best_step.shapes.iter()
+        .map(|s| serde_json::to_value(s.v()).unwrap())
+        .collect();
+
+    let keyframe = crate::trace::Keyframe {
+        step_index: min_step,
+        shapes: shapes_json,
+        error: Some(min_error),
+    };
+
+    // Build V2 trace
+    let trace_v2 = crate::trace::TraceFileV2 {
+        version: 2,
+        created: Some(format!("{}", std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis())),
+        config: crate::trace::TraceConfig {
+            inputs: session.inputs.clone(),
+            targets: session.targets.clone(),
+            learning_rate: session.learning_rate,
+            convergence_threshold: 1e-10,
+        },
+        btd_keyframes: vec![keyframe.clone()],
+        interval_keyframes: vec![],
+        total_steps,
+        min_error,
+        min_step,
+        tiering: None,
+        errors: None,
+    };
+
+    // Convert to TraceData and save
+    let trace_data = TraceData::V2(trace_v2);
+    let saved_meta = {
+        let mut store = trace_store.lock().unwrap();
+        store.save(trace_data, name)
+    };
+
+    JsonRpcResponse {
+        id: id.to_string(),
+        result: Some(serde_json::json!({
+            "traceId": saved_meta.trace_id,
+            "name": saved_meta.name,
+            "savedAt": saved_meta.saved_at,
+        })),
+        error: None,
+    }
+}
+
+/// Handle listTraces RPC - list all saved traces.
+fn handle_list_traces(
+    id: &str,
+    trace_store: &Arc<std::sync::Mutex<TraceStore>>,
+) -> JsonRpcResponse {
+    let store = trace_store.lock().unwrap();
+    let traces = store.list();
+
+    JsonRpcResponse {
+        id: id.to_string(),
+        result: Some(serde_json::json!({
+            "traces": traces
+        })),
+        error: None,
+    }
+}
+
+/// Handle renameTrace RPC - rename a saved trace.
+fn handle_rename_trace(
+    id: &str,
+    params: &Value,
+    trace_store: &Arc<std::sync::Mutex<TraceStore>>,
+) -> JsonRpcResponse {
+    let trace_id = match params.get("traceId").and_then(|v| v.as_str()) {
+        Some(id) => id,
+        None => return JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32602,
+                message: "Missing 'traceId' parameter".to_string(),
+            }),
+        },
+    };
+
+    let name = match params.get("name").and_then(|v| v.as_str()) {
+        Some(n) => n.to_string(),
+        None => return JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32602,
+                message: "Missing 'name' parameter".to_string(),
+            }),
+        },
+    };
+
+    let mut store = trace_store.lock().unwrap();
+    match store.rename(trace_id, name) {
+        Some(meta) => JsonRpcResponse {
+            id: id.to_string(),
+            result: Some(serde_json::to_value(meta).unwrap()),
+            error: None,
+        },
+        None => JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32000,
+                message: format!("Trace not found: {}", trace_id),
+            }),
+        },
+    }
+}
+
+/// Handle deleteTrace RPC - delete a saved trace.
+fn handle_delete_trace(
+    id: &str,
+    params: &Value,
+    trace_store: &Arc<std::sync::Mutex<TraceStore>>,
+) -> JsonRpcResponse {
+    let trace_id = match params.get("traceId").and_then(|v| v.as_str()) {
+        Some(id) => id,
+        None => return JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32602,
+                message: "Missing 'traceId' parameter".to_string(),
+            }),
+        },
+    };
+
+    let mut store = trace_store.lock().unwrap();
+    if store.delete(trace_id) {
+        JsonRpcResponse {
+            id: id.to_string(),
+            result: Some(serde_json::json!({ "deleted": true })),
+            error: None,
+        }
+    } else {
+        JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32000,
+                message: format!("Trace not found: {}", trace_id),
+            }),
+        }
+    }
+}
+
+/// Handle loadSavedTrace RPC - load a previously saved trace by ID.
+fn handle_load_saved_trace(
+    id: &str,
+    params: &Value,
+    current_session: &Arc<std::sync::Mutex<Option<Arc<TrainingSession>>>>,
+    trace_store: &Arc<std::sync::Mutex<TraceStore>>,
+) -> JsonRpcResponse {
+    let trace_id = match params.get("traceId").and_then(|v| v.as_str()) {
+        Some(id) => id,
+        None => return JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32602,
+                message: "Missing 'traceId' parameter".to_string(),
+            }),
+        },
+    };
+
+    let load_step = params.get("step")
+        .and_then(|v| v.as_str())
+        .unwrap_or("best");
+
+    // Get trace from store
+    let store = trace_store.lock().unwrap();
+    let saved_trace = match store.get(trace_id) {
+        Some(t) => t,
+        None => return JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32000,
+                message: format!("Trace not found: {}", trace_id),
+            }),
+        },
+    };
+
+    let trace_data = &saved_trace.data;
+    let trace_meta = saved_trace.meta.clone();
+
+    // Determine which step to load
+    let target_step = match load_step {
+        "best" => trace_data.min_step(),
+        "last" => trace_data.total_steps().saturating_sub(1),
+        "first" | "0" => 0,
+        s => match s.parse::<usize>() {
+            Ok(n) => n.min(trace_data.total_steps().saturating_sub(1)),
+            Err(_) => trace_data.min_step(),
+        },
+    };
+
+    // Get keyframes and find the one at or before target_step
+    let keyframes = trace_data.keyframes();
+    let keyframe = keyframes
+        .iter()
+        .filter(|k| k.step_index <= target_step)
+        .max_by_key(|k| k.step_index);
+
+    let (shapes_json, kf_step) = match keyframe {
+        Some(kf) => (kf.shapes.clone(), kf.step_index),
+        None => {
+            if let Some(first) = keyframes.first() {
+                (first.shapes.clone(), first.step_index)
+            } else {
+                return JsonRpcResponse {
+                    id: id.to_string(),
+                    result: None,
+                    error: Some(JsonRpcError {
+                        code: -32000,
+                        message: "No keyframes found in trace".to_string(),
+                    }),
+                };
+            }
+        }
+    };
+
+    // Parse shapes from keyframe
+    let shapes: Vec<Shape<f64>> = match shapes_json
+        .iter()
+        .map(|v| serde_json::from_value(v.clone()))
+        .collect::<Result<Vec<_>, _>>()
+    {
+        Ok(s) => s,
+        Err(e) => return JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32000,
+                message: format!("Failed to parse shapes from keyframe: {}", e),
+            }),
+        },
+    };
+
+    let inputs = trace_data.inputs().clone();
+    let inputs_with_loaded_shapes: Vec<InputSpec> = inputs
+        .iter()
+        .zip(shapes.iter())
+        .map(|((_, trainable), shape)| (shape.clone(), trainable.clone()))
+        .collect();
+
+    let targets = trace_data.targets().clone();
+    let learning_rate = trace_data.learning_rate();
+
+    // Drop the store lock before creating session
+    drop(store);
+
+    // Create initial step from loaded shapes
+    let step = match Step::new(inputs_with_loaded_shapes.clone(), targets.clone().into()) {
+        Ok(s) => s,
+        Err(e) => return JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32000,
+                message: format!("Failed to create step from loaded shapes: {}", e),
+            }),
+        },
+    };
+
+    // Recompute forward from keyframe to target step if needed
+    let mut current_step = step;
+    for _ in kf_step..target_step {
+        match current_step.step(learning_rate) {
+            Ok(next) => current_step = next,
+            Err(e) => return JsonRpcResponse {
+                id: id.to_string(),
+                result: None,
+                error: Some(JsonRpcError {
+                    code: -32000,
+                    message: format!("Failed to recompute to step {}: {}", target_step, e),
+                }),
+            },
+        }
+    }
+
+    // Create new training session
+    let session = Arc::new(TrainingSession::new(inputs.clone(), targets.clone(), learning_rate, StorageStrategy::Tiered));
+    session.record_step(target_step, current_step.clone(), current_step.error.v());
+
+    // Install the session
+    {
+        let mut current = current_session.lock().unwrap();
+        if let Some(old_session) = current.take() {
+            old_session.request_stop();
+        }
+        *current = Some(session);
+    }
+
+    // Build response with geometry
+    let num_shapes = current_step.shapes.len();
+    let region_key_to_exclusive = |key: &str| -> String {
+        let included: std::collections::HashSet<char> = key.chars().collect();
+        (0..num_shapes)
+            .map(|i| {
+                let ch = char::from_digit(i as u32, 10).unwrap();
+                if included.contains(&ch) { ch } else { '-' }
+            })
+            .collect()
+    };
+
+    let mut region_infos: Vec<RegionInfo> = Vec::new();
+    for component in &current_step.components {
+        for region in &component.regions {
+            let exclusive_key = region_key_to_exclusive(&region.key);
+            let error_info = current_step.errors.get(&exclusive_key);
+            region_infos.push(RegionInfo {
+                key: region.key.clone(),
+                area: region.area,
+                target_area: error_info.map(|e| e.target_area),
+                error: error_info.map(|e| e.error.v()).unwrap_or(0.0),
+            });
+        }
+    }
+
+    let result_shapes: Vec<Value> = current_step.shapes.iter()
+        .map(|s| serde_json::to_value(s.v()).unwrap())
+        .collect();
+
+    let result = serde_json::json!({
+        "loaded": true,
+        "traceId": trace_meta.trace_id,
+        "name": trace_meta.name,
+        "loadedStep": target_step,
+        "totalSteps": trace_meta.total_steps,
+        "minStep": trace_meta.min_step,
+        "minError": trace_meta.min_error,
+        "keyframeCount": keyframes.len(),
+        "step": StepStateWithGeometry {
+            step_index: target_step,
+            error: current_step.error.v(),
+            shapes: result_shapes,
+            is_keyframe: true,
+            geometry: StepGeometry {
+                components: current_step.components.clone(),
+                regions: region_infos,
+            },
+        },
+    });
+
+    JsonRpcResponse {
+        id: id.to_string(),
+        result: Some(result),
         error: None,
     }
 }
