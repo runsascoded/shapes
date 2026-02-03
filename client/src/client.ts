@@ -19,6 +19,13 @@ import type {
   TargetsMap,
   BatchTrainingRequest,
   BatchTrainingResult,
+  TraceExport,
+  StepSelector,
+  LoadTraceResult,
+  SaveTraceResult,
+  TraceListResult,
+  RenameTraceResult,
+  DeleteTraceResult,
 } from "./types";
 
 // ============================================================================
@@ -202,6 +209,34 @@ export class WebSocketTrainingClient implements TrainingClient {
 
   async getTraceInfo(handle: TrainingHandle): Promise<TraceInfo> {
     return this.sendRequest<TraceInfo>("getTraceInfo", { handleId: handle.id });
+  }
+
+  // ==========================================================================
+  // Trace Management
+  // ==========================================================================
+
+  async loadTrace(trace: TraceExport, step: StepSelector = "best", name?: string): Promise<LoadTraceResult> {
+    return this.sendRequest<LoadTraceResult>("loadTrace", { trace, step, name });
+  }
+
+  async loadSavedTrace(traceId: string, step: StepSelector = "best"): Promise<LoadTraceResult> {
+    return this.sendRequest<LoadTraceResult>("loadSavedTrace", { traceId, step });
+  }
+
+  async saveTrace(name?: string): Promise<SaveTraceResult> {
+    return this.sendRequest<SaveTraceResult>("saveTrace", { name });
+  }
+
+  async listTraces(): Promise<TraceListResult> {
+    return this.sendRequest<TraceListResult>("listTraces", {});
+  }
+
+  async renameTrace(traceId: string, name: string): Promise<RenameTraceResult> {
+    return this.sendRequest<RenameTraceResult>("renameTrace", { traceId, name });
+  }
+
+  async deleteTrace(traceId: string): Promise<DeleteTraceResult> {
+    return this.sendRequest<DeleteTraceResult>("deleteTrace", { traceId });
   }
 
   disconnect(): void {

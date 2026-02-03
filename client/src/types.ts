@@ -298,6 +298,104 @@ export interface BatchTrainingResult {
 }
 
 // ============================================================================
+// Trace Export Types
+// ============================================================================
+
+/** V1 trace format (dense keyframes + errors array) */
+export interface TraceExportV1 {
+  version: 1;
+  steps: TraceStepV1[];
+  minIdx: number;
+  minError: number;
+  repeatIdx: number | null;
+}
+
+export interface TraceStepV1 {
+  shapes: Shape[];
+  errors: Record<string, unknown>;
+  error: { v: number; d?: number[] };
+}
+
+/** V2 trace format (sparse BTD + interval keyframes) */
+export interface TraceExportV2 {
+  version: 2;
+  config: TraceConfigV2;
+  btdKeyframes: TraceKeyframeV2[];
+  intervalKeyframes: TraceKeyframeV2[];
+  totalSteps: number;
+  minStep: number;
+  minError: number;
+}
+
+export interface TraceConfigV2 {
+  inputs: InputSpec[];
+  targets: TargetsMap;
+  learningRate: number;
+}
+
+export interface TraceKeyframeV2 {
+  step: number;
+  shapes: Shape[];
+  error: number;
+}
+
+export type TraceExport = TraceExportV1 | TraceExportV2;
+
+/** Step selection for loading traces */
+export type StepSelector = "best" | "last" | "first" | number;
+
+// ============================================================================
+// Trace Management Types
+// ============================================================================
+
+/** Result from loading a trace */
+export interface LoadTraceResult {
+  loaded: true;
+  traceId: string;
+  format: "v1" | "v2-btd";
+  loadedStep: number;
+  totalSteps: number;
+  minStep: number;
+  minError: number;
+  keyframeCount: number;
+  step: StepStateWithGeometry;
+}
+
+/** Result from saving a trace */
+export interface SaveTraceResult {
+  traceId: string;
+  name: string;
+  savedAt: string;
+}
+
+/** Summary of a saved trace */
+export interface TraceSummary {
+  traceId: string;
+  name: string;
+  savedAt: string;
+  totalSteps: number;
+  minError: number;
+  numShapes: number;
+  shapeTypes: string[];
+}
+
+/** Result from listing traces */
+export interface TraceListResult {
+  traces: TraceSummary[];
+}
+
+/** Result from renaming a trace */
+export interface RenameTraceResult {
+  traceId: string;
+  name: string;
+}
+
+/** Result from deleting a trace */
+export interface DeleteTraceResult {
+  deleted: true;
+}
+
+// ============================================================================
 // Client Interface
 // ============================================================================
 
@@ -342,6 +440,41 @@ export interface TrainingClient {
 
   /** Get trace metadata (BTD indices, total steps, etc.) */
   getTraceInfo(handle: TrainingHandle): Promise<TraceInfo>;
+
+  // ==========================================================================
+  // Trace Management (server mode only)
+  // ==========================================================================
+
+  /**
+   * Load a trace and reconstruct model state for continued training.
+   * Server auto-saves the trace on load.
+   */
+  loadTrace(trace: TraceExport, step?: StepSelector, name?: string): Promise<LoadTraceResult>;
+
+  /**
+   * Load a previously saved trace by ID.
+   */
+  loadSavedTrace(traceId: string, step?: StepSelector): Promise<LoadTraceResult>;
+
+  /**
+   * Save the current trace (after training) with an optional name.
+   */
+  saveTrace(name?: string): Promise<SaveTraceResult>;
+
+  /**
+   * List all saved traces for the current session.
+   */
+  listTraces(): Promise<TraceListResult>;
+
+  /**
+   * Rename a saved trace.
+   */
+  renameTrace(traceId: string, name: string): Promise<RenameTraceResult>;
+
+  /**
+   * Delete a saved trace.
+   */
+  deleteTrace(traceId: string): Promise<DeleteTraceResult>;
 
   /** Disconnect and clean up resources */
   disconnect(): void;

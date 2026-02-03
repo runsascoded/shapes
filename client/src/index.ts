@@ -87,6 +87,23 @@ export type {
   StepGeometry,
   StepStateWithGeometry,
 
+  // Trace export types
+  TraceExportV1,
+  TraceStepV1,
+  TraceExportV2,
+  TraceConfigV2,
+  TraceKeyframeV2,
+  TraceExport,
+  StepSelector,
+
+  // Trace management types
+  LoadTraceResult,
+  SaveTraceResult,
+  TraceSummary,
+  TraceListResult,
+  RenameTraceResult,
+  DeleteTraceResult,
+
   // Client interface
   TrainingClient,
   Unsubscribe,
