@@ -29,7 +29,7 @@ import type {
 } from "@apvd/client";
 
 // WASM module will be imported dynamically
-let wasm: typeof import("apvd-wasm") | null = null;
+let wasm: typeof import("@apvd/wasm") | null = null;
 
 // Active training sessions
 interface TrainingSession {
@@ -83,7 +83,7 @@ async function initWasm(): Promise<void> {
 
   try {
     // Dynamic import - the actual path will be resolved by the bundler
-    wasm = await import("apvd-wasm");
+    wasm = await import("@apvd/wasm");
     wasm.init_logs();
   } catch (e) {
     throw new Error(`Failed to load WASM: ${e}`);

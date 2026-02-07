@@ -5,7 +5,7 @@
  * - Core types for the TrainingClient interface
  * - WebSocketTrainingClient for connecting to native Rust server (apvd serve)
  *
- * For WASM/Worker-based training in the browser, use the apvd-wasm package
+ * For WASM/Worker-based training in the browser, use @apvd/worker
  * which provides WorkerTrainingClient.
  *
  * @example
@@ -103,6 +103,8 @@ export type {
   TraceListResult,
   RenameTraceResult,
   DeleteTraceResult,
+  SampleTraceSummary,
+  SampleTraceListResult,
 
   // Client interface
   TrainingClient,
@@ -116,7 +118,7 @@ export type {
   // Version info
   VersionInfo,
 
-  // Worker message types (for apvd-wasm)
+  // Worker message types (for @apvd/worker)
   WorkerRequest,
   WorkerResponse,
 } from "./types";

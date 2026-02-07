@@ -1,8 +1,8 @@
 /**
- * Type declarations for apvd-wasm module.
+ * Type declarations for @apvd/wasm module.
  * The actual module is the WASM build output (../pkg/).
  */
-declare module "apvd-wasm" {
+declare module "@apvd/wasm" {
   /** Initialize logging */
   export function init_logs(): void;
 

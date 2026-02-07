@@ -54,9 +54,10 @@ jobs:
       - name: Update package.json exports
         run: |
           # TypeScript already compiled to pkg via tsconfig outDir
-          # Update package.json to include the new exports
+          # Update package.json to include the new exports and scoped name
           cd apvd-wasm/pkg
-          jq '.repository.directory = "apvd-wasm/pkg" |
+          jq '.name = "@apvd/wasm" |
+              .repository.directory = "apvd-wasm/pkg" |
               .exports = {
                 ".": {
                   "types": "./apvd_wasm.d.ts",

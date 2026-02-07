@@ -26,6 +26,7 @@ import type {
   TraceListResult,
   RenameTraceResult,
   DeleteTraceResult,
+  SampleTraceListResult,
 } from "./types";
 
 // ============================================================================
@@ -239,6 +240,18 @@ export class WebSocketTrainingClient implements TrainingClient {
     return this.sendRequest<DeleteTraceResult>("deleteTrace", { traceId });
   }
 
+  // ==========================================================================
+  // Sample Traces
+  // ==========================================================================
+
+  async listSampleTraces(): Promise<SampleTraceListResult> {
+    return this.sendRequest<SampleTraceListResult>("listSampleTraces", {});
+  }
+
+  async loadSampleTrace(filename: string, step: StepSelector = "best"): Promise<LoadTraceResult> {
+    return this.sendRequest<LoadTraceResult>("loadSampleTrace", { filename, step });
+  }
+
   disconnect(): void {
     this.ws?.close();
     this.ws = null;
@@ -263,14 +276,14 @@ export class WebSocketTrainingClient implements TrainingClient {
  * });
  *
  * Note: For Worker transport (WASM in browser), use createWorkerTrainingClient
- * from the apvd-wasm package instead.
+ * from the @apvd/worker package instead.
  */
 export function createTrainingClient(config: TransportConfig): TrainingClient {
   switch (config.transport) {
     case "worker":
       throw new Error(
         "Worker transport is not available in @apvd/client. " +
-        "Use createWorkerTrainingClient from apvd-wasm instead."
+        "Use createWorkerTrainingClient from @apvd/worker instead."
       );
 
     case "websocket":

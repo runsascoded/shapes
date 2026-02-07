@@ -2,7 +2,7 @@
  * WorkerTrainingClient - Training client using Web Worker + WASM.
  *
  * This client runs training in a background worker thread using the
- * apvd-wasm module for computation.
+ * @apvd/wasm module for computation.
  */
 
 import type {

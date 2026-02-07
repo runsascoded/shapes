@@ -1,11 +1,9 @@
 /**
- * apvd-wasm TypeScript exports
- *
- * This module provides the WorkerTrainingClient for running training
- * in a Web Worker using the apvd-wasm module.
+ * @apvd/worker - WorkerTrainingClient for running training
+ * in a Web Worker using the @apvd/wasm module.
  *
  * @example
- * import { createWorkerTrainingClient } from "apvd-wasm";
+ * import { createWorkerTrainingClient } from "@apvd/worker";
  *
  * const client = createWorkerTrainingClient();
  * const model = await client.createModel(inputs, targets);
