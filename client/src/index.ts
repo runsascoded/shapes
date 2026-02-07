@@ -68,6 +68,8 @@ export type {
   BatchTrainingRequest,
   BatchStep,
   BatchTrainingResult,
+  SparklineData,
+  ContinueTrainingResult,
 
   // Progress/Result types
   ProgressUpdate,

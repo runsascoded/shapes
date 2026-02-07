@@ -11,6 +11,18 @@
 
 export { WorkerTrainingClient, createWorkerTrainingClient } from "./client";
 
+// Dual number extraction utilities (for unwrapping WASM Shape<Dual> → Shape<number>)
+export {
+  extractNumber,
+  extractPoint,
+  extractShape,
+  extractShapes,
+  tier,
+  resolution,
+  isKeyframe,
+  nearestKeyframe,
+} from "./worker";
+
 // Re-export types from @apvd/client for convenience
 export type {
   TrainingClient,
@@ -24,4 +36,8 @@ export type {
   Shape,
   InputSpec,
   TargetsMap,
+  BatchTrainingRequest,
+  BatchTrainingResult,
+  ContinueTrainingResult,
+  SparklineData,
 } from "@apvd/client";

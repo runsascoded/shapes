@@ -19,6 +19,7 @@ import type {
   TargetsMap,
   BatchTrainingRequest,
   BatchTrainingResult,
+  ContinueTrainingResult,
   TraceExport,
   StepSelector,
   LoadTraceResult,
@@ -183,6 +184,10 @@ export class WebSocketTrainingClient implements TrainingClient {
 
   async trainBatch(request: BatchTrainingRequest): Promise<BatchTrainingResult> {
     return this.sendRequest<BatchTrainingResult>("trainBatch", request);
+  }
+
+  async continueTraining(handle: TrainingHandle, numSteps: number): Promise<ContinueTrainingResult> {
+    return this.sendRequest<ContinueTrainingResult>("continueTraining", { handleId: handle.id, numSteps });
   }
 
   async startTraining(request: TrainingRequest): Promise<TrainingHandle> {

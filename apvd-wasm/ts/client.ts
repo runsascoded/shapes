@@ -20,6 +20,7 @@ import type {
   TargetsMap,
   BatchTrainingRequest,
   BatchTrainingResult,
+  ContinueTrainingResult,
 } from "@apvd/client";
 
 export class WorkerTrainingClient implements TrainingClient {
@@ -31,10 +32,13 @@ export class WorkerTrainingClient implements TrainingClient {
   private progressCallbacks = new Set<(update: ProgressUpdate) => void>();
   private requestIdCounter = 0;
 
-  constructor(workerUrl?: string | URL) {
-    // Create worker - URL should point to the compiled worker.js
-    const url = workerUrl ?? new URL("./worker.js", import.meta.url);
-    this.worker = new Worker(url, { type: "module" });
+  constructor(workerOrUrl?: Worker | string | URL) {
+    if (workerOrUrl instanceof Worker) {
+      this.worker = workerOrUrl;
+    } else {
+      const url = workerOrUrl ?? new URL("./worker.js", import.meta.url);
+      this.worker = new Worker(url, { type: "module" });
+    }
 
     this.worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
       const { id, type, payload } = event.data;
@@ -86,6 +90,10 @@ export class WorkerTrainingClient implements TrainingClient {
     return this.sendRequest<BatchTrainingResult>("trainBatch", request);
   }
 
+  async continueTraining(handle: TrainingHandle, numSteps: number): Promise<ContinueTrainingResult> {
+    return this.sendRequest<ContinueTrainingResult>("continueTraining", { handleId: handle.id, numSteps });
+  }
+
   async startTraining(request: TrainingRequest): Promise<TrainingHandle> {
     const result = await this.sendRequest<{ handle: TrainingHandle }>("train", request);
     return result.handle;
@@ -118,6 +126,32 @@ export class WorkerTrainingClient implements TrainingClient {
     this.worker.terminate();
     this.pendingRequests.clear();
     this.progressCallbacks.clear();
+  }
+
+  // Trace persistence stubs (OPFS support planned)
+  async loadTrace(): Promise<never> {
+    throw new Error("loadTrace not implemented in Worker client - use uploadTrace() for file import");
+  }
+  async loadSavedTrace(): Promise<never> {
+    throw new Error("loadSavedTrace not implemented - OPFS persistence planned");
+  }
+  async saveTrace(): Promise<never> {
+    throw new Error("saveTrace not implemented - OPFS persistence planned");
+  }
+  async listTraces(): Promise<never> {
+    throw new Error("listTraces not implemented - OPFS persistence planned");
+  }
+  async renameTrace(): Promise<never> {
+    throw new Error("renameTrace not implemented - OPFS persistence planned");
+  }
+  async deleteTrace(): Promise<never> {
+    throw new Error("deleteTrace not implemented - OPFS persistence planned");
+  }
+  async listSampleTraces(): Promise<never> {
+    throw new Error("listSampleTraces not implemented in Worker client");
+  }
+  async loadSampleTrace(): Promise<never> {
+    throw new Error("loadSampleTrace not implemented in Worker client");
   }
 }
 

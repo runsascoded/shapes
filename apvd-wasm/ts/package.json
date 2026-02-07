@@ -11,6 +11,7 @@
   },
   "devDependencies": {
     "@apvd/client": "workspace:*",
+    "@apvd/wasm": "file:../pkg",
     "typescript": "^5.9.3"
   }
 }

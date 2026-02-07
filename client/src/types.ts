@@ -297,6 +297,30 @@ export interface BatchTrainingResult {
   sparklineData: SparklineData;
 }
 
+/** Result from continuing training on an existing session */
+export interface ContinueTrainingResult {
+  /** New total step count */
+  totalSteps: number;
+  /** Current step index */
+  currentStep: number;
+  /** Best error seen so far */
+  minError: number;
+  /** Step where best error was achieved */
+  minStep: number;
+  /** Shapes at current step */
+  currentShapes: Shape[];
+  /** Current error */
+  currentError: number;
+  /** Per-step data for sparklines and history */
+  steps: Array<{
+    stepIndex: number;
+    error: number;
+    shapes: Shape[];
+  }>;
+  /** Sparkline-ready data for visualization */
+  sparklineData?: SparklineData;
+}
+
 // ============================================================================
 // Trace Export Types
 // ============================================================================
@@ -436,6 +460,14 @@ export interface TrainingClient {
    */
   trainBatch(request: BatchTrainingRequest): Promise<BatchTrainingResult>;
 
+  /**
+   * Continue training an existing session for more steps.
+   *
+   * Uses the session's stored WASM model state, so optimizer momentum is preserved.
+   * Returns per-step data and sparkline info for visualization.
+   */
+  continueTraining(handle: TrainingHandle, numSteps: number): Promise<ContinueTrainingResult>;
+
   /** Start training with given inputs and targets (session-based, streaming) */
   startTraining(request: TrainingRequest): Promise<TrainingHandle>;
 
@@ -544,7 +576,7 @@ export type TransportConfig = WorkerTransportConfig | WebSocketTransportConfig;
 
 export interface WorkerRequest {
   id: string;
-  type: "createModel" | "trainBatch" | "train" | "stop" | "getStep" | "getStepWithGeometry" | "getTraceInfo";
+  type: "createModel" | "trainBatch" | "train" | "stop" | "getStep" | "getStepWithGeometry" | "getTraceInfo" | "continueTraining";
   payload: unknown;
 }
 

@@ -26,6 +26,8 @@ import type {
   BatchTrainingRequest,
   BatchTrainingResult,
   BatchStep,
+  ContinueTrainingResult,
+  SparklineData,
 } from "@apvd/client";
 
 // WASM module will be imported dynamically
@@ -34,8 +36,8 @@ let wasm: typeof import("@apvd/wasm") | null = null;
 // Active training sessions
 interface TrainingSession {
   id: string;
-  inputs: unknown;
-  targets: unknown;
+  inputs: InputSpec[];
+  targets: TargetsMap;
   params: TrainingRequest["params"];
   currentStep: number;
   totalSteps: number;
@@ -55,50 +57,160 @@ interface TrainingSession {
 
 const sessions = new Map<string, TrainingSession>();
 
+// ============================================================================
+// Dual number extraction (WASM returns Shape<Dual> where coordinates are {v, d})
+// ============================================================================
+
+/**
+ * Extracts plain JS number from a WASM value that may be wrapped in Dual { v: number }.
+ */
+export function extractNumber(val: unknown): number {
+  if (typeof val === "number") return val;
+  if (val && typeof val === "object" && "v" in val) return (val as { v: number }).v;
+  throw new Error(`Cannot extract number from ${JSON.stringify(val)}`);
+}
+
+export function extractPoint(pt: unknown): { x: number; y: number } {
+  const p = pt as { x: unknown; y: unknown };
+  return { x: extractNumber(p.x), y: extractNumber(p.y) };
+}
+
+/**
+ * Converts WASM Shape<Dual> to plain Shape<number> by extracting values.
+ */
+export function extractShape(wasmShape: unknown): Shape {
+  const s = wasmShape as { kind: string; c?: unknown; r?: unknown; t?: unknown; vertices?: unknown[] };
+  if (s.kind === "Circle") {
+    return {
+      kind: "Circle",
+      c: extractPoint(s.c),
+      r: extractNumber(s.r),
+    };
+  } else if (s.kind === "XYRR") {
+    return {
+      kind: "XYRR",
+      c: extractPoint(s.c),
+      r: extractPoint(s.r),
+    };
+  } else if (s.kind === "XYRRT") {
+    return {
+      kind: "XYRRT",
+      c: extractPoint(s.c),
+      r: extractPoint(s.r),
+      t: extractNumber(s.t),
+    };
+  } else {
+    // Polygon
+    const vertices = (s.vertices ?? []).map(v => extractPoint(v));
+    return { kind: "Polygon", vertices };
+  }
+}
+
+export function extractShapes(wasmShapes: unknown[]): Shape[] {
+  return wasmShapes.map(s => extractShape(s));
+}
+
+// ============================================================================
+// Sparkline data extraction
+// ============================================================================
+
+function extractSparklineData(
+  modelSteps: unknown[],
+  startIndex: number,
+): { gradients: number[][]; regionErrors: Record<string, number[]> } {
+  const gradients: number[][] = [];
+  const regionErrors: Record<string, number[]> = {};
+
+  for (let i = startIndex; i < modelSteps.length; i++) {
+    const wasmStep = modelSteps[i] as {
+      error: { v: number; d?: number[] };
+      errors: Map<string, { error: { v: number } }> | Record<string, { error: { v: number } }>;
+    };
+
+    gradients.push(wasmStep.error.d || []);
+
+    const errors = wasmStep.errors;
+    if (errors) {
+      const errorEntries = errors instanceof Map ? errors.entries() : Object.entries(errors);
+      for (const [regionKey, regionErr] of errorEntries) {
+        if (!regionErrors[regionKey]) {
+          regionErrors[regionKey] = [];
+        }
+        while (regionErrors[regionKey].length < i - startIndex) {
+          regionErrors[regionKey].push(0);
+        }
+        regionErrors[regionKey].push((regionErr as { error: { v: number } }).error.v);
+      }
+    }
+  }
+
+  return { gradients, regionErrors };
+}
+
+// ============================================================================
 // Tiered keyframe helpers
-function tier(step: number, b: number): number {
+// ============================================================================
+
+export function tier(step: number, b: number): number {
   if (step < 2 * b) return 0;
   return Math.floor(Math.log2(step / b));
 }
 
-function resolution(t: number): number {
+export function resolution(t: number): number {
   return 1 << t;
 }
 
-function isKeyframe(step: number, b: number): boolean {
+export function isKeyframe(step: number, b: number): boolean {
   const t = tier(step, b);
   const res = resolution(t);
   return step % res === 0;
 }
 
-function nearestKeyframe(step: number, b: number): number {
+export function nearestKeyframe(step: number, b: number): number {
   const t = tier(step, b);
   const res = resolution(t);
   return Math.floor(step / res) * res;
 }
 
-// Initialize WASM
+// ============================================================================
+// WASM initialization
+// ============================================================================
+
 async function initWasm(): Promise<void> {
   if (wasm) return;
 
   try {
     // Dynamic import - the actual path will be resolved by the bundler
     wasm = await import("@apvd/wasm");
+    // Call the WASM init function (default export) before using any exports
+    await (wasm as unknown as { default?: () => Promise<unknown> }).default?.();
     wasm.init_logs();
   } catch (e) {
     throw new Error(`Failed to load WASM: ${e}`);
   }
 }
 
-// Send response to main thread
+function getWasm(): any {
+  if (!wasm) throw new Error("WASM not initialized");
+  return wasm;
+}
+
+// ============================================================================
+// Worker message helpers
+// ============================================================================
+
 function respond(response: WorkerResponse): void {
   self.postMessage(response);
 }
 
-// Send progress update
-function sendProgress(session: TrainingSession, type: "progress" | "complete" | "error", errorMessage?: string, finalResult?: TrainingResult): void {
+function sendProgress(
+  session: TrainingSession,
+  type: "progress" | "complete" | "error",
+  errorMessage?: string,
+  finalResult?: TrainingResult,
+): void {
   const shapes = session.currentWasmStep
-    ? (session.currentWasmStep as { shapes: Shape[] }).shapes
+    ? extractShapes((session.currentWasmStep as { shapes: unknown[] }).shapes)
     : [];
 
   const update: ProgressUpdate = {
@@ -106,7 +218,9 @@ function sendProgress(session: TrainingSession, type: "progress" | "complete" | 
     type,
     currentStep: session.currentStep,
     totalSteps: session.totalSteps,
-    error: session.currentWasmStep ? (session.currentWasmStep as { error: { v: number } }).error.v : Infinity,
+    error: session.currentWasmStep
+      ? (session.currentWasmStep as { error: { v: number } }).error.v
+      : Infinity,
     minError: session.minError,
     minStep: session.minStep,
     shapes,
@@ -118,18 +232,21 @@ function sendProgress(session: TrainingSession, type: "progress" | "complete" | 
   respond({ id: session.id, type: "progress", payload: update });
 }
 
-// Handle training request
+// ============================================================================
+// Request handlers
+// ============================================================================
+
 async function handleTrain(id: string, request: TrainingRequest): Promise<void> {
   await initWasm();
+  const apvd = getWasm();
 
   const params = request.params ?? {};
   const maxSteps = params.maxSteps ?? 10000;
-  const learningRate = params.learningRate ?? 0.05;
+  const learningRate = params.learningRate ?? 0.5;
   const convergenceThreshold = params.convergenceThreshold ?? 1e-10;
   const progressInterval = params.progressInterval ?? 100;
-  const bucketSize = 1024; // Default tiered bucket size
+  const bucketSize = 1024;
 
-  // Create session
   const session: TrainingSession = {
     id,
     inputs: request.inputs,
@@ -149,8 +266,7 @@ async function handleTrain(id: string, request: TrainingRequest): Promise<void> 
   sessions.set(id, session);
 
   try {
-    // Create initial step
-    session.currentWasmStep = wasm!.make_step(request.inputs, request.targets);
+    session.currentWasmStep = apvd.make_step(request.inputs, request.targets);
     let currentError = (session.currentWasmStep as { error: { v: number } }).error.v;
     session.minError = currentError;
 
@@ -158,47 +274,46 @@ async function handleTrain(id: string, request: TrainingRequest): Promise<void> 
     session.history.push({
       stepIndex: 0,
       error: currentError,
-      shapes: JSON.parse(JSON.stringify((session.currentWasmStep as { shapes: Shape[] }).shapes)),
+      shapes: extractShapes((session.currentWasmStep as { shapes: unknown[] }).shapes),
     });
     session.btdSteps.push(0);
 
-    // Send initial progress
     sendProgress(session, "progress");
 
-    // Training loop
+    // Return handle immediately so client can start querying steps
+    respond({ id, type: "result", payload: { handle: { id, startedAt: session.startTime } } });
+
+    // Training loop (runs asynchronously after returning handle)
     for (let step = 1; step <= maxSteps && !session.stopped; step++) {
-      // Take a step
-      session.currentWasmStep = wasm!.step(session.currentWasmStep, learningRate);
+      // Error-scaled stepping: step_size = current_error * learningRate
+      const prevError = (session.currentWasmStep as { error: { v: number } }).error.v;
+      const scaledStepSize = prevError * learningRate;
+      session.currentWasmStep = apvd.step(session.currentWasmStep, scaledStepSize);
       session.currentStep = step;
       currentError = (session.currentWasmStep as { error: { v: number } }).error.v;
 
-      // Track BTD (best to date)
       if (currentError < session.minError) {
         session.minError = currentError;
         session.minStep = step;
         session.btdSteps.push(step);
       }
 
-      // Store keyframe if tiered storage says so
       if (isKeyframe(step, bucketSize) || step === maxSteps) {
         session.history.push({
           stepIndex: step,
           error: currentError,
-          shapes: JSON.parse(JSON.stringify((session.currentWasmStep as { shapes: Shape[] }).shapes)),
+          shapes: extractShapes((session.currentWasmStep as { shapes: unknown[] }).shapes),
         });
       }
 
-      // Send progress update at intervals or on BTD improvement
       if (step % progressInterval === 0 || currentError < session.minError || step === maxSteps) {
         sendProgress(session, "progress");
       }
 
-      // Check convergence
       if (currentError < convergenceThreshold) {
         break;
       }
 
-      // Yield to event loop periodically to allow stop messages
       if (step % 100 === 0) {
         await new Promise(resolve => setTimeout(resolve, 0));
       }
@@ -211,12 +326,11 @@ async function handleTrain(id: string, request: TrainingRequest): Promise<void> 
       tiered: session.tieredConfig,
     };
 
-    // Get shapes at min step (may need to retrieve from history)
     const minStepEntry = session.history.find(h => h.stepIndex === session.minStep)
       || session.history.find(h => h.stepIndex === nearestKeyframe(session.minStep, bucketSize));
     const bestShapes = minStepEntry
       ? minStepEntry.shapes as Shape[]
-      : (session.currentWasmStep as { shapes: Shape[] }).shapes;
+      : extractShapes((session.currentWasmStep as { shapes: unknown[] }).shapes);
 
     const finalResult: TrainingResult = {
       success: true,
@@ -230,16 +344,16 @@ async function handleTrain(id: string, request: TrainingRequest): Promise<void> 
     };
 
     sendProgress(session, "complete", undefined, finalResult);
-    respond({ id, type: "result", payload: { handle: { id, startedAt: session.startTime } } });
-
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : String(e);
     sendProgress(session, "error", errorMessage);
-    respond({ id, type: "error", payload: { message: errorMessage } });
+    // Only respond with error if we haven't already responded with handle
+    if (!session.currentWasmStep) {
+      respond({ id, type: "error", payload: { message: errorMessage } });
+    }
   }
 }
 
-// Handle stop request
 function handleStop(id: string, handleId: string): void {
   const session = sessions.get(handleId);
   if (session) {
@@ -248,9 +362,9 @@ function handleStop(id: string, handleId: string): void {
   respond({ id, type: "result", payload: { stopped: true } });
 }
 
-// Handle getStep request (for time-travel)
 async function handleGetStep(id: string, handleId: string, stepIndex: number): Promise<void> {
   await initWasm();
+  const apvd = getWasm();
 
   const session = sessions.get(handleId);
   if (!session) {
@@ -260,7 +374,6 @@ async function handleGetStep(id: string, handleId: string, stepIndex: number): P
 
   const bucketSize = session.tieredConfig?.bucketSize ?? 1024;
 
-  // Check if we have this exact step in history
   const exactEntry = session.history.find(h => h.stepIndex === stepIndex);
   if (exactEntry) {
     const state: StepState = {
@@ -273,7 +386,6 @@ async function handleGetStep(id: string, handleId: string, stepIndex: number): P
     return;
   }
 
-  // Find nearest keyframe and recompute
   const kf = nearestKeyframe(stepIndex, bucketSize);
   const keyframeEntry = session.history.find(h => h.stepIndex === kf);
 
@@ -282,34 +394,33 @@ async function handleGetStep(id: string, handleId: string, stepIndex: number): P
     return;
   }
 
-  // Recompute from keyframe
   try {
-    let wasmStep = wasm!.make_step(
+    let wasmStep = apvd.make_step(
       keyframeEntry.shapes.map((s: unknown) => [s, Array((s as Shape).kind === "Circle" ? 3 : (s as Shape).kind === "XYRR" ? 4 : 5).fill(true)]),
       session.targets
     );
 
-    const learningRate = session.params?.learningRate ?? 0.05;
+    const learningRate = session.params?.learningRate ?? 0.5;
     for (let i = keyframeEntry.stepIndex; i < stepIndex; i++) {
-      wasmStep = wasm!.step(wasmStep, learningRate);
+      const prevError = (wasmStep as { error: { v: number } }).error.v;
+      const scaledStepSize = prevError * learningRate;
+      wasmStep = apvd.step(wasmStep, scaledStepSize);
     }
 
     const state: StepState = {
       stepIndex,
       error: (wasmStep as { error: { v: number } }).error.v,
-      shapes: (wasmStep as { shapes: Shape[] }).shapes,
+      shapes: extractShapes((wasmStep as { shapes: unknown[] }).shapes),
       isKeyframe: false,
       recomputedFrom: kf,
     };
     respond({ id, type: "result", payload: state });
-
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : String(e);
     respond({ id, type: "error", payload: { message: errorMessage } });
   }
 }
 
-// Handle getTraceInfo request
 function handleGetTraceInfo(id: string, handleId: string): void {
   const session = sessions.get(handleId);
   if (!session) {
@@ -327,7 +438,6 @@ function handleGetTraceInfo(id: string, handleId: string): void {
 
 /**
  * Extract geometry from a WASM step object.
- * The WASM step contains regions, edges, points, etc. that we format into StepGeometry.
  */
 function extractGeometry(wasmStep: unknown, targets: unknown): StepGeometry {
   const step = wasmStep as {
@@ -336,18 +446,15 @@ function extractGeometry(wasmStep: unknown, targets: unknown): StepGeometry {
     points?: Array<{ p: { x: number; y: number }; shape0: number; shape1: number; theta0: number; theta1: number }>;
     components?: Array<{ key: string; points: unknown[]; edges: unknown[]; regions: unknown[] }>;
     total_area?: { v: number };
-    errors?: { regions?: Record<string, { actual: number; target: number; delta: number }> };
     error: { v: number };
   };
 
-  // Extract regions with their areas
   const regions = (step.regions ?? []).map(r => ({
     key: r.key,
     area: r.area?.v ?? 0,
     edges: [],
   }));
 
-  // Extract intersection points
   const points = (step.points ?? []).map(p => ({
     p: p.p,
     shape0: p.shape0,
@@ -356,7 +463,6 @@ function extractGeometry(wasmStep: unknown, targets: unknown): StepGeometry {
     theta1: p.theta1,
   }));
 
-  // Extract components if available
   const components = (step.components ?? []).map(c => ({
     key: c.key,
     points: c.points as never[],
@@ -364,7 +470,6 @@ function extractGeometry(wasmStep: unknown, targets: unknown): StepGeometry {
     regions: c.regions as never[],
   }));
 
-  // Build error breakdown
   const targetMap = targets as TargetsMap;
   const errors: Record<string, { actual: number; target: number; delta: number; errorContribution: number }> = {};
 
@@ -389,22 +494,17 @@ function extractGeometry(wasmStep: unknown, targets: unknown): StepGeometry {
   };
 }
 
-// Handle createModel request (for server branch compatibility)
 async function handleCreateModel(id: string, inputs: InputSpec[], targets: TargetsMap): Promise<void> {
   await initWasm();
+  const apvd = getWasm();
 
   try {
-    const wasmStep = wasm!.make_step(inputs, targets);
-    const step = wasmStep as { shapes: Shape[]; error: { v: number } };
+    const wasmStep = apvd.make_step(inputs, targets);
 
-    const geometry = extractGeometry(wasmStep, targets);
-
-    const result: StepStateWithGeometry = {
+    const result = {
       stepIndex: 0,
-      error: step.error.v,
-      shapes: step.shapes,
       isKeyframe: true,
-      geometry,
+      raw: wasmStep,
     };
 
     respond({ id, type: "result", payload: result });
@@ -414,61 +514,42 @@ async function handleCreateModel(id: string, inputs: InputSpec[], targets: Targe
   }
 }
 
-// Handle trainBatch request (stateless, on-demand step computation)
+// Handle trainBatch request - stateless batch computation using train()
+// Uses error-scaled stepping which matches main branch behavior
 async function handleTrainBatch(id: string, request: BatchTrainingRequest): Promise<void> {
   await initWasm();
+  const apvd = getWasm();
 
-  const { inputs, targets, numSteps, learningRate = 0.05 } = request;
+  const { inputs, targets, numSteps, learningRate = 0.5 } = request;
 
   try {
-    // Create initial step
-    let wasmStep = wasm!.make_step(inputs, targets);
-    const steps: BatchStep[] = [];
-    let minError = (wasmStep as { error: { v: number } }).error.v;
-    let minStepIndex = 0;
+    // Create model and train with error-scaled stepping
+    const wasmModel = apvd.make_model(inputs, targets);
+    const trainedModel = apvd.train(wasmModel, learningRate, numSteps);
 
-    // Record initial step (step 0)
-    steps.push({
-      stepIndex: 0,
+    const modelSteps = (trainedModel as { steps: unknown[] }).steps;
+    const minIdx = (trainedModel as { min_idx: number }).min_idx;
+    const minError = (trainedModel as { min_error: number }).min_error;
+
+    const steps: BatchStep[] = modelSteps.map((wasmStep: unknown, i: number) => ({
+      stepIndex: i,
       error: (wasmStep as { error: { v: number } }).error.v,
-      shapes: JSON.parse(JSON.stringify((wasmStep as { shapes: Shape[] }).shapes)),
-    });
+      shapes: extractShapes((wasmStep as { shapes: unknown[] }).shapes),
+    }));
 
-    // Compute remaining steps
-    for (let i = 1; i < numSteps; i++) {
-      wasmStep = wasm!.step(wasmStep, learningRate);
-      const error = (wasmStep as { error: { v: number } }).error.v;
-
-      // Check for NaN
-      if (isNaN(error)) {
-        respond({ id, type: "error", payload: { message: `NaN error at step ${i}` } });
-        return;
-      }
-
-      // Track minimum
-      if (error < minError) {
-        minError = error;
-        minStepIndex = i;
-      }
-
-      // Record step
-      steps.push({
-        stepIndex: i,
-        error,
-        shapes: JSON.parse(JSON.stringify((wasmStep as { shapes: Shape[] }).shapes)),
-      });
-
-      // Yield periodically for responsiveness
-      if (i % 100 === 0) {
-        await new Promise(resolve => setTimeout(resolve, 0));
-      }
-    }
+    // Extract sparkline data from all steps
+    const { gradients, regionErrors } = extractSparklineData(modelSteps, 0);
 
     const result: BatchTrainingResult = {
       steps,
       minError,
-      minStepIndex,
+      minStepIndex: minIdx,
       finalShapes: steps[steps.length - 1].shapes,
+      sparklineData: {
+        errors: steps.map(s => s.error),
+        gradients,
+        regionErrors,
+      },
     };
 
     respond({ id, type: "result", payload: result });
@@ -478,9 +559,103 @@ async function handleTrainBatch(id: string, request: BatchTrainingRequest): Prom
   }
 }
 
-// Handle getStepWithGeometry request (rich step data for display)
+// Handle continueTraining - continue a session for more steps
+// Uses train() for batch computation with error-scaled stepping
+async function handleContinueTraining(id: string, handleId: string, numSteps: number): Promise<void> {
+  await initWasm();
+  const apvd = getWasm();
+
+  const session = sessions.get(handleId);
+  if (!session) {
+    respond({ id, type: "error", payload: { message: `Session ${handleId} not found` } });
+    return;
+  }
+
+  const learningRate = session.params?.learningRate ?? 0.5;
+  const bucketSize = session.tieredConfig?.bucketSize ?? 1024;
+  const startStep = session.currentStep;
+
+  try {
+    // Create a seed model from the last step
+    const lastStep = session.currentWasmStep;
+    const batchSeed = {
+      steps: [lastStep],
+      repeat_idx: null,
+      min_idx: 0,
+      min_error: (lastStep as { error: { v: number } }).error.v,
+    };
+
+    // Call train() to compute the batch - handles error-scaled stepping
+    const trainedModel = apvd.train(batchSeed, learningRate, numSteps);
+    const modelSteps = (trainedModel as { steps: unknown[] }).steps;
+    const batchMinIdx = (trainedModel as { min_idx: number }).min_idx;
+    const batchMinError = (trainedModel as { min_error: number }).min_error;
+
+    // Collect per-step data (skip first step as it duplicates last)
+    const batchSteps: Array<{ stepIndex: number; error: number; shapes: Shape[] }> = [];
+
+    // Extract sparkline data (starting from index 1, skipping duplicate)
+    const { gradients: sparklineGradients, regionErrors: sparklineRegionErrors } =
+      extractSparklineData(modelSteps, 1);
+
+    for (let i = 1; i < modelSteps.length; i++) {
+      const wasmStep = modelSteps[i] as { error: { v: number }; shapes: unknown[] };
+      const stepIndex = startStep + i;
+      const error = wasmStep.error.v;
+      const shapes = extractShapes(wasmStep.shapes);
+
+      batchSteps.push({ stepIndex, error, shapes });
+
+      // Store keyframe in session history if tiered storage says so
+      if (isKeyframe(stepIndex, bucketSize)) {
+        session.history.push({ stepIndex, error, shapes });
+      }
+    }
+
+    // Update session state with final step
+    const finalStep = modelSteps[modelSteps.length - 1];
+    session.currentWasmStep = finalStep;
+    session.currentStep = startStep + modelSteps.length - 1;
+
+    // Update best step tracking
+    const absoluteBatchMinStep = startStep + batchMinIdx;
+    if (batchMinError < session.minError) {
+      session.minError = batchMinError;
+      session.minStep = absoluteBatchMinStep;
+      session.btdSteps.push(absoluteBatchMinStep);
+    }
+
+    const currentError = (finalStep as { error: { v: number } }).error.v;
+    const currentShapes = extractShapes((finalStep as { shapes: unknown[] }).shapes);
+
+    const result: ContinueTrainingResult = {
+      totalSteps: session.currentStep,
+      currentStep: session.currentStep,
+      minError: session.minError,
+      minStep: session.minStep,
+      currentShapes,
+      currentError,
+      steps: batchSteps,
+      sparklineData: {
+        errors: batchSteps.map(s => s.error),
+        gradients: sparklineGradients,
+        regionErrors: sparklineRegionErrors,
+      },
+    };
+
+    respond({ id, type: "result", payload: result });
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    respond({ id, type: "error", payload: { message: errorMessage } });
+  }
+}
+
+// Handle getStepWithGeometry request
+// Returns shapes and targets so the main thread can call make_step
+// (WASM Step objects don't serialize properly through postMessage)
 async function handleGetStepWithGeometry(id: string, handleId: string, stepIndex: number): Promise<void> {
   await initWasm();
+  const apvd = getWasm();
 
   const session = sessions.get(handleId);
   if (!session) {
@@ -491,17 +666,17 @@ async function handleGetStepWithGeometry(id: string, handleId: string, stepIndex
   const bucketSize = session.tieredConfig?.bucketSize ?? 1024;
 
   try {
-    // Find shapes for this step (from history or recompute)
     let shapes: Shape[];
-    let isKeyframe = false;
+    let error: number;
+    let isKf = false;
     let recomputedFrom: number | undefined;
 
     const exactEntry = session.history.find(h => h.stepIndex === stepIndex);
     if (exactEntry) {
       shapes = exactEntry.shapes as Shape[];
-      isKeyframe = true;
+      error = exactEntry.error;
+      isKf = true;
     } else {
-      // Recompute from nearest keyframe
       const kf = nearestKeyframe(stepIndex, bucketSize);
       const keyframeEntry = session.history.find(h => h.stepIndex === kf);
 
@@ -510,36 +685,32 @@ async function handleGetStepWithGeometry(id: string, handleId: string, stepIndex
         return;
       }
 
-      let wasmStep = wasm!.make_step(
+      let wasmStep = apvd.make_step(
         (keyframeEntry.shapes as Shape[]).map((s: Shape) => [s, Array(s.kind === "Circle" ? 3 : s.kind === "XYRR" ? 4 : 5).fill(true)]),
         session.targets
       );
 
-      const learningRate = session.params?.learningRate ?? 0.05;
+      const lr = session.params?.learningRate ?? 0.5;
       for (let i = keyframeEntry.stepIndex; i < stepIndex; i++) {
-        wasmStep = wasm!.step(wasmStep, learningRate);
+        const prevError = (wasmStep as { error: { v: number } }).error.v;
+        const scaledStepSize = prevError * lr;
+        wasmStep = apvd.step(wasmStep, scaledStepSize);
       }
 
-      shapes = (wasmStep as { shapes: Shape[] }).shapes;
+      shapes = extractShapes((wasmStep as { shapes: unknown[] }).shapes);
+      error = (wasmStep as { error: { v: number } }).error.v;
       recomputedFrom = kf;
     }
 
-    // Now compute full geometry by calling make_step with current shapes
-    const inputs: InputSpec[] = shapes.map((s: Shape) => [
-      s,
-      Array(s.kind === "Circle" ? 3 : s.kind === "XYRR" ? 4 : s.kind === "XYRRT" ? 5 : (s as { vertices: unknown[] }).vertices.length * 2).fill(true),
-    ]);
-    const wasmStep = wasm!.make_step(inputs, session.targets);
-    const step = wasmStep as { shapes: Shape[]; error: { v: number } };
-    const geometry = extractGeometry(wasmStep, session.targets);
-
-    const result: StepStateWithGeometry = {
+    // Return shapes and targets so main thread can call make_step
+    const result = {
       stepIndex,
-      error: step.error.v,
-      shapes: step.shapes,
-      isKeyframe,
+      isKeyframe: isKf,
       ...(recomputedFrom !== undefined && { recomputedFrom }),
-      geometry,
+      shapes,
+      error,
+      targets: session.targets,
+      inputs: session.inputs,
     };
 
     respond({ id, type: "result", payload: result });
@@ -549,47 +720,60 @@ async function handleGetStepWithGeometry(id: string, handleId: string, stepIndex
   }
 }
 
+// ============================================================================
 // Message handler
+// ============================================================================
+
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   const { id, type, payload } = event.data;
 
-  switch (type) {
-    case "createModel":
-      await handleCreateModel(
-        id,
-        (payload as { inputs: InputSpec[]; targets: TargetsMap }).inputs,
-        (payload as { inputs: InputSpec[]; targets: TargetsMap }).targets
-      );
-      break;
-
-    case "train":
-      await handleTrain(id, payload as TrainingRequest);
-      break;
-
-    case "trainBatch":
-      await handleTrainBatch(id, payload as BatchTrainingRequest);
-      break;
-
-    case "stop":
-      handleStop(id, (payload as { handleId: string }).handleId);
-      break;
-
-    case "getStep":
-      await handleGetStep(id, (payload as { handleId: string; stepIndex: number }).handleId, (payload as { handleId: string; stepIndex: number }).stepIndex);
-      break;
-
-    case "getStepWithGeometry":
-      await handleGetStepWithGeometry(id, (payload as { handleId: string; stepIndex: number }).handleId, (payload as { handleId: string; stepIndex: number }).stepIndex);
-      break;
-
-    case "getTraceInfo":
-      handleGetTraceInfo(id, (payload as { handleId: string }).handleId);
-      break;
-
-    default:
-      respond({ id, type: "error", payload: { message: `Unknown request type: ${type}` } });
+  try {
+    switch (type) {
+      case "createModel": {
+        const { inputs, targets } = payload as { inputs: InputSpec[]; targets: TargetsMap };
+        await handleCreateModel(id, inputs, targets);
+        break;
+      }
+      case "train":
+        await handleTrain(id, payload as TrainingRequest);
+        break;
+      case "trainBatch":
+        await handleTrainBatch(id, payload as BatchTrainingRequest);
+        break;
+      case "continueTraining": {
+        const { handleId, numSteps } = payload as { handleId: string; numSteps: number };
+        await handleContinueTraining(id, handleId, numSteps);
+        break;
+      }
+      case "stop": {
+        const { handleId } = payload as { handleId: string };
+        handleStop(id, handleId);
+        break;
+      }
+      case "getStep": {
+        const { handleId, stepIndex } = payload as { handleId: string; stepIndex: number };
+        await handleGetStep(id, handleId, stepIndex);
+        break;
+      }
+      case "getStepWithGeometry": {
+        const { handleId, stepIndex } = payload as { handleId: string; stepIndex: number };
+        await handleGetStepWithGeometry(id, handleId, stepIndex);
+        break;
+      }
+      case "getTraceInfo": {
+        const { handleId } = payload as { handleId: string };
+        handleGetTraceInfo(id, handleId);
+        break;
+      }
+      default:
+        respond({ id, type: "error", payload: { message: `Unknown request type: ${type}` } });
+    }
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    respond({ id, type: "error", payload: { message: errorMessage } });
   }
 };
 
-// Export for type checking (not actually used at runtime)
-export {};
+// Exported functions (extractNumber, extractPoint, extractShape, extractShapes,
+// tier, resolution, isKeyframe, nearestKeyframe) are used by @apvd/worker/index.ts
+// and downstream consumers. The `self.onmessage` handler above runs in worker context.

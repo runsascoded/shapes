@@ -11,6 +11,9 @@ importers:
       '@apvd/client':
         specifier: workspace:*
         version: link:../../client
+      '@apvd/wasm':
+        specifier: file:../pkg
+        version: file:apvd-wasm/pkg
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -23,11 +26,16 @@ importers:
 
 packages:
 
+  '@apvd/wasm@file:apvd-wasm/pkg':
+    resolution: {directory: apvd-wasm/pkg, type: directory}
+
   typescript@5.9.3:
     resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
     engines: {node: '>=14.17'}
     hasBin: true
 
 snapshots:
+
+  '@apvd/wasm@file:apvd-wasm/pkg': {}
 
   typescript@5.9.3: {}
