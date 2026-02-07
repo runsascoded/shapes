@@ -566,7 +566,7 @@ impl<D> Component<D> {
     }
 }
 
-impl<D: AreaArg + Into<f64> + std::ops::Add<Output = D> + std::ops::Sub<Output = D>> Component<D>
+impl<D: AreaArg + Into<f64> + std::ops::Add<Output = D> + std::ops::Sub<Output = D> + std::ops::Neg<Output = D>> Component<D>
 // where f64: From<&'a D>  `From<&f64> for f64` doesn't exist…?
 {
     pub fn verify_areas(&self, ε: f64) -> Result<()> {
@@ -590,12 +590,10 @@ impl<D: AreaArg + Into<f64> + std::ops::Add<Output = D> + std::ops::Sub<Output =
             let shape_area: f64 = set.shape.area().into();
             let diff = (shape_region_area / shape_area - 1.).abs();
             if diff > ε {
-                error!(
-                // return Err(anyhow!(
+                return Err(anyhow!(
                     "shape {} area {} != sum of regions area {}, half-diff {}",
                     set.idx, shape_area, shape_region_area, (shape_region_area - shape_area) / 2.
-                // ));
-                )
+                ));
             }
         }
         Ok(())

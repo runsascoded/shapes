@@ -401,7 +401,7 @@ impl Polygon<D> {
 }
 
 /// Area calculation using the shoelace formula
-impl<D: AreaArg + Add<Output = D> + Sub<Output = D>> Polygon<D> {
+impl<D: AreaArg + Add<Output = D> + Sub<Output = D> + Into<f64> + Neg<Output = D>> Polygon<D> {
     pub fn area(&self) -> D {
         let n = self.vertices.len();
         if n < 3 {
@@ -418,8 +418,14 @@ impl<D: AreaArg + Add<Output = D> + Sub<Output = D>> Polygon<D> {
             sum = sum + term;
         }
 
-        // Absolute value: if negative (clockwise), negate
-        sum * 0.5
+        let half = sum * 0.5;
+        // Shoelace formula returns negative area for clockwise winding;
+        // always return positive area regardless of winding order.
+        if half.clone().into() < 0.0 {
+            half.neg()
+        } else {
+            half
+        }
     }
 }
 
@@ -608,15 +614,15 @@ impl<D: Clone + Into<f64>> Polygon<D> {
             let edge_pt_y = v0y + t * dy;
             let dist_sq = (p.x - edge_pt_x).powi(2) + (p.y - edge_pt_y).powi(2);
 
-            if dist_sq < 1e-12 {
+            if dist_sq < 1e-8 {
                 // Found the edge! Return edge_idx + t
-                return (i as f64) + t;
+                return (i as f64) + t.clamp(0.0, 1.0);
             }
         }
 
         // Fallback: point not found on any edge, use centroid angle
         // This shouldn't happen for valid intersection points
-        eprintln!("Warning: perimeter_param could not find edge for point ({}, {})", p.x, p.y);
+        log::warn!("perimeter_param could not find edge for point ({}, {})", p.x, p.y);
         let cx: f64 = self.vertices.iter().map(|v| v.x.clone().into()).sum::<f64>() / (n as f64);
         let cy: f64 = self.vertices.iter().map(|v| v.y.clone().into()).sum::<f64>() / (n as f64);
         let theta = (p.y - cy).atan2(p.x - cx);
@@ -856,8 +862,11 @@ where
     let s_val: f64 = s.clone().into();
     let t_val: f64 = t.clone().into();
 
-    // Check if intersection is within both segments [0, 1]
-    if s_val >= 0. && s_val <= 1. && t_val >= 0. && t_val <= 1. {
+    // Check if intersection is within both segments [0, 1] (with small epsilon for
+    // robustness across platforms — WASM strict IEEE 754 vs native extended precision
+    // can cause boundary intersections to be missed without tolerance)
+    let eps = 1e-10;
+    if s_val >= -eps && s_val <= 1. + eps && t_val >= -eps && t_val <= 1. + eps {
         let x = a0.x.clone() + s.clone() * da_x;
         let y = a0.y.clone() + s * da_y;
         if x.is_normal() && y.is_normal() {
@@ -2562,5 +2571,282 @@ mod tests {
             "Training should achieve at least 20% improvement: {} -> best {}",
             initial_error, best_error
         );
+    }
+
+    fn five_shape_layout(n_sides: usize, dist: f64, rx: f64, ry: f64, dent: f64) -> Vec<Shape<f64>> {
+        (0..5).map(|i| {
+            let angle = std::f64::consts::FRAC_PI_2 + (2.0 * std::f64::consts::PI * i as f64) / 5.0;
+            let cx = dist * angle.cos();
+            let cy = dist * angle.sin();
+            let rotation = angle;
+            let cos_r = rotation.cos();
+            let sin_r = rotation.sin();
+            let vertices: Vec<R2<f64>> = (0..n_sides).map(|j| {
+                let theta = 2.0 * std::f64::consts::PI * (j as f64) / (n_sides as f64);
+                let cos_t = theta.cos();
+                let sin_t = theta.sin();
+                let r = 1.0 + dent * cos_t;
+                let px = sin_t * rx * r;
+                let py = cos_t * ry * r;
+                R2 {
+                    x: cx + px * cos_r - py * sin_r,
+                    y: cy + px * sin_r + py * cos_r,
+                }
+            }).collect();
+            Shape::Polygon(Polygon::new(vertices))
+        }).collect()
+    }
+
+    fn count_regions(shapes: Vec<Shape<f64>>, label: &str) -> (usize, usize, usize) {
+        use crate::scene::Scene;
+
+        let scene: Scene<f64> = Scene::new(shapes).expect("Failed to create scene");
+
+        let mut negative_regions = Vec::new();
+        let mut zero_regions = Vec::new();
+        let mut positive_regions = Vec::new();
+
+        for mask in 1u32..32 {
+            let key: String = (0..5).map(|i| {
+                if mask & (1 << i) != 0 { char::from_digit(i, 10).unwrap() } else { '-' }
+            }).collect();
+
+            let area = scene.area(&key);
+            let area_val: f64 = area.clone().unwrap_or(0.0);
+            if area_val < -0.001 {
+                negative_regions.push((key, area_val));
+            } else if area_val.abs() < 0.001 {
+                zero_regions.push(key);
+            } else {
+                positive_regions.push((key, area_val));
+            }
+        }
+
+        eprintln!("\n=== {} ===", label);
+        eprintln!("{} positive, {} zero, {} negative", positive_regions.len(), zero_regions.len(), negative_regions.len());
+        if !zero_regions.is_empty() {
+            eprintln!("  Zero: {}", zero_regions.join(", "));
+        }
+        if !negative_regions.is_empty() {
+            eprintln!("  Negative: {}", negative_regions.iter().map(|(k, v)| format!("{}({:.4})", k, v)).collect::<Vec<_>>().join(", "));
+        }
+
+        (positive_regions.len(), zero_regions.len(), negative_regions.len())
+    }
+
+    #[test]
+    fn test_five_shape_layouts_region_count() {
+        // 31/31 requires tight spacing so non-adjacent triples overlap.
+        // Explore the boundary between 26/31 and 31/31.
+
+        // Sweep dist from 0.15 to 0.30, with width=0.8, height=1.5
+        for &dist in &[0.15, 0.18, 0.20, 0.22, 0.25, 0.28, 0.30] {
+            let shapes = five_shape_layout(40, dist, 0.8, 1.5, 0.15);
+            count_regions(shapes, &format!("d={:.2}, w=0.8, h=1.5, dent=0.15", dist));
+        }
+
+        // Sweep dist with width=0.7
+        for &dist in &[0.15, 0.18, 0.20, 0.22, 0.25] {
+            let shapes = five_shape_layout(40, dist, 0.7, 1.5, 0.15);
+            count_regions(shapes, &format!("d={:.2}, w=0.7, h=1.5, dent=0.15", dist));
+        }
+
+        // Sweep width at dist=0.2
+        for &width in &[0.5, 0.6, 0.7, 0.8, 0.9, 1.0] {
+            let shapes = five_shape_layout(40, 0.2, width, 1.5, 0.15);
+            count_regions(shapes, &format!("d=0.20, w={:.1}, h=1.5, dent=0.15", width));
+        }
+
+        // Try dist=0.2 with different dents
+        for &dent in &[0.0, 0.05, 0.10, 0.15, 0.20, 0.30] {
+            let shapes = five_shape_layout(40, 0.2, 0.7, 1.5, dent);
+            count_regions(shapes, &format!("d=0.20, w=0.7, h=1.5, dent={:.2}", dent));
+        }
+    }
+
+    #[test]
+    fn test_five_blobs_vertex_count_sweep() {
+        // Find minimum vertex count that still achieves 31 regions
+        // with the standard five blobs layout params (d=0.2, w=0.7, h=1.5, dent=0.15)
+        for &n in &[8, 10, 12, 15, 20, 25, 30, 40] {
+            let shapes = five_shape_layout(n, 0.2, 0.7, 1.5, 0.15);
+            let (pos, zero, neg) = count_regions(shapes, &format!("n={}", n));
+            eprintln!("  n={}: {} positive, {} zero, {} negative", n, pos, zero, neg);
+        }
+    }
+
+    #[test]
+    fn test_five_blobs_dual_vs_f64() {
+        // Compare Scene<f64> vs Scene<Dual> (via Step::new) to isolate
+        // whether the WASM region count discrepancy is a Dual vs f64 issue.
+        use crate::step::Step;
+        use crate::to::To;
+
+        let shapes_f64 = five_shape_layout(40, 0.2, 0.7, 1.5, 0.15);
+        let (p_f64, z_f64, n_f64) = count_regions(shapes_f64.clone(), "f64 Scene");
+
+        // Create InputSpec for Dual scene (all coords trainable, like WASM does)
+        let input_specs: Vec<(Shape<f64>, Vec<bool>)> = shapes_f64.iter().map(|s| {
+            let n_coords = match s {
+                Shape::Polygon(p) => p.vertices.len() * 2,
+                _ => unreachable!(),
+            };
+            (s.clone(), vec![true; n_coords])
+        }).collect();
+
+        // Build targets for all 31 regions
+        let mut targets_map: std::collections::BTreeMap<String, f64> = std::collections::BTreeMap::new();
+        for mask in 1u32..32 {
+            let key: String = (0..5).map(|i| {
+                if mask & (1 << i) != 0 { char::from_digit(i, 10).unwrap() } else { '-' }
+            }).collect();
+            targets_map.insert(key, 1.0);
+        }
+
+        let step = Step::new(input_specs, targets_map.into());
+        match &step {
+            Ok(step) => {
+                let mut p_dual = 0;
+                let mut z_dual = 0;
+                let mut n_dual = 0;
+                let mut negative_list = Vec::new();
+                let mut zero_list = Vec::new();
+                for (key, err) in &step.errors {
+                    if key.contains('*') { continue; }
+                    let actual = err.actual_area.unwrap_or(0.0);
+                    if actual < -0.001 {
+                        n_dual += 1;
+                        negative_list.push(format!("{}({:.1})", key, actual));
+                    } else if actual.abs() < 0.001 {
+                        z_dual += 1;
+                        zero_list.push(key.clone());
+                    } else {
+                        p_dual += 1;
+                    }
+                }
+                eprintln!("\n=== Dual Scene ===");
+                eprintln!("{} positive, {} zero, {} negative", p_dual, z_dual, n_dual);
+                if !zero_list.is_empty() {
+                    eprintln!("  Zero: {}", zero_list.join(", "));
+                }
+                if !negative_list.is_empty() {
+                    eprintln!("  Negative: {}", negative_list.join(", "));
+                }
+
+                // The key comparison: do f64 and Dual agree?
+                eprintln!("\nf64: {} positive, {} zero, {} negative", p_f64, z_f64, n_f64);
+                eprintln!("Dual: {} positive, {} zero, {} negative", p_dual, z_dual, n_dual);
+            }
+            Err(e) => {
+                eprintln!("Step::new failed: {:?}", e);
+            }
+        }
+    }
+
+    #[test]
+    fn test_five_blobs_verify_areas() {
+        // Verify that shape.area() matches sum of region areas (catches CW winding sign bug)
+        use crate::scene::Scene;
+
+        for &n in &[12, 15, 20, 40] {
+            let shapes = five_shape_layout(n, 0.2, 0.7, 1.5, 0.15);
+            let scene: Scene<f64> = Scene::new(shapes).expect("Failed to create scene");
+            for component in &scene.components {
+                component.verify_areas(0.01).unwrap_or_else(|e| {
+                    panic!("verify_areas failed for n={}: {}", n, e);
+                });
+            }
+        }
+    }
+
+    #[test]
+    fn test_five_dodecagons_model_errors() {
+        use crate::model::Model;
+        use crate::to::To;
+
+        // Create 5 elongated 12-gons in a pentagonal arrangement
+        let dist = 0.5_f64;
+        let rx = 0.45_f64;
+        let ry = 1.3_f64;
+        let n_sides = 12;
+
+        let shapes: Vec<Shape<f64>> = (0..5).map(|i| {
+            let angle = std::f64::consts::FRAC_PI_2 + (2.0 * std::f64::consts::PI * i as f64) / 5.0;
+            let cx = dist * angle.cos();
+            let cy = dist * angle.sin();
+            let rotation = angle - std::f64::consts::FRAC_PI_2;
+            let cos_r = rotation.cos();
+            let sin_r = rotation.sin();
+            let vertices: Vec<R2<f64>> = (0..n_sides).map(|j| {
+                let theta = 2.0 * std::f64::consts::PI * (j as f64) / (n_sides as f64);
+                let px = rx * theta.cos();
+                let py = ry * theta.sin();
+                R2 {
+                    x: cx + px * cos_r - py * sin_r,
+                    y: cy + px * sin_r + py * cos_r,
+                }
+            }).collect();
+            Shape::Polygon(Polygon::new(vertices))
+        }).collect();
+
+        // FizzBuzzBazzQuxQuux exclusive targets (from sample-targets comment)
+        let targets: [(&str, f64); 31] = [
+            ("0----", 5280.),
+            ("-1---", 2640.),
+            ("--2--", 1320.),
+            ("---3-", 1760.),
+            ("----4",  880.),
+            ("01---",  440.),
+            ("0-2--",  220.),
+            ("0--3-", 1056.),
+            ("0---4",  528.),
+            ("-12--",  264.),
+            ("-1-3-",  132.),
+            ("-1--4",  176.),
+            ("--23-",   88.),
+            ("--2-4",   44.),
+            ("---34",   22.),
+            ("012--",  480.),
+            ("01-3-",  240.),
+            ("01--4",  120.),
+            ("0-23-",   60.),
+            ("0-2-4",   80.),
+            ("0--34",   40.),
+            ("-123-",   20.),
+            ("-12-4",   10.),
+            ("-1-34",   48.),
+            ("--234",   24.),
+            ("0123-",   12.),
+            ("012-4",    6.),
+            ("01-34",    8.),
+            ("0-234",    4.),
+            ("-1234",    2.),
+            ("01234",    1.),
+        ];
+
+        let inputs: Vec<(Shape<f64>, Vec<bool>)> = shapes
+            .into_iter()
+            .map(|s| {
+                let ncoords = if let Shape::Polygon(ref p) = s { p.vertices.len() * 2 } else { 0 };
+                (s, vec![true; ncoords])
+            })
+            .collect();
+
+        let model = Model::new(inputs, targets.to()).expect("Failed to create model");
+        let step = &model.steps[0];
+
+        eprintln!("\n=== 5 Dodecagon Model Initial Errors ===");
+        eprintln!("Total error: {:.4}", step.error.v());
+
+        // Print errors for each target, sorted by absolute error
+        let mut errors: Vec<_> = step.errors.iter()
+            .map(|(key, err)| (key.clone(), err.actual_area, err.target_area, err.actual_frac, err.target_frac, err.error.v()))
+            .collect();
+        errors.sort_by(|a, b| b.5.abs().partial_cmp(&a.5.abs()).unwrap());
+
+        for (key, actual_area, target_area, actual_frac, target_frac, error) in &errors {
+            eprintln!("  {} actual_area={:>8.2?} target={:>6.0} actual_frac={:>8.4} target_frac={:>8.4} err={:>8.4}",
+                key, actual_area, target_area, actual_frac, target_frac, error);
+        }
     }
 }

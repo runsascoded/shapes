@@ -178,7 +178,7 @@ impl<D: Clone + Mul<Output = D> + Mul<f64, Output = D>> AreaArg for D {}
 impl<D: AreaArg> Shape<D> {
     pub fn area(&self) -> D
     where
-        D: Add<Output = D> + Sub<Output = D>,
+        D: Add<Output = D> + Sub<Output = D> + Into<f64> + Neg<Output = D>,
     {
         match self {
             Shape::Circle(c) => c.area(),
