@@ -115,6 +115,10 @@ enum Commands {
         /// Directory for persistent trace storage
         #[arg(long, default_value = ".apvd/traces")]
         storage_dir: String,
+
+        /// Directory containing sample traces (e.g., testcases/)
+        #[arg(long)]
+        samples_dir: Option<String>,
     },
 
     /// Render shapes to SVG
@@ -488,10 +492,11 @@ fn main() {
                 std::process::exit(1);
             }
         }
-        Commands::Serve { port, parallel, storage_dir } => {
+        Commands::Serve { port, parallel, storage_dir, samples_dir } => {
             let config = server::ServerConfig {
                 parallel,
                 storage_dir: Some(std::path::PathBuf::from(storage_dir)),
+                samples_dir: samples_dir.map(std::path::PathBuf::from),
             };
             let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
             if let Err(e) = rt.block_on(server::run_server(port, config)) {

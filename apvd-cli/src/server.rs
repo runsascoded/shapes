@@ -48,6 +48,8 @@ pub struct ServerConfig {
     pub parallel: usize,
     /// Directory for persistent trace storage (None = in-memory only)
     pub storage_dir: Option<std::path::PathBuf>,
+    /// Directory containing sample traces (None = no samples)
+    pub samples_dir: Option<std::path::PathBuf>,
 }
 
 // ============================================================================
@@ -688,6 +690,12 @@ async fn handle_json_rpc(
         },
         "loadSavedTrace" => {
             handle_load_saved_trace(&req.id, &req.params, current_session, trace_store)
+        },
+        "listSampleTraces" => {
+            handle_list_sample_traces(&req.id, config)
+        },
+        "loadSampleTrace" => {
+            handle_load_sample_trace(&req.id, &req.params, config, current_session, trace_store)
         },
         _ => JsonRpcResponse {
             id: req.id.clone(),
@@ -1833,6 +1841,190 @@ fn handle_load_saved_trace(
         result: Some(result),
         error: None,
     }
+}
+
+/// Handle listSampleTraces RPC - list available sample traces.
+fn handle_list_sample_traces(
+    id: &str,
+    config: &ServerConfig,
+) -> JsonRpcResponse {
+    let samples_dir = match &config.samples_dir {
+        Some(dir) => dir,
+        None => return JsonRpcResponse {
+            id: id.to_string(),
+            result: Some(serde_json::json!({ "samples": [] })),
+            error: None,
+        },
+    };
+
+    let mut samples: Vec<serde_json::Value> = Vec::new();
+
+    if let Ok(entries) = std::fs::read_dir(samples_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            // Only look at .trace.json files
+            let filename = path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("");
+
+            if filename.ends_with(".trace.json") {
+                // Extract name without .trace.json suffix
+                let name = filename.strip_suffix(".trace.json")
+                    .unwrap_or(filename)
+                    .to_string();
+
+                // Get file size
+                let size_bytes = entry.metadata()
+                    .map(|m| m.len())
+                    .unwrap_or(0);
+
+                // Try to read basic metadata from file
+                if let Ok(contents) = std::fs::read_to_string(&path) {
+                    if let Ok(trace) = serde_json::from_str::<serde_json::Value>(&contents) {
+                        // Try V2 format first, then fall back to V1 format
+                        let total_steps = trace.get("totalSteps")
+                            .and_then(|v| v.as_u64())
+                            .or_else(|| trace.get("best").and_then(|b| b.get("total_steps")).and_then(|v| v.as_u64()))
+                            .unwrap_or(0) as usize;
+                        let min_error = trace.get("minError")
+                            .and_then(|v| v.as_f64())
+                            .or_else(|| trace.get("best").and_then(|b| b.get("min_error")).and_then(|v| v.as_f64()))
+                            .unwrap_or(0.0);
+                        let min_step = trace.get("minStep")
+                            .and_then(|v| v.as_u64())
+                            .or_else(|| trace.get("best").and_then(|b| b.get("min_step")).and_then(|v| v.as_u64()))
+                            .unwrap_or(0) as usize;
+
+                        // Count shapes from config (V2) or inputs (V1)
+                        let num_shapes = trace.get("config")
+                            .and_then(|c| c.get("inputs"))
+                            .and_then(|i| i.as_array())
+                            .map(|a| a.len())
+                            .or_else(|| trace.get("inputs").and_then(|i| i.as_array()).map(|a| a.len()))
+                            .unwrap_or(0);
+
+                        samples.push(serde_json::json!({
+                            "filename": filename,
+                            "name": name,
+                            "totalSteps": total_steps,
+                            "minError": min_error,
+                            "minStep": min_step,
+                            "numShapes": num_shapes,
+                            "sizeBytes": size_bytes,
+                        }));
+                    }
+                }
+            }
+        }
+    }
+
+    // Sort by name
+    samples.sort_by(|a, b| {
+        let name_a = a.get("name").and_then(|v| v.as_str()).unwrap_or("");
+        let name_b = b.get("name").and_then(|v| v.as_str()).unwrap_or("");
+        name_a.cmp(name_b)
+    });
+
+    JsonRpcResponse {
+        id: id.to_string(),
+        result: Some(serde_json::json!({ "samples": samples })),
+        error: None,
+    }
+}
+
+/// Handle loadSampleTrace RPC - load a sample trace by filename.
+fn handle_load_sample_trace(
+    id: &str,
+    params: &Value,
+    config: &ServerConfig,
+    current_session: &Arc<std::sync::Mutex<Option<Arc<TrainingSession>>>>,
+    trace_store: &Arc<std::sync::Mutex<TraceStore>>,
+) -> JsonRpcResponse {
+    let samples_dir = match &config.samples_dir {
+        Some(dir) => dir,
+        None => return JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32000,
+                message: "No samples directory configured".to_string(),
+            }),
+        },
+    };
+
+    let filename = match params.get("filename").and_then(|v| v.as_str()) {
+        Some(f) => f,
+        None => return JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32602,
+                message: "Missing 'filename' parameter".to_string(),
+            }),
+        },
+    };
+
+    // Sanitize filename to prevent directory traversal
+    let safe_filename = std::path::Path::new(filename)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("");
+
+    if safe_filename.is_empty() || !safe_filename.ends_with(".trace.json") {
+        return JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32602,
+                message: "Invalid filename".to_string(),
+            }),
+        };
+    }
+
+    let file_path = samples_dir.join(safe_filename);
+    let contents = match std::fs::read_to_string(&file_path) {
+        Ok(c) => c,
+        Err(e) => return JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32000,
+                message: format!("Failed to read sample trace: {}", e),
+            }),
+        },
+    };
+
+    let trace_json: Value = match serde_json::from_str(&contents) {
+        Ok(v) => v,
+        Err(e) => return JsonRpcResponse {
+            id: id.to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32000,
+                message: format!("Failed to parse sample trace: {}", e),
+            }),
+        },
+    };
+
+    // Extract name from filename
+    let trace_name = safe_filename
+        .strip_suffix(".trace.json")
+        .unwrap_or(safe_filename)
+        .to_string();
+
+    let load_step = params.get("step")
+        .and_then(|v| v.as_str())
+        .unwrap_or("best");
+
+    // Build params for loadTrace
+    let load_params = serde_json::json!({
+        "trace": trace_json,
+        "name": trace_name,
+        "step": load_step,
+    });
+
+    // Delegate to loadTrace handler
+    handle_load_trace(id, &load_params, current_session, trace_store)
 }
 
 fn run_single_training(

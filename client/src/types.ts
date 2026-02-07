@@ -395,6 +395,22 @@ export interface DeleteTraceResult {
   deleted: true;
 }
 
+/** Summary of a sample trace */
+export interface SampleTraceSummary {
+  filename: string;
+  name: string;
+  totalSteps: number;
+  minError: number;
+  minStep: number;
+  numShapes: number;
+  sizeBytes: number;
+}
+
+/** Result from listing sample traces */
+export interface SampleTraceListResult {
+  samples: SampleTraceSummary[];
+}
+
 // ============================================================================
 // Client Interface
 // ============================================================================
@@ -475,6 +491,20 @@ export interface TrainingClient {
    * Delete a saved trace.
    */
   deleteTrace(traceId: string): Promise<DeleteTraceResult>;
+
+  // ==========================================================================
+  // Sample Traces (server mode only, requires --samples-dir)
+  // ==========================================================================
+
+  /**
+   * List available sample traces (from samples directory).
+   */
+  listSampleTraces(): Promise<SampleTraceListResult>;
+
+  /**
+   * Load a sample trace by filename.
+   */
+  loadSampleTrace(filename: string, step?: StepSelector): Promise<LoadTraceResult>;
 
   /** Disconnect and clean up resources */
   disconnect(): void;
