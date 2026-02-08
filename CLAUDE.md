@@ -188,13 +188,22 @@ Test data in `apvd-core/testdata/` (CSV files with expected values).
 - Issue #9: Only absolute error metric (no relative)
 - Issue #10: Basic missing-region penalty
 - Quartic solver can have numerical stability issues at edge cases
-- Polygon edge traversal uses theta-based logic (fragile for concave polygons)
+- `Polygon::secant_area()` uses theta-from-centroid (atan2) to find intermediate
+  vertices between two edge endpoints — breaks for concave polygons where angular
+  ordering from centroid doesn't match perimeter ordering. Should use `perimeter_param`
+  (edge_idx + t) instead, which is already used by `BoundaryCoord` for node ordering.
+- `Segment::successors()` returns candidate edges without any ordering — region
+  traversal picks edges arbitrarily, which can select wrong paths at intersection
+  nodes on concave polygons.
 
 ## Future Improvements
 
 ### Algorithm Robustness
+- **Fix `secant_area()` for concave polygons**: Replace theta-from-centroid vertex
+  filtering with `perimeter_param`-based filtering (edge_idx + t ordering)
+- **Order successors in region traversal**: Use `BoundaryCoord` to select the
+  correct next edge at intersection nodes
 - **Sweep line algorithm**: Replace current intersection logic with Bentley-Ottmann style
-- **Proper polygon edge traversal**: Track edge indices instead of theta-based filtering
 - **X-monotone decomposition**: Split curves at vertical tangent points
 
 ### Optimization
