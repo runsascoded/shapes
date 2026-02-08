@@ -6,6 +6,7 @@
 //! - Parallel scene training across different initial assignments
 //! - SVG rendering of training results
 
+mod layout_opt;
 mod render;
 mod server;
 mod trace;
@@ -194,6 +195,38 @@ enum Commands {
     Trace {
         #[command(subcommand)]
         command: TraceCommands,
+    },
+
+    /// Optimize a 5-shape layout by training a single template polygon
+    #[command(name = "5-shape-layout")]
+    FiveShapeLayout {
+        /// Number of vertices per polygon
+        #[arg(short, long, default_value = "15")]
+        vertices: usize,
+
+        /// Maximum training steps
+        #[arg(short, long, default_value = "2000")]
+        max_steps: usize,
+
+        /// Learning rate for Adam optimizer
+        #[arg(short, long, default_value = "0.005")]
+        learning_rate: f64,
+
+        /// Initial template width
+        #[arg(short = 'W', long, default_value = "0.7")]
+        width: f64,
+
+        /// Initial template height
+        #[arg(short = 'H', long, default_value = "1.5")]
+        height: f64,
+
+        /// Initial cardioid dent factor
+        #[arg(short, long, default_value = "0.15")]
+        dent: f64,
+
+        /// Output format: "json" for machine-readable, "text" for human-readable
+        #[arg(short, long, default_value = "text")]
+        format: String,
     },
 }
 
@@ -544,6 +577,58 @@ fn main() {
             if let Err(e) = run_trace_command(command) {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
+            }
+        }
+        Commands::FiveShapeLayout { vertices, max_steps, learning_rate, width, height, dent, format } => {
+            eprintln!("Optimizing 5-shape layout: {} vertices, {} steps, lr={}", vertices, max_steps, learning_rate);
+            eprintln!("  Initial template: width={}, height={}, dent={}", width, height, dent);
+            eprintln!();
+
+            match layout_opt::optimize_layout(vertices, max_steps, learning_rate, width, height, dent) {
+                Ok(result) => {
+                    if format == "json" {
+                        let output = serde_json::json!({
+                            "vertices": result.template.iter().map(|v| {
+                                serde_json::json!({"x": v.x, "y": v.y})
+                            }).collect::<Vec<_>>(),
+                            "n_vertices": vertices,
+                            "final_loss": result.final_loss,
+                            "min_ratio": result.min_ratio,
+                            "loss_history": result.loss_history,
+                            "region_areas": result.region_areas.iter().map(|(k, a)| {
+                                serde_json::json!({"key": k, "area": a})
+                            }).collect::<Vec<_>>(),
+                        });
+                        println!("{}", serde_json::to_string_pretty(&output).unwrap());
+                    } else {
+                        let total: f64 = result.region_areas.iter().filter(|(_, a)| *a > 1e-6).map(|(_, a)| a).sum();
+                        eprintln!("\nOptimized template ({} vertices):", vertices);
+                        for (i, v) in result.template.iter().enumerate() {
+                            eprintln!("  [{:2}] ({:+.6}, {:+.6})", i, v.x, v.y);
+                        }
+                        eprintln!("\nRegion areas (total={:.4}, min/total={:.4}%):", total, result.min_ratio * 100.0);
+                        for (key, area) in &result.region_areas {
+                            if *area > 1e-6 {
+                                eprintln!("  {}: {:.6} ({:.4}%)", key, area, area / total * 100.0);
+                            } else {
+                                eprintln!("  {}: MISSING", key);
+                            }
+                        }
+                        eprintln!("\nFinal loss: {:.6e}", result.final_loss);
+
+                        // Print as TypeScript for easy copy-paste
+                        eprintln!("\n// TypeScript (paste into layout.ts):");
+                        eprintln!("const optimizedTemplate: R2<number>[] = [");
+                        for v in &result.template {
+                            eprintln!("  {{ x: {:+.6}, y: {:+.6} }},", v.x, v.y);
+                        }
+                        eprintln!("];");
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(1);
+                }
             }
         }
     }
