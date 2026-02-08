@@ -98,21 +98,55 @@ fn replicate_template(template: &[R2<Dual>], n_params: usize) -> Vec<Shape<Dual>
     }).collect()
 }
 
-/// Compute all 31 region areas from 5 shapes.
-/// Returns (areas_vec, total_area) or None if Scene fails.
-fn compute_regions(shapes: Vec<Shape<Dual>>, n_params: usize) -> Option<(Vec<(String, Dual)>, Dual)> {
+struct RegionInfo {
+    /// Summed area per key (31 entries)
+    areas: Vec<(String, Dual)>,
+    /// Total area across all regions
+    total: Dual,
+    /// Fragment areas: for each key with >1 geometric region,
+    /// the areas of all but the largest (the ones we want to eliminate)
+    fragment_areas: Vec<Dual>,
+}
+
+/// Compute all 31 region areas from 5 shapes, plus fragmentation info.
+fn compute_regions(shapes: Vec<Shape<Dual>>, n_params: usize) -> Option<RegionInfo> {
     let scene = Scene::new(shapes).ok()?;
+
+    // Collect actual geometric regions grouped by key
+    let mut regions_by_key: std::collections::BTreeMap<String, Vec<Dual>> = std::collections::BTreeMap::new();
+    for component in &scene.components {
+        for region in &component.regions {
+            regions_by_key.entry(region.key.clone()).or_default().push(region.area());
+        }
+    }
+
+    // Build summed areas for all 31 keys, and collect fragment penalties
     let mut areas = Vec::new();
     let mut total = Dual::zero(n_params);
+    let mut fragment_areas = Vec::new();
+
     for mask in 1u32..32 {
         let key: String = (0..5).map(|i| {
             if mask & (1 << i) != 0 { char::from_digit(i, 10).unwrap() } else { '-' }
         }).collect();
         let area = scene.area(&key).unwrap_or_else(|| Dual::zero(n_params));
         total = total + area.clone();
-        areas.push((key, area));
+        areas.push((key.clone(), area));
+
+        // Check for fragmentation: if this key has multiple geometric regions,
+        // penalize all but the largest
+        if let Some(mut geo_areas) = regions_by_key.remove(&key) {
+            if geo_areas.len() > 1 {
+                // Sort descending by value, keep all but the largest as fragments
+                geo_areas.sort_by(|a, b| b.v().partial_cmp(&a.v()).unwrap());
+                for frag in geo_areas.into_iter().skip(1) {
+                    fragment_areas.push(frag);
+                }
+            }
+        }
     }
-    Some((areas, total))
+
+    Some(RegionInfo { areas, total, fragment_areas })
 }
 
 /// Run the layout optimization.
@@ -137,32 +171,41 @@ pub fn optimize_layout(
         let vertices = dual_radii_to_vertices(&dual_radii, n_params);
         let shapes = replicate_template(&vertices, n_params);
 
-        let (areas, total) = compute_regions(shapes, n_params)
+        let info = compute_regions(shapes, n_params)
             .ok_or_else(|| format!("Scene creation failed at step {}", step))?;
 
         // Count positive regions
-        let n_positive = areas.iter().filter(|(_, a)| a.v() > 1e-6).count();
+        let n_positive = info.areas.iter().filter(|(_, a)| a.v() > 1e-6).count();
+        let n_fragments = info.fragment_areas.len();
 
         // Loss = sum of (area_i - mean)^2 (variance * 31)
-        let mean = total.clone() / Dual::scalar(31.0, n_params);
+        let mean = info.total.clone() / Dual::scalar(31.0, n_params);
         let mut loss = Dual::zero(n_params);
-        for (_, area) in &areas {
+        for (_, area) in &info.areas {
             let diff = area - mean.clone();
             loss = loss + &diff * &diff;
         }
 
         // Add penalty for missing regions (area <= 0)
-        for (_, area) in &areas {
+        for (_, area) in &info.areas {
             if area.v() < 1e-6 {
                 let penalty = Dual::scalar(10.0, n_params) - area.clone();
                 loss = loss + &penalty * &penalty;
             }
         }
 
+        // Fragmentation penalty: linear (L1) penalty on fragment areas.
+        // L1 provides constant gradient pressure to eliminate fragments,
+        // unlike L2 which vanishes as fragment area → 0.
+        let frag_weight = Dual::scalar(100.0, n_params);
+        for frag_area in &info.fragment_areas {
+            loss = loss + frag_weight.clone() * frag_area;
+        }
+
         let loss_val = loss.v();
         loss_history.push(loss_val);
 
-        if loss_val < best_loss && n_positive == 31 {
+        if loss_val < best_loss && n_positive == 31 && n_fragments == 0 {
             best_loss = loss_val;
             best_radii = radii.clone();
             best_step = step;
@@ -170,12 +213,13 @@ pub fn optimize_layout(
 
         // Progress
         if step % 100 == 0 || step == max_steps - 1 {
-            let min_area = areas.iter().map(|(_, a)| a.v()).filter(|a| *a > 1e-6).fold(f64::INFINITY, f64::min);
-            let total_val = total.v();
+            let min_area = info.areas.iter().map(|(_, a)| a.v()).filter(|a| *a > 1e-6).fold(f64::INFINITY, f64::min);
+            let total_val = info.total.v();
             let ratio = if total_val > 0.0 && min_area < f64::INFINITY { min_area / total_val } else { 0.0 };
+            let frag_str = if n_fragments > 0 { format!("  frags={}", n_fragments) } else { String::new() };
             eprintln!(
-                "  step {:5}: loss={:.6e}  regions={}/31  min/total={:.4}%  (best: step {} loss={:.6e})",
-                step, loss_val, n_positive, ratio * 100.0, best_step, best_loss,
+                "  step {:5}: loss={:.6e}  regions={}/31{}  min/total={:.4}%  (best: step {} loss={:.6e})",
+                step, loss_val, n_positive, frag_str, ratio * 100.0, best_step, best_loss,
             );
         }
 
@@ -196,15 +240,19 @@ pub fn optimize_layout(
     let dual_radii = dualize_radii(&best_radii);
     let vertices = dual_radii_to_vertices(&dual_radii, n_params);
     let shapes = replicate_template(&vertices, n_params);
-    let (areas, total) = compute_regions(shapes, n_params)
+    let info = compute_regions(shapes, n_params)
         .ok_or("Scene failed for best template")?;
 
-    let total_val = total.v();
-    let mut region_areas: Vec<(String, f64)> = areas.iter().map(|(k, a)| (k.clone(), a.v())).collect();
+    let total_val = info.total.v();
+    let mut region_areas: Vec<(String, f64)> = info.areas.iter().map(|(k, a)| (k.clone(), a.v())).collect();
     region_areas.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
     let min_positive = region_areas.iter().filter(|(_, a)| *a > 1e-6).map(|(_, a)| *a).next().unwrap_or(0.0);
     let min_ratio = if total_val > 0.0 { min_positive / total_val } else { 0.0 };
+
+    if !info.fragment_areas.is_empty() {
+        eprintln!("WARNING: Best template has {} fragments", info.fragment_areas.len());
+    }
 
     Ok(LayoutResult {
         template: best_template,

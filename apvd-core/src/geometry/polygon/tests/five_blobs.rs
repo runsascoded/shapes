@@ -2,7 +2,7 @@ use super::super::*;
 use crate::r2::R2;
 use crate::shape::Shape;
 
-fn five_shape_layout(n_sides: usize, dist: f64, rx: f64, ry: f64, dent: f64) -> Vec<Shape<f64>> {
+pub(super) fn five_shape_layout(n_sides: usize, dist: f64, rx: f64, ry: f64, dent: f64) -> Vec<Shape<f64>> {
     (0..5).map(|i| {
         let angle = std::f64::consts::FRAC_PI_2 + (2.0 * std::f64::consts::PI * i as f64) / 5.0;
         let cx = dist * angle.cos();
