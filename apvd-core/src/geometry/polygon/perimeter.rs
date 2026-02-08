@@ -131,84 +131,48 @@ where
     /// This is the signed area between the chord (p0→p1) and the polygon boundary path.
     /// The polygon boundary may include intermediate vertices between the two endpoints.
     ///
-    /// theta0 and theta1 are the angular positions (relative to centroid) of the endpoints.
-    /// Vertices with theta in the range (theta0, theta1) are included in the path.
-    pub fn secant_area(&self, p0: &R2<D>, p1: &R2<D>, theta0: D, theta1: D) -> D {
-        let center = self.center();
+    /// coord0 and coord1 are perimeter_param values (edge_idx + t) of the endpoints.
+    /// Vertices with integer perimeter_param strictly in (coord0, coord1) are intermediate.
+    pub fn secant_area(&self, p0: &R2<D>, p1: &R2<D>, coord0: f64, coord1: f64) -> D {
         let n = self.vertices.len();
 
-        // Compute theta for each vertex
-        let vertex_thetas: Vec<(usize, f64)> = (0..n)
-            .map(|i| {
-                let v = &self.vertices[i];
-                let rel_x: f64 = (v.x.clone() - center.x.clone()).into();
-                let rel_y: f64 = (v.y.clone() - center.y.clone()).into();
-                let theta = rel_y.atan2(rel_x);
-                (i, theta)
-            })
-            .collect();
+        // Find vertices with integer perimeter_param strictly between coord0 and coord1.
+        // Vertex i has perimeter_param = i (integer). Handle wrap-around: coord1 may be > n.
+        let first_idx = coord0.ceil() as usize;
+        let last_idx = coord1.floor() as usize;
 
-        let theta0_val: f64 = theta0.clone().into();
-        let theta1_val: f64 = theta1.clone().into();
+        let mut intermediate: Vec<usize> = Vec::new();
+        for vi in first_idx..=last_idx {
+            let vf = vi as f64;
+            if vf > coord0 + 1e-9 && vf < coord1 - 1e-9 {
+                intermediate.push(vi % n);
+            }
+        }
 
-        // Find vertices in the theta range (theta0, theta1)
-        // Handle wrapping: theta1 might be > 2π if it wrapped around
-        let mut intermediate_vertices: Vec<(usize, f64)> = vertex_thetas
-            .iter()
-            .filter(|(_, vt)| {
-                // Normalize vertex theta to be in the same "revolution" as the range
-                let vt_normalized = if theta1_val > std::f64::consts::TAU {
-                    // Range wraps around, so we might need to add TAU to vt
-                    if *vt < theta0_val {
-                        *vt + std::f64::consts::TAU
-                    } else {
-                        *vt
-                    }
-                } else {
-                    *vt
-                };
-                // Vertex is between theta0 and theta1 (exclusive of endpoints)
-                vt_normalized > theta0_val + 1e-9 && vt_normalized < theta1_val - 1e-9
-            })
-            .map(|(i, vt)| {
-                // Normalize for sorting
-                let vt_normalized = if theta1_val > std::f64::consts::TAU && *vt < theta0_val {
-                    *vt + std::f64::consts::TAU
-                } else {
-                    *vt
-                };
-                (*i, vt_normalized)
-            })
-            .collect();
-
-        // Sort by theta
-        intermediate_vertices.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-
-        // If no intermediate vertices, secant area is 0 (chord = boundary)
-        if intermediate_vertices.is_empty() {
+        if intermediate.is_empty() {
             return self.zero();
         }
 
-        // Compute the shoelace area of the polygon: p0 → v1 → v2 → ... → vn → p1 → back to p0
-        // Shoelace formula: sum of (x_i * y_{i+1} - x_{i+1} * y_i) / 2
+        // Compute shoelace area of the closed polygon: p0 → v1 → ... → vk → p1 → p0.
+        // This gives the signed area between the chord (p0→p1) and the polygon boundary path.
         let mut area = self.zero();
 
-        // First segment: p0 → first intermediate vertex
-        let first_v = &self.vertices[intermediate_vertices[0].0];
+        // p0 → first intermediate vertex
+        let first_v = &self.vertices[intermediate[0]];
         area = area + (p0.x.clone() * first_v.y.clone() - first_v.x.clone() * p0.y.clone());
 
-        // Intermediate segments: v_i → v_{i+1}
-        for i in 0..intermediate_vertices.len() - 1 {
-            let v_i = &self.vertices[intermediate_vertices[i].0];
-            let v_next = &self.vertices[intermediate_vertices[i + 1].0];
-            area = area + (v_i.x.clone() * v_next.y.clone() - v_next.x.clone() * v_i.y.clone());
+        // Consecutive intermediate vertices
+        for i in 0..intermediate.len() - 1 {
+            let vi = &self.vertices[intermediate[i]];
+            let vn = &self.vertices[intermediate[i + 1]];
+            area = area + (vi.x.clone() * vn.y.clone() - vn.x.clone() * vi.y.clone());
         }
 
-        // Segment from last intermediate vertex to p1
-        let last_v = &self.vertices[intermediate_vertices.last().unwrap().0];
+        // Last intermediate vertex → p1
+        let last_v = &self.vertices[*intermediate.last().unwrap()];
         area = area + (last_v.x.clone() * p1.y.clone() - p1.x.clone() * last_v.y.clone());
 
-        // Closing segment: p1 → back to p0
+        // Close: p1 → p0
         area = area + (p1.x.clone() * p0.y.clone() - p0.x.clone() * p1.y.clone());
 
         area / 2.

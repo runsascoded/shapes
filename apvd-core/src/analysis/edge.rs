@@ -165,9 +165,12 @@ impl<D: EdgeArg + Zero> Edge<D> {
                 r2 / 2. * (theta.clone() - theta.sin())
             },
             Polygon(polygon) => {
-                // Polygon edges are straight lines, no arc bulge
-                // Return zero of type D by getting a D value from polygon
-                polygon.vertices[0].x.clone().zero()
+                // Polygon edges are straight lines, but the boundary path between two
+                // intersection points may pass through intermediate polygon vertices.
+                // secant_area computes the signed area between the chord and that path.
+                let p0 = self.node0.borrow().p.clone();
+                let p1 = self.node1.borrow().p.clone();
+                polygon.secant_area(&p0, &p1, self.coord0, self.coord1)
             },
         }
     }
