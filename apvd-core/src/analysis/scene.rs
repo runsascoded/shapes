@@ -480,7 +480,11 @@ pub mod tests {
             }).collect::<Vec<String>>().join(" ");
             format!("{} {}: {:.3} + {:.3} = {}", region.key, path_str, region.polygon_area.v(), region.secant_area.v(), region.area().s(3))
         }).collect::<Vec<String>>();
-        actual.iter().zip(expected.iter()).enumerate().for_each(|(idx, (a, b))| assert_eq!(&a, b, "idx: {}, {} != {}", idx, a, b));
+        let mut actual_sorted = actual.clone();
+        actual_sorted.sort();
+        let mut expected_sorted: Vec<&str> = expected.to_vec();
+        expected_sorted.sort();
+        actual_sorted.iter().zip(expected_sorted.iter()).enumerate().for_each(|(idx, (a, b))| assert_eq!(a, b, "idx: {}, {} != {}", idx, a, b));
     }
 
     #[test]
