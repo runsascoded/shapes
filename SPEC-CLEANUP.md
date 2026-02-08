@@ -82,6 +82,7 @@ src/
     set.rs, theta_points.rs
   geometry/           # Shape types
     shape.rs, circle.rs, r2.rs
+    polygon/ (mod, intersection, perimeter, transforms, penalties, tests/)
     ellipses/ (xyrr, xyrrt, cdef, bcdef, quartic)
     transform.rs, rotate.rs
   math/               # Numerical algorithms
@@ -120,7 +121,7 @@ pub fn make_model(...) -> Model { ... }
 
 ### 8. Test Coverage ✅ EXPANDED
 
-**Added tests** (total: 142 tests):
+**Added tests** (total: 217 tests):
 - `math/quadratic.rs` - 8 comprehensive tests (real roots, complex roots, edge cases)
 - `distance.rs` - 6 tests for R2 distance calculations
 - `targets.rs` - 6 additional tests (disjoints, neighbors, idx, none_key, total_area)

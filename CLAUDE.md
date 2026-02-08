@@ -66,7 +66,7 @@ apvd serve -p 8080
 ### Core Modules (`apvd-core/src/`)
 
 **Geometry** (`geometry/`):
-- `circle.rs`, `polygon.rs`: Shape implementations
+- `circle.rs`, `polygon/`: Shape implementations
 - `ellipses/xyrr.rs`, `xyrrt.rs`: Ellipse computations
 - `ellipses/quartic.rs`: Quartic solver for ellipse-ellipse intersections
 - `r2.rs`: 2D point type
@@ -188,15 +188,10 @@ Test data in `apvd-core/testdata/` (CSV files with expected values).
 - Issue #9: Only absolute error metric (no relative)
 - Issue #10: Basic missing-region penalty
 - Quartic solver can have numerical stability issues at edge cases
-- `Segment::successors()` returns candidate edges without any ordering — region
-  traversal picks edges arbitrarily, which can select wrong paths at intersection
-  nodes on concave polygons. (DFS backtracking mitigates this for most cases.)
 
 ## Future Improvements
 
 ### Algorithm Robustness
-- **Order successors in region traversal**: Use `BoundaryCoord` to select the
-  correct next edge at intersection nodes
 - **Sweep line algorithm**: Replace current intersection logic with Bentley-Ottmann style
 - **X-monotone decomposition**: Split curves at vertical tangent points
 
