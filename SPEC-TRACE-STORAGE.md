@@ -1,5 +1,7 @@
 # Trace Storage Spec
 
+**Status**: Partially implemented. Tiered keyframes implemented in `@apvd/worker`. BTD bitmask not yet implemented. See also `specs/btd-trace-format.md` for the BTD-specific format spec.
+
 ## Problem
 
 Training histories can grow arbitrarily long (10k+ steps). Storing every step:
