@@ -746,3 +746,69 @@ fn test_optimized_template_five_shapes() {
     }
     eprintln!("{} positive, {} zero, {} negative", positives, zeros, negatives);
 }
+
+#[test]
+fn test_12gon_opt_template_two_shapes_regions() {
+    // Repro: the 12-gon opt template shapes 0,1 fail region detection in the browser.
+    // Error: total_visits (42) != total_expected_visits (70)
+    use crate::scene::Scene;
+
+    let template12: Vec<R2<f64>> = vec![
+        R2 { x:  0.000000, y:  0.708513 },
+        R2 { x:  0.135692, y:  0.235026 },
+        R2 { x:  0.375308, y:  0.216684 },
+        R2 { x:  0.070803, y:  0.000000 },
+        R2 { x:  0.316522, y: -0.182744 },
+        R2 { x:  0.300825, y: -0.521044 },
+        R2 { x:  0.000000, y: -0.096645 },
+        R2 { x: -0.275279, y: -0.476797 },
+        R2 { x: -0.183135, y: -0.105733 },
+        R2 { x: -0.056255, y:  0.000000 },
+        R2 { x: -0.339773, y:  0.196168 },
+        R2 { x: -0.144770, y:  0.250750 },
+    ];
+
+    for (i, j) in [(0, 1), (0, 2), (1, 2)] {
+        let angle_i = std::f64::consts::FRAC_PI_2 + (2.0 * std::f64::consts::PI * i as f64) / 5.0;
+        let angle_j = std::f64::consts::FRAC_PI_2 + (2.0 * std::f64::consts::PI * j as f64) / 5.0;
+        let shapes = vec![
+            rotate_template(&template12, angle_i),
+            rotate_template(&template12, angle_j),
+        ];
+
+        let scene = match Scene::new(shapes) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("12-gon opt ({}, {}): Scene::new failed: {:?}", i, j, e);
+                continue;
+            }
+        };
+
+        let mut regions = Vec::new();
+        for mask in 1u32..4 {
+            let key: String = (0..2).map(|k| {
+                if mask & (1 << k) != 0 { char::from_digit(k, 10).unwrap() } else { '-' }
+            }).collect();
+            let area = scene.area(&key).unwrap_or(0.0);
+            regions.push((key, area));
+        }
+
+        let positives: Vec<_> = regions.iter().filter(|(_, a)| *a > 0.001).collect();
+        if positives.len() != 3 {
+            eprintln!(
+                "12-gon opt ({}, {}): {} positive | {}",
+                i, j, positives.len(),
+                regions.iter().map(|(k, a)| format!("{}={:.4}", k, a)).collect::<Vec<_>>().join(", ")
+            );
+            for (ci, component) in scene.components.iter().enumerate() {
+                eprintln!("  Component {}: key={}, {} regions, {} edges, {} nodes",
+                    ci, component.key, component.regions.len(),
+                    component.edges.len(), component.nodes.len());
+                for region in &component.regions {
+                    eprintln!("    Region {}: area={:.6}, {} segments", region.key, region.total_area, region.segments.len());
+                }
+            }
+        }
+        assert_eq!(positives.len(), 3, "12-gon opt ({}, {}): expected 3 positive regions", i, j);
+    }
+}
