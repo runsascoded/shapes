@@ -132,10 +132,6 @@ where
         // For polygons, add vertices as nodes (they're boundary points that need to be
         // in the graph for proper area computation, since polygon edges are straight lines
         // between consecutive nodes, not curved arcs with a "bulge" like circles/ellipses).
-        // Use a larger merge threshold than for intersection points: polygon vertices
-        // very close to intersection points create tiny edges with numerically unreliable
-        // containment classification, breaking region traversal.
-        let vertex_merge_threshold = 1e-3;
         for (idx, set_ptr) in set_ptrs.iter().enumerate() {
             let shape = &set_ptr.borrow().shape;
             if let Shape::Polygon(polygon) = shape {
@@ -144,7 +140,7 @@ where
                     let coord = v_idx as f64;
                     for node in &nodes {
                         let d = node.borrow().p.distance(vertex);
-                        if d.into() < vertex_merge_threshold {
+                        if d.into() < merge_threshold {
                             let mut node = node.borrow_mut();
                             if !node.shape_coords.contains_key(&idx) {
                                 node.shape_coords.insert(idx, coord);

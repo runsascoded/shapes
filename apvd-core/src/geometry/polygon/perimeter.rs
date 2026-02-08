@@ -39,6 +39,7 @@ impl<D: Clone + Into<f64>> Polygon<D> {
     /// The point is assumed to lie on the polygon boundary (from an intersection computation).
     pub fn perimeter_param(&self, p: &R2<f64>) -> f64 {
         let n = self.vertices.len();
+        let mut best: Option<(f64, f64)> = None; // (dist_sq, param)
 
         for i in 0..n {
             let v0x: f64 = self.vertices[i].x.clone().into();
@@ -74,9 +75,15 @@ impl<D: Clone + Into<f64>> Polygon<D> {
             let dist_sq = (p.x - edge_pt_x).powi(2) + (p.y - edge_pt_y).powi(2);
 
             if dist_sq < 1e-8 {
-                // Found the edge! Return edge_idx + t
-                return (i as f64) + t.clamp(0.0, 1.0);
+                let param = (i as f64) + t.clamp(0.0, 1.0);
+                if best.is_none() || dist_sq < best.unwrap().0 {
+                    best = Some((dist_sq, param));
+                }
             }
+        }
+
+        if let Some((_, param)) = best {
+            return param;
         }
 
         // Fallback: point not found on any edge, use centroid angle

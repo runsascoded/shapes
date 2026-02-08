@@ -109,7 +109,6 @@ fn test_five_blobs_dual_vs_f64() {
     // Compare Scene<f64> vs Scene<Dual> (via Step::new) to isolate
     // whether the WASM region count discrepancy is a Dual vs f64 issue.
     use crate::step::Step;
-    use crate::to::To;
 
     let shapes_f64 = five_shape_layout(40, 0.2, 0.7, 1.5, 0.15);
     let (p_f64, z_f64, n_f64) = count_regions(shapes_f64.clone(), "f64 Scene");
@@ -804,11 +803,202 @@ fn test_12gon_opt_template_two_shapes_regions() {
                 eprintln!("  Component {}: key={}, {} regions, {} edges, {} nodes",
                     ci, component.key, component.regions.len(),
                     component.edges.len(), component.nodes.len());
+                eprintln!("  Nodes:");
+                for node in &component.nodes {
+                    let n = node.borrow();
+                    let coords: Vec<String> = n.shape_coords.iter()
+                        .map(|(s, c)| format!("s{}:{:.4}", s, c))
+                        .collect();
+                    eprintln!("    N{}: ({:.6},{:.6}) [{}]",
+                        n.idx, n.p.x, n.p.y, coords.join(", "));
+                }
+                eprintln!("  Edges:");
+                for edge in &component.edges {
+                    let e = edge.borrow();
+                    let containers: Vec<String> = e.container_set_idxs.iter().map(|i| i.to_string()).collect();
+                    eprintln!("    E{}: s{} N{}({:.4})→N{}({:.4}) [{}] {} visits={}/{}",
+                        e.idx, e.set.borrow().idx,
+                        e.node0.borrow().idx, e.coord0,
+                        e.node1.borrow().idx, e.coord1,
+                        containers.join(","),
+                        if e.is_component_boundary { "bnd" } else { "int" },
+                        e.visits, e.expected_visits());
+                }
                 for region in &component.regions {
-                    eprintln!("    Region {}: area={:.6}, {} segments", region.key, region.total_area, region.segments.len());
+                    let seg_desc: Vec<String> = region.segments.iter().map(|s| {
+                        let e = s.edge.borrow();
+                        format!("s{}:N{}{}N{}",
+                            e.set.borrow().idx,
+                            if s.fwd { e.node0.borrow().idx } else { e.node1.borrow().idx },
+                            if s.fwd { "→" } else { "←" },
+                            if s.fwd { e.node1.borrow().idx } else { e.node0.borrow().idx })
+                    }).collect();
+                    eprintln!("    Region {}: area={:.6}, {} segs: {}",
+                        region.key, region.total_area, region.segments.len(), seg_desc.join(" "));
                 }
             }
         }
         assert_eq!(positives.len(), 3, "12-gon opt ({}, {}): expected 3 positive regions", i, j);
+    }
+}
+
+/// Diagnostic: dump the full graph for the 2-shape case to find the traversal bug.
+/// Temporarily bypass vertex_merge_threshold to see the raw graph.
+#[test]
+fn test_graph_topology_diagnostic() {
+    use crate::contains::ContainsF64;
+    use crate::geometry::polygon::intersection::line_line_intersection;
+
+    let template12: Vec<R2<f64>> = vec![
+        R2 { x:  0.000000, y:  0.708513 },
+        R2 { x:  0.135692, y:  0.235026 },
+        R2 { x:  0.375308, y:  0.216684 },
+        R2 { x:  0.070803, y:  0.000000 },
+        R2 { x:  0.316522, y: -0.182744 },
+        R2 { x:  0.300825, y: -0.521044 },
+        R2 { x:  0.000000, y: -0.096645 },
+        R2 { x: -0.275279, y: -0.476797 },
+        R2 { x: -0.183135, y: -0.105733 },
+        R2 { x: -0.056255, y:  0.000000 },
+        R2 { x: -0.339773, y:  0.196168 },
+        R2 { x: -0.144770, y:  0.250750 },
+    ];
+
+    let angle0 = std::f64::consts::FRAC_PI_2;
+    let angle1 = std::f64::consts::FRAC_PI_2 + 2.0 * std::f64::consts::PI / 5.0;
+    let shape0 = rotate_template(&template12, angle0);
+    let shape1 = rotate_template(&template12, angle1);
+
+    let poly0 = match &shape0 { Shape::Polygon(p) => p, _ => panic!() };
+    let poly1 = match &shape1 { Shape::Polygon(p) => p, _ => panic!() };
+    let n = poly0.vertices.len();
+
+    // Print all intersections
+    let mut intersections: Vec<(R2<f64>, usize, f64, usize, f64)> = Vec::new();
+    for i in 0..n {
+        let a0 = &poly0.vertices[i];
+        let a1 = &poly0.vertices[(i + 1) % n];
+        for j in 0..n {
+            let b0 = &poly1.vertices[j];
+            let b1 = &poly1.vertices[(j + 1) % n];
+            if let Some(pt) = line_line_intersection(a0, a1, b0, b1) {
+                let da_x = a1.x - a0.x;
+                let da_y = a1.y - a0.y;
+                let t = if da_x.abs() > da_y.abs() {
+                    (pt.x - a0.x) / da_x
+                } else {
+                    (pt.y - a0.y) / da_y
+                };
+                let db_x = b1.x - b0.x;
+                let db_y = b1.y - b0.y;
+                let u = if db_x.abs() > db_y.abs() {
+                    (pt.x - b0.x) / db_x
+                } else {
+                    (pt.y - b0.y) / db_y
+                };
+                if t > 1e-10 && t < 1.0 - 1e-10 && u > 1e-10 && u < 1.0 - 1e-10 {
+                    let pp0 = i as f64 + t;
+                    let pp1 = j as f64 + u;
+                    intersections.push((pt, i, pp0, j, pp1));
+                }
+            }
+        }
+    }
+
+    eprintln!("\nAll {} intersections:", intersections.len());
+    for (k, (pt, e0, pp0, e1, pp1)) in intersections.iter().enumerate() {
+        // Find nearest vertex on each shape
+        let mut min_d0 = f64::MAX;
+        let mut min_v0 = 0;
+        let mut min_d1 = f64::MAX;
+        let mut min_v1 = 0;
+        for v in 0..n {
+            let d0 = ((pt.x - poly0.vertices[v].x).powi(2) + (pt.y - poly0.vertices[v].y).powi(2)).sqrt();
+            let d1 = ((pt.x - poly1.vertices[v].x).powi(2) + (pt.y - poly1.vertices[v].y).powi(2)).sqrt();
+            if d0 < min_d0 { min_d0 = d0; min_v0 = v; }
+            if d1 < min_d1 { min_d1 = d1; min_v1 = v; }
+        }
+        eprintln!("  [{}] ({:.6}, {:.6}) s0e{}(pp={:.4}) s1e{}(pp={:.4})  nearest: s0v{}({:.2e}) s1v{}({:.2e})",
+            k, pt.x, pt.y, e0, pp0, e1, pp1, min_v0, min_d0, min_v1, min_d1);
+    }
+
+    // Now check which vertices are inside the other shape
+    eprintln!("\nShape0 vertices containment in shape1:");
+    for (v, vtx) in poly0.vertices.iter().enumerate() {
+        let inside = shape1.contains_f64(vtx);
+        eprintln!("  v{}: ({:.6}, {:.6}) inside_shape1={}", v, vtx.x, vtx.y, inside);
+    }
+    eprintln!("\nShape1 vertices containment in shape0:");
+    for (v, vtx) in poly1.vertices.iter().enumerate() {
+        let inside = shape0.contains_f64(vtx);
+        eprintln!("  v{}: ({:.6}, {:.6}) inside_shape0={}", v, vtx.x, vtx.y, inside);
+    }
+
+    // Build the graph manually: list nodes on each shape in perimeter order
+    // On shape0: 12 vertices at pp=0,1,...,11 plus intersections
+    // On shape1: 12 vertices at pp=0,1,...,11 plus intersections
+    eprintln!("\nNodes on shape0 in perimeter order:");
+    let mut s0_nodes: Vec<(f64, String)> = Vec::new();
+    for v in 0..n {
+        s0_nodes.push((v as f64, format!("v{}", v)));
+    }
+    for (k, (_, _, pp0, _, _)) in intersections.iter().enumerate() {
+        s0_nodes.push((*pp0, format!("i{}", k)));
+    }
+    s0_nodes.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+    for (pp, name) in &s0_nodes {
+        eprintln!("  pp={:.6}: {}", pp, name);
+    }
+
+    eprintln!("\nNodes on shape1 in perimeter order:");
+    let mut s1_nodes: Vec<(f64, String)> = Vec::new();
+    for v in 0..n {
+        s1_nodes.push((v as f64, format!("v{}", v)));
+    }
+    for (k, (_, _, _, _, pp1)) in intersections.iter().enumerate() {
+        s1_nodes.push((*pp1, format!("i{}", k)));
+    }
+    s1_nodes.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+    for (pp, name) in &s1_nodes {
+        eprintln!("  pp={:.6}: {}", pp, name);
+    }
+
+    // For each consecutive pair of nodes on each shape, check the edge's containment
+    eprintln!("\nEdges on shape0 (containment in shape1):");
+    for w in s0_nodes.windows(2) {
+        let (pp0, name0) = &w[0];
+        let (pp1, name1) = &w[1];
+        let mid_pp = (pp0 + pp1) / 2.0;
+        let mid_pt = poly0.perimeter_point(mid_pp);
+        let inside_s1 = shape1.contains_f64(&mid_pt);
+        eprintln!("  {} → {} (pp {:.4}→{:.4}): mid inside_shape1={}", name0, name1, pp0, pp1, inside_s1);
+    }
+    // Wrap-around edge
+    {
+        let (pp0, name0) = s0_nodes.last().unwrap();
+        let (pp1, name1) = &s0_nodes[0];
+        let mid_pp = (pp0 + pp1 + n as f64) / 2.0;
+        let mid_pt = poly0.perimeter_point(mid_pp % n as f64);
+        let inside_s1 = shape1.contains_f64(&mid_pt);
+        eprintln!("  {} → {} (pp {:.4}→{:.4}[+12]): mid inside_shape1={}", name0, name1, pp0, pp1 + n as f64, inside_s1);
+    }
+
+    eprintln!("\nEdges on shape1 (containment in shape0):");
+    for w in s1_nodes.windows(2) {
+        let (pp0, name0) = &w[0];
+        let (pp1, name1) = &w[1];
+        let mid_pp = (pp0 + pp1) / 2.0;
+        let mid_pt = poly1.perimeter_point(mid_pp);
+        let inside_s0 = shape0.contains_f64(&mid_pt);
+        eprintln!("  {} → {} (pp {:.4}→{:.4}): mid inside_shape0={}", name0, name1, pp0, pp1, inside_s0);
+    }
+    // Wrap-around edge
+    {
+        let (pp0, name0) = s1_nodes.last().unwrap();
+        let (pp1, name1) = &s1_nodes[0];
+        let mid_pp = (pp0 + pp1 + n as f64) / 2.0;
+        let mid_pt = poly1.perimeter_point(mid_pp % n as f64);
+        let inside_s0 = shape0.contains_f64(&mid_pt);
+        eprintln!("  {} → {} (pp {:.4}→{:.4}[+12]): mid inside_shape0={}", name0, name1, pp0, pp1 + n as f64, inside_s0);
     }
 }
