@@ -21,8 +21,8 @@ jobs:
       - run: cargo build
       - run: cargo test -- --nocapture
 
-  build-wasm:
-    needs: [test, build-client]
+  build-dist:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -45,85 +45,34 @@ jobs:
       - name: Build WASM
         run: cd apvd-wasm && wasm-pack build --target web
 
+      - name: Rename WASM package
+        run: |
+          cd apvd-wasm/pkg
+          jq '.name = "@apvd/wasm"' package.json > tmp.json && mv tmp.json package.json
+
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build TypeScript wrapper
-        run: cd apvd-wasm/ts && pnpm build
-
-      - name: Update package.json exports
+      - name: Build TypeScript packages
         run: |
-          # TypeScript already compiled to pkg via tsconfig outDir
-          # Update package.json to include the new exports and scoped name
-          cd apvd-wasm/pkg
-          jq '.name = "@apvd/wasm" |
-              .repository.directory = "apvd-wasm/pkg" |
-              .exports = {
-                ".": {
-                  "types": "./apvd_wasm.d.ts",
-                  "default": "./apvd_wasm.js"
-                },
-                "./client": {
-                  "types": "./index.d.ts",
-                  "default": "./index.js"
-                },
-                "./worker": {
-                  "types": "./worker.d.ts",
-                  "default": "./worker.js"
-                }
-              } |
-              .peerDependencies = { "@apvd/client": "*" } |
-              .peerDependenciesMeta = { "@apvd/client": { "optional": true } }' package.json > tmp.json && mv tmp.json package.json
+          cd client && pnpm build && cd ..
+          cd apvd-wasm/ts && pnpm build
 
       - name: Push dist branch (main)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        uses: runsascoded/npm-dist@v1.1
+        uses: runsascoded/npm-dist@v1
         with:
-          prebuilt_dir: apvd-wasm/pkg
+          pkgs: |
+            client
+            apvd-wasm/pkg
+            apvd-wasm/ts
 
       - name: Push dist branch (PR)
         if: github.event_name == 'pull_request'
-        uses: runsascoded/npm-dist@v1.1
+        uses: runsascoded/npm-dist@v1
         with:
-          prebuilt_dir: apvd-wasm/pkg
           dist_branch: dist-${{ github.head_ref }}
-
-  build-client:
-    needs: test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'pnpm'
-          cache-dependency-path: client/pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: cd client && pnpm install
-
-      - name: Build TypeScript
-        run: cd client && pnpm build
-
-      - name: Push dist branch (main)
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        uses: runsascoded/npm-dist@v1.1
-        with:
-          dir: client
-          dist_branch: client-dist
-
-      - name: Push dist branch (PR)
-        if: github.event_name == 'pull_request'
-        uses: runsascoded/npm-dist@v1.1
-        with:
-          dir: client
-          dist_branch: client-dist-${{ github.head_ref }}
+          pkgs: |
+            client
+            apvd-wasm/pkg
+            apvd-wasm/ts
