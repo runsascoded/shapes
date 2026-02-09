@@ -15,6 +15,11 @@ export interface AdamState {
     epsilon: number;
 }
 
+export interface BtdEvenlySpacedConfig {
+    maxBtdKeyframes: number | null;
+    intervalSpacing: number | null;
+}
+
 export interface Circle<D> {
     c: R2<D>;
     r: D;
@@ -50,6 +55,7 @@ export interface Error {
     target_area: number;
     target_frac: number;
     error: Dual;
+    kind: ErrorKind;
 }
 
 export interface HistoryStep {
@@ -83,6 +89,13 @@ export interface OptimConfig {
     warmup_steps: number;
     max_error_increase: number;
     max_rejections: number;
+}
+
+export interface Penalties {
+    disjoint: number;
+    contained: number;
+    self_intersection: number;
+    regularity: number;
 }
 
 export interface Point {
@@ -126,6 +139,7 @@ export interface Step {
     errors: Errors;
     error: Dual;
     converged: boolean;
+    penalties: Penalties;
 }
 
 export interface Targets<D> {
@@ -133,6 +147,19 @@ export interface Targets<D> {
     given: string[];
     n: number;
     total_area: D;
+}
+
+export interface TieredConfig {
+    bucketSize: number;
+}
+
+export interface TraceMetadata {
+    totalSteps: number;
+    storedSteps: number;
+    strategy: string;
+    minIndex: number;
+    minError: number;
+    btdIndices?: number[];
 }
 
 export interface XYRR<D> {
@@ -150,6 +177,8 @@ export type D = Dual;
 
 export type Duals = number[][];
 
+export type ErrorKind = { type: "AreaMismatch"; signed_error: number } | { type: "MissingRegion"; target_frac: number } | { type: "ExtraRegion"; actual_frac: number };
+
 export type Errors = Record<string, Error>;
 
 export type History = HistoryStep[];
@@ -159,6 +188,8 @@ export type Input = [Shape<number>, Duals];
 export type Key = string;
 
 export type Shape<D> = ({ kind: "Circle" } & Circle<D>) | ({ kind: "XYRR" } & XYRR<D>) | ({ kind: "XYRRT" } & XYRRT<D>) | ({ kind: "Polygon" } & Polygon<D>);
+
+export type StorageStrategy = "dense" | "btd" | "tiered" | "btdevenlyspaced";
 
 export type TargetsMap<D> = Record<string, D>;
 
@@ -248,6 +279,21 @@ export function make_model(inputs: any, targets: any): any;
 export function make_step(inputs: any, targets: any): any;
 
 /**
+ * Creates a tiered keyframe configuration.
+ *
+ * Tiered storage achieves O(log N) storage for N steps while maintaining
+ * bounded seek time via recomputation from keyframes.
+ *
+ * # Arguments
+ * * `bucket_size` - Optional bucket size B (default: 1024). Tier 0 has 2B
+ *   samples, other tiers have B samples.
+ *
+ * # Returns
+ * A [`TieredConfig`] for determining which steps are keyframes.
+ */
+export function make_tiered_config(bucket_size?: number | null): any;
+
+/**
  * Performs a single gradient descent step with gradient clipping (recommended).
  *
  * Uses fixed learning rate with gradient clipping for stable updates.
@@ -274,6 +320,59 @@ export function step(step: any, learning_rate: number): any;
  * * `max_step_error_ratio` - Learning rate scaling factor.
  */
 export function step_legacy(step: any, max_step_error_ratio: number): any;
+
+/**
+ * Check if a step should be stored as a keyframe.
+ *
+ * # Arguments
+ * * `config` - Tiered configuration from [`make_tiered_config`].
+ * * `step_idx` - Step index to check.
+ *
+ * # Returns
+ * True if this step should be stored as a keyframe.
+ */
+export function tiered_is_keyframe(config: any, step_idx: number): boolean;
+
+/**
+ * Calculate keyframe count for N steps.
+ *
+ * # Arguments
+ * * `config` - Tiered configuration.
+ * * `total_steps` - Total number of steps.
+ *
+ * # Returns
+ * Number of keyframes needed to store total_steps.
+ */
+export function tiered_keyframe_count(config: any, total_steps: number): number;
+
+/**
+ * Find the nearest keyframe at or before a step.
+ *
+ * # Arguments
+ * * `config` - Tiered configuration from [`make_tiered_config`].
+ * * `step_idx` - Target step index.
+ *
+ * # Returns
+ * Index of the nearest keyframe ≤ step_idx.
+ */
+export function tiered_nearest_keyframe(config: any, step_idx: number): number;
+
+/**
+ * Seek to a target step by recomputing from a keyframe.
+ *
+ * Given a keyframe step, recomputes forward to reach the target step.
+ * This enables random access to any step with bounded recomputation.
+ *
+ * # Arguments
+ * * `keyframe` - The stored keyframe step.
+ * * `keyframe_idx` - Index of the keyframe.
+ * * `target_idx` - Target step index to seek to.
+ * * `learning_rate` - Learning rate for recomputation steps.
+ *
+ * # Returns
+ * The step at target_idx, or throws if recomputation fails.
+ */
+export function tiered_seek(keyframe: any, keyframe_idx: number, target_idx: number, learning_rate: number): any;
 
 /**
  * Runs gradient descent training on a model.
@@ -364,8 +463,13 @@ export interface InitOutput {
     readonly is_converged: (a: any, b: number) => number;
     readonly make_model: (a: any, b: any) => any;
     readonly make_step: (a: any, b: any) => any;
+    readonly make_tiered_config: (a: number) => any;
     readonly step: (a: any, b: number) => any;
     readonly step_legacy: (a: any, b: number) => any;
+    readonly tiered_is_keyframe: (a: any, b: number) => number;
+    readonly tiered_keyframe_count: (a: any, b: number) => number;
+    readonly tiered_nearest_keyframe: (a: any, b: number) => number;
+    readonly tiered_seek: (a: any, b: number, c: number, d: number) => [number, number, number];
     readonly train: (a: any, b: number, c: number) => any;
     readonly train_adam: (a: any, b: number, c: number) => any;
     readonly train_robust: (a: any, b: number) => any;
@@ -377,6 +481,7 @@ export interface InitOutput {
     readonly __externref_table_alloc: () => number;
     readonly __wbindgen_externrefs: WebAssembly.Table;
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;
+    readonly __externref_table_dealloc: (a: number) => void;
     readonly __wbindgen_start: () => void;
 }
 

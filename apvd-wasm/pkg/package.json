@@ -1,0 +1,21 @@
+{
+  "name": "@apvd/wasm",
+  "type": "module",
+  "description": "WASM bindings for area-proportional Venn diagrams",
+  "version": "0.1.0-dist.1483cda",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/runsascoded/shapes"
+  },
+  "files": [
+    "apvd_wasm_bg.wasm",
+    "apvd_wasm.js",
+    "apvd_wasm.d.ts"
+  ],
+  "main": "apvd_wasm.js",
+  "types": "apvd_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

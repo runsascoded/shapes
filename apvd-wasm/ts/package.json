@@ -1,0 +1,17 @@
+{
+  "name": "@apvd/worker",
+  "version": "0.1.0-dist.1483cda",
+  "private": true,
+  "type": "module",
+  "peerDependencies": {
+    "@apvd/client": "*"
+  },
+  "devDependencies": {
+    "@apvd/wasm": "file:../pkg",
+    "typescript": "^5.9.3",
+    "@apvd/client": "0.1.0"
+  },
+  "scripts": {
+    "build": "tsc"
+  }
+}

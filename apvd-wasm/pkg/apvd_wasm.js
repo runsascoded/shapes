@@ -115,6 +115,26 @@ export function make_step(inputs, targets) {
 }
 
 /**
+ * Creates a tiered keyframe configuration.
+ *
+ * Tiered storage achieves O(log N) storage for N steps while maintaining
+ * bounded seek time via recomputation from keyframes.
+ *
+ * # Arguments
+ * * `bucket_size` - Optional bucket size B (default: 1024). Tier 0 has 2B
+ *   samples, other tiers have B samples.
+ *
+ * # Returns
+ * A [`TieredConfig`] for determining which steps are keyframes.
+ * @param {number | null} [bucket_size]
+ * @returns {any}
+ */
+export function make_tiered_config(bucket_size) {
+    const ret = wasm.make_tiered_config(isLikeNone(bucket_size) ? 0x100000001 : (bucket_size) >>> 0);
+    return ret;
+}
+
+/**
  * Performs a single gradient descent step with gradient clipping (recommended).
  *
  * Uses fixed learning rate with gradient clipping for stable updates.
@@ -152,6 +172,88 @@ export function step(step, learning_rate) {
 export function step_legacy(step, max_step_error_ratio) {
     const ret = wasm.step_legacy(step, max_step_error_ratio);
     return ret;
+}
+
+/**
+ * Check if a step should be stored as a keyframe.
+ *
+ * # Arguments
+ * * `config` - Tiered configuration from [`make_tiered_config`].
+ * * `step_idx` - Step index to check.
+ *
+ * # Returns
+ * True if this step should be stored as a keyframe.
+ * @param {any} config
+ * @param {number} step_idx
+ * @returns {boolean}
+ */
+export function tiered_is_keyframe(config, step_idx) {
+    const ret = wasm.tiered_is_keyframe(config, step_idx);
+    return ret !== 0;
+}
+
+/**
+ * Calculate keyframe count for N steps.
+ *
+ * # Arguments
+ * * `config` - Tiered configuration.
+ * * `total_steps` - Total number of steps.
+ *
+ * # Returns
+ * Number of keyframes needed to store total_steps.
+ * @param {any} config
+ * @param {number} total_steps
+ * @returns {number}
+ */
+export function tiered_keyframe_count(config, total_steps) {
+    const ret = wasm.tiered_keyframe_count(config, total_steps);
+    return ret >>> 0;
+}
+
+/**
+ * Find the nearest keyframe at or before a step.
+ *
+ * # Arguments
+ * * `config` - Tiered configuration from [`make_tiered_config`].
+ * * `step_idx` - Target step index.
+ *
+ * # Returns
+ * Index of the nearest keyframe ≤ step_idx.
+ * @param {any} config
+ * @param {number} step_idx
+ * @returns {number}
+ */
+export function tiered_nearest_keyframe(config, step_idx) {
+    const ret = wasm.tiered_nearest_keyframe(config, step_idx);
+    return ret >>> 0;
+}
+
+/**
+ * Seek to a target step by recomputing from a keyframe.
+ *
+ * Given a keyframe step, recomputes forward to reach the target step.
+ * This enables random access to any step with bounded recomputation.
+ *
+ * # Arguments
+ * * `keyframe` - The stored keyframe step.
+ * * `keyframe_idx` - Index of the keyframe.
+ * * `target_idx` - Target step index to seek to.
+ * * `learning_rate` - Learning rate for recomputation steps.
+ *
+ * # Returns
+ * The step at target_idx, or throws if recomputation fails.
+ * @param {any} keyframe
+ * @param {number} keyframe_idx
+ * @param {number} target_idx
+ * @param {number} learning_rate
+ * @returns {any}
+ */
+export function tiered_seek(keyframe, keyframe_idx, target_idx, learning_rate) {
+    const ret = wasm.tiered_seek(keyframe, keyframe_idx, target_idx, learning_rate);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
 }
 
 /**
@@ -271,6 +373,13 @@ function __wbg_get_imports() {
         __wbg_Number_04624de7d0e8332d: function(arg0) {
             const ret = Number(arg0);
             return ret;
+        },
+        __wbg_String_8f0eb39a4a4c2f66: function(arg0, arg1) {
+            const ret = String(arg1);
+            const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len1 = WASM_VECTOR_LEN;
+            getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
+            getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
         },
         __wbg___wbindgen_bigint_get_as_i64_8fcf4ce7f1ca72a2: function(arg0, arg1) {
             const v = arg1;
@@ -667,6 +776,12 @@ function passStringToWasm0(arg, malloc, realloc) {
 
     WASM_VECTOR_LEN = offset;
     return ptr;
+}
+
+function takeFromExternrefTable0(idx) {
+    const value = wasm.__wbindgen_externrefs.get(idx);
+    wasm.__externref_table_dealloc(idx);
+    return value;
 }
 
 let cachedTextDecoder = new TextDecoder('utf-8', { ignoreBOM: true, fatal: true });

@@ -1,0 +1,31 @@
+{
+  "name": "@apvd/client",
+  "version": "0.1.0-dist.1483cda",
+  "description": "Training client types and WebSocket transport for area-proportional Venn diagrams",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/runsascoded/shapes.git",
+    "directory": "client"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "watch": "tsc --watch"
+  }
+}
