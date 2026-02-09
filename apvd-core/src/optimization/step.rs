@@ -28,6 +28,50 @@ pub struct Step {
     /// True if error is below convergence threshold (1e-10).
     /// Frontend should stop iterating when this is true.
     pub converged: bool,
+    /// Breakdown of penalty terms (values only, gradients are folded into `error`)
+    pub penalties: Penalties,
+}
+
+/// Classification of a per-region error.
+#[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum ErrorKind {
+    /// Region exists and has target > 0, but actual != target
+    AreaMismatch {
+        /// Positive = too large, negative = too small
+        signed_error: f64,
+    },
+    /// Region should exist (target > 0) but doesn't (actual = 0 or None)
+    MissingRegion {
+        target_frac: f64,
+    },
+    /// Region exists (actual > 0) but shouldn't (target = 0)
+    ExtraRegion {
+        actual_frac: f64,
+    },
+}
+
+/// Breakdown of penalty terms applied during optimization.
+///
+/// These values represent the scalar magnitudes of each penalty.
+/// Gradients are folded into the `Step::error` dual for optimization,
+/// but the values here are the raw (pre-zeroing) penalty magnitudes.
+#[derive(Clone, Debug, Default, Tsify, Serialize, Deserialize)]
+pub struct Penalties {
+    /// Penalty for shapes that should overlap but are completely disjoint
+    pub disjoint: f64,
+    /// Penalty for shapes where parent regions exist but target intersection doesn't
+    pub contained: f64,
+    /// Polygon self-intersection penalty
+    pub self_intersection: f64,
+    /// Polygon regularity penalty (edge variance + convexity)
+    pub regularity: f64,
+}
+
+impl Penalties {
+    pub fn total(&self) -> f64 {
+        self.disjoint + self.contained + self.self_intersection + self.regularity
+    }
 }
 
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
@@ -38,6 +82,8 @@ pub struct Error {
     pub target_area: f64,
     pub target_frac: f64,
     pub error: Dual,
+    /// Classification of this error
+    pub kind: ErrorKind,
 }
 
 impl Display for Error {
@@ -163,14 +209,15 @@ impl Step {
         }
 
         // Add polygon regularization penalties (self-intersection, convexity, edge regularity)
-        let mut total_regularization_penalty = scene.zero();
+        let mut total_self_intersection_penalty = scene.zero();
+        let mut total_regularity_penalty = scene.zero();
         for set in sets.iter() {
             if let crate::shape::Shape::Polygon(poly) = &set.borrow().shape {
                 // Self-intersection penalty (high weight - this is a serious problem)
                 let self_int_penalty = poly.self_intersection_penalty_dual();
                 if self_int_penalty.v() > 0.0 {
                     debug!("  self-intersection penalty: {}", self_int_penalty.v());
-                    total_regularization_penalty = total_regularization_penalty + self_int_penalty;
+                    total_self_intersection_penalty = total_self_intersection_penalty + self_int_penalty;
                 }
 
                 // Regularity penalty (edge variance + convexity, lower weight)
@@ -178,25 +225,35 @@ impl Step {
                 if reg_penalty.v() > 0.0 {
                     debug!("  regularity penalty: {}", reg_penalty.v());
                     // Scale down regularity penalty relative to area error
-                    total_regularization_penalty = total_regularization_penalty + reg_penalty * 0.01;
+                    total_regularity_penalty = total_regularity_penalty + reg_penalty * 0.01;
                 }
             }
         }
 
-        let total_reg_penalty_v = total_regularization_penalty.v();
-        if total_reg_penalty_v > 0.0 {
-            debug!("  total_regularization_penalty: {}", total_reg_penalty_v);
-            // Add gradient only (like other penalties) to not disrupt error metric
-            // but still guide optimization away from bad shapes
-            error += Dual::new(0., total_regularization_penalty.d());
+        let self_int_v = total_self_intersection_penalty.v();
+        let regularity_v = total_regularity_penalty.v();
+        if self_int_v > 0.0 {
+            debug!("  total_self_intersection_penalty: {}", self_int_v);
+            error += Dual::new(0., total_self_intersection_penalty.d());
         }
+        if regularity_v > 0.0 {
+            debug!("  total_regularity_penalty: {}", regularity_v);
+            error += Dual::new(0., total_regularity_penalty.d());
+        }
+
+        let penalties = Penalties {
+            disjoint: total_disjoint_penalty.v(),
+            contained: total_contained_penalty.v(),
+            self_intersection: self_int_v,
+            regularity: regularity_v,
+        };
 
         // Take shapes back from `scene`
         let shapes = sets.iter().map(|s| s.borrow().to_owned().shape).collect::<Vec<Shape<D>>>();
 
         let converged = error.v() < CONVERGENCE_THRESHOLD;
         debug!("all-in error: {:?}, converged: {}", error, converged);
-        Ok(Step { shapes, components, targets, total_area, errors, error, converged })
+        Ok(Step { shapes, components, targets, total_area, errors, error, converged, penalties })
     }
 
     pub fn n(&self) -> usize {
@@ -217,15 +274,24 @@ impl Step {
                 let target_frac = target_area / targets.total_area;
                 let actual_frac = actual_area.clone().unwrap_or_else(|| scene.zero()).clone() / total_area;
                 let error = actual_frac.clone() - target_frac;
+                let actual_frac_v = actual_frac.v();
+                let kind = if target_frac > 0.0 && (actual_area.is_none() || actual_frac_v < 1e-12) {
+                    ErrorKind::MissingRegion { target_frac }
+                } else if target_frac < 1e-12 && actual_frac_v > 1e-12 {
+                    ErrorKind::ExtraRegion { actual_frac: actual_frac_v }
+                } else {
+                    ErrorKind::AreaMismatch { signed_error: error.v() }
+                };
                 Some((
                     key.clone(),
                     Error {
                         key: key.clone(),
                         actual_area: actual_area.map(|a| a.v()),
                         target_area: *target_area,
-                        actual_frac: actual_frac.v(),
+                        actual_frac: actual_frac_v,
                         target_frac,
                         error,
+                        kind,
                     }
                 ))
             }
