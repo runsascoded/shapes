@@ -66,11 +66,15 @@ pub struct Penalties {
     pub self_intersection: f64,
     /// Polygon regularity penalty (edge variance + convexity)
     pub regularity: f64,
+    /// Fragmentation penalty: area of non-largest components per region key
+    pub fragmentation: f64,
+    /// Isoperimetric ratio penalty: P²/(4πA) - 1, per polygon
+    pub perimeter_area: f64,
 }
 
 impl Penalties {
     pub fn total(&self) -> f64 {
-        self.disjoint + self.contained + self.self_intersection + self.regularity
+        self.disjoint + self.contained + self.self_intersection + self.regularity + self.fragmentation + self.perimeter_area
     }
 }
 
@@ -208,9 +212,36 @@ impl Step {
             error += Dual::new(0., total_contained_penalty.d());
         }
 
-        // Add polygon regularization penalties (self-intersection, convexity, edge regularity)
+        // Fragmentation penalty: for region keys with multiple disconnected geometric
+        // components, penalize all but the largest (L1 in fragment area).
+        let mut total_fragmentation_penalty = scene.zero();
+        {
+            let mut regions_by_key: BTreeMap<String, Vec<Dual>> = BTreeMap::new();
+            for component in &scene.components {
+                for region in &component.regions {
+                    regions_by_key.entry(region.key.clone()).or_default().push(region.area());
+                }
+            }
+            for (key, mut geo_areas) in regions_by_key {
+                if geo_areas.len() > 1 {
+                    geo_areas.sort_by(|a, b| b.v().partial_cmp(&a.v()).unwrap());
+                    for frag in geo_areas.into_iter().skip(1) {
+                        debug!("  fragmentation penalty: key={}, fragment area={}", key, frag.v());
+                        total_fragmentation_penalty += frag;
+                    }
+                }
+            }
+        }
+        let fragmentation_v = total_fragmentation_penalty.v();
+        if fragmentation_v > 0.0 {
+            debug!("  total_fragmentation_penalty: {}", fragmentation_v);
+            error += Dual::new(0., total_fragmentation_penalty.d());
+        }
+
+        // Add polygon regularization penalties (self-intersection, convexity, edge regularity, perimeter:area)
         let mut total_self_intersection_penalty = scene.zero();
         let mut total_regularity_penalty = scene.zero();
+        let mut total_perimeter_area_penalty = scene.zero();
         for set in sets.iter() {
             if let crate::shape::Shape::Polygon(poly) = &set.borrow().shape {
                 // Self-intersection penalty (high weight - this is a serious problem)
@@ -224,14 +255,21 @@ impl Step {
                 let reg_penalty = poly.regularity_penalty();
                 if reg_penalty.v() > 0.0 {
                     debug!("  regularity penalty: {}", reg_penalty.v());
-                    // Scale down regularity penalty relative to area error
                     total_regularity_penalty = total_regularity_penalty + reg_penalty * 0.01;
+                }
+
+                // Perimeter:area ratio penalty (same weight as regularity)
+                let pa_penalty = poly.perimeter_area_penalty();
+                if pa_penalty.v() > 0.0 {
+                    debug!("  perimeter:area penalty: {}", pa_penalty.v());
+                    total_perimeter_area_penalty = total_perimeter_area_penalty + pa_penalty * 0.01;
                 }
             }
         }
 
         let self_int_v = total_self_intersection_penalty.v();
         let regularity_v = total_regularity_penalty.v();
+        let perimeter_area_v = total_perimeter_area_penalty.v();
         if self_int_v > 0.0 {
             debug!("  total_self_intersection_penalty: {}", self_int_v);
             error += Dual::new(0., total_self_intersection_penalty.d());
@@ -240,12 +278,18 @@ impl Step {
             debug!("  total_regularity_penalty: {}", regularity_v);
             error += Dual::new(0., total_regularity_penalty.d());
         }
+        if perimeter_area_v > 0.0 {
+            debug!("  total_perimeter_area_penalty: {}", perimeter_area_v);
+            error += Dual::new(0., total_perimeter_area_penalty.d());
+        }
 
         let penalties = Penalties {
             disjoint: total_disjoint_penalty.v(),
             contained: total_contained_penalty.v(),
             self_intersection: self_int_v,
             regularity: regularity_v,
+            fragmentation: fragmentation_v,
+            perimeter_area: perimeter_area_v,
         };
 
         // Take shapes back from `scene`

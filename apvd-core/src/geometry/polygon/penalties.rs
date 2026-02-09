@@ -136,6 +136,35 @@ impl Polygon<D> {
             .collect()
     }
 
+    /// Sum of edge lengths.
+    pub fn perimeter(&self) -> Dual {
+        let n = self.vertices.len();
+        (0..n).map(|i| {
+            let v0 = &self.vertices[i];
+            let v1 = &self.vertices[(i + 1) % n];
+            let dx = v1.x.clone() - &v0.x;
+            let dy = v1.y.clone() - &v0.y;
+            (dx.clone() * &dx + dy.clone() * &dy).sqrt()
+        }).reduce(|a, b| a + b).unwrap()
+    }
+
+    /// Isoperimetric ratio penalty: P²/(4πA) - 1.
+    /// Equals 0 for a circle, >0 for anything else.
+    /// Returns max(0, ratio - 1) with gradients.
+    pub fn perimeter_area_penalty(&self) -> Dual {
+        let area = self.area();
+        let perim = self.perimeter();
+        let p_sq = perim.clone() * &perim;
+        let four_pi_a = area * (4.0 * std::f64::consts::PI);
+        let ratio = p_sq / &four_pi_a;
+        let excess = ratio.v() - 1.0;
+        if excess > 0.0 {
+            ratio - Dual::scalar(1.0, self.n())
+        } else {
+            Dual::zero(self.n())
+        }
+    }
+
     /// Compute regularization penalty that encourages "nice" polygon shapes.
     ///
     /// Returns a Dual with both value and gradient, penalizing:
