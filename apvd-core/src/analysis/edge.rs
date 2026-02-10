@@ -1,6 +1,6 @@
 use std::{fmt::Display, rc::Rc, cell::RefCell, collections::BTreeSet, ops::{Add, Mul, Div, Sub}, f64::consts::TAU};
 
-use crate::{math::deg::Deg, node::N, set::S, shape::Shape::{Circle, XYRR, XYRRT, Polygon}, trig::Trig, dual::Dual, zero::Zero};
+use crate::{boundary_coord::BoundaryCoord, math::deg::Deg, node::N, r2::R2, set::S, shape::Shape::{Circle, XYRR, XYRRT, Polygon}, trig::Trig, dual::Dual, zero::Zero};
 
 pub type E<D> = Rc<RefCell<Edge<D>>>;
 
@@ -172,6 +172,81 @@ impl<D: EdgeArg + Zero> Edge<D> {
                 let p1 = self.node1.borrow().p.clone();
                 polygon.secant_area(&p0, &p1, self.coord0, self.coord1)
             },
+        }
+    }
+
+    /// Compute the boundary length of this edge (f64, no gradients).
+    /// For circles: exact arc length = r * theta.
+    /// For ellipses: numerical approximation via sampled points.
+    /// For polygons: sum of vertex-to-vertex distances along the boundary path.
+    pub fn boundary_length(&self) -> f64 {
+        let set = self.set.borrow();
+        match &set.shape {
+            Circle(c) => {
+                let r: f64 = c.r.clone().into();
+                r * self.coord_span()
+            }
+            Polygon(polygon) => {
+                let n0 = self.node0.borrow();
+                let p0 = R2 { x: n0.p.x.clone().into(), y: n0.p.y.clone().into() };
+                drop(n0);
+                let n1 = self.node1.borrow();
+                let p1 = R2 { x: n1.p.x.clone().into(), y: n1.p.y.clone().into() };
+                drop(n1);
+                let n = polygon.vertices.len();
+                let first_idx = self.coord0.ceil() as usize;
+                let last_idx = self.coord1.floor() as usize;
+
+                let mut intermediate: Vec<usize> = Vec::new();
+                for vi in first_idx..=last_idx {
+                    let vf = vi as f64;
+                    if vf > self.coord0 + 1e-9 && vf < self.coord1 - 1e-9 {
+                        intermediate.push(vi % n);
+                    }
+                }
+
+                if intermediate.is_empty() {
+                    let dx = p1.x - p0.x;
+                    let dy = p1.y - p0.y;
+                    return (dx * dx + dy * dy).sqrt();
+                }
+
+                let vf = |idx: usize| -> R2<f64> {
+                    let v = &polygon.vertices[idx];
+                    R2 { x: v.x.clone().into(), y: v.y.clone().into() }
+                };
+                let mut length = 0.0;
+                let first_v = vf(intermediate[0]);
+                length += ((first_v.x - p0.x).powi(2) + (first_v.y - p0.y).powi(2)).sqrt();
+                for i in 0..intermediate.len() - 1 {
+                    let vi = vf(intermediate[i]);
+                    let vn = vf(intermediate[i + 1]);
+                    length += ((vn.x - vi.x).powi(2) + (vn.y - vi.y).powi(2)).sqrt();
+                }
+                let last_v = vf(*intermediate.last().unwrap());
+                length += ((p1.x - last_v.x).powi(2) + (p1.y - last_v.y).powi(2)).sqrt();
+                length
+            }
+            _ => {
+                // Ellipses: numerical approximation via sampled points along the arc
+                let n_samples = 32;
+                let n0 = self.node0.borrow();
+                let p0 = R2 { x: n0.p.x.clone().into(), y: n0.p.y.clone().into() };
+                drop(n0);
+                let mut length = 0.0;
+                let mut prev = p0;
+                let span = self.coord_span();
+                for i in 1..=n_samples {
+                    let t = i as f64 / n_samples as f64;
+                    let coord = self.coord0 + t * span;
+                    let pt = set.shape.point(coord);
+                    let dx = pt.x - prev.x;
+                    let dy = pt.y - prev.y;
+                    length += (dx * dx + dy * dy).sqrt();
+                    prev = pt;
+                }
+                length
+            }
         }
     }
 

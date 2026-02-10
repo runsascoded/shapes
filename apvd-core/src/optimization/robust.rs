@@ -201,7 +201,7 @@ pub fn train_robust(
             .collect();
 
         // Compute new step
-        let new_step = Step::nxt(new_shapes, current.targets.clone())?;
+        let new_step = Step::nxt(new_shapes, current.targets.clone(), current.penalty_config.clone())?;
         let new_error = new_step.error.v();
 
         // Check for NaN
@@ -228,9 +228,9 @@ pub fn train_robust(
         steps.push(new_step.clone());
         current = new_step;
 
-        // Check for convergence (error very small or not changing)
-        if new_error < 1e-10 {
-            info!("Step {}: converged (error < 1e-10)", step_idx);
+        // Check for convergence (error + penalties very small)
+        if new_error + current.penalties.total() < 1e-10 {
+            info!("Step {}: converged (error + penalties < 1e-10)", step_idx);
             break;
         }
     }

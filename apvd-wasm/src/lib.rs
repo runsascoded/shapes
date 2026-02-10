@@ -204,7 +204,7 @@ pub fn step_legacy(step: JsValue, max_step_error_ratio: f64) -> JsValue {
 #[wasm_bindgen]
 pub fn is_converged(step: JsValue, threshold: f64) -> bool {
     let step: Step = serde_wasm_bindgen::from_value(step).unwrap();
-    step.error.v() < threshold
+    step.error.v() + step.penalties.total() < threshold
 }
 
 /// Expands target specifications into fully-qualified region targets.
