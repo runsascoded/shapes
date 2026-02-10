@@ -60,6 +60,20 @@ pub struct Step {
     pub penalties: Penalties,
     /// Penalty weights used for this step
     pub penalty_config: PenaltyConfig,
+    /// Per-shape gradient anchor points for visualization
+    pub gradient_anchors: Vec<Vec<GradientAnchor>>,
+}
+
+/// A point on a shape where a gradient arrow should be drawn.
+#[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
+pub struct GradientAnchor {
+    /// Position of the anchor point (where to draw arrow base)
+    pub position: R2<f64>,
+    /// Error gradient projected onto this anchor's degrees of freedom.
+    /// Frontend draws arrow in *negative* gradient direction (descent).
+    pub gradient: R2<f64>,
+    /// Human-readable label: "center", "0°", "90°", "v0", "v1", etc.
+    pub label: String,
 }
 
 /// Classification of a per-region error.
@@ -165,6 +179,53 @@ impl Display for Error {
             self.actual_area.map(|a| format!("{:.3}", a)).unwrap_or_else(|| "-".to_string()),
             self.actual_frac,
         )
+    }
+}
+
+/// Dot product of two f64 slices.
+fn dot(a: &[f64], b: &[f64]) -> f64 {
+    a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
+}
+
+/// Compute gradient anchors for a shape, projected onto the error gradient.
+fn shape_gradient_anchors(shape: &Shape<D>, error_d: &[f64]) -> Vec<GradientAnchor> {
+    let anchor = |label: &str, pos: R2<Dual>| -> GradientAnchor {
+        GradientAnchor {
+            position: R2 { x: pos.x.v(), y: pos.y.v() },
+            gradient: R2 { x: dot(&pos.x.d(), error_d), y: dot(&pos.y.d(), error_d) },
+            label: label.to_string(),
+        }
+    };
+    match shape {
+        Shape::Circle(c) => vec![
+            anchor("center", c.c.clone()),
+            anchor("0°", R2 { x: c.c.x.clone() + c.r.clone(), y: c.c.y.clone() }),
+        ],
+        Shape::XYRR(e) => vec![
+            anchor("center", e.c.clone()),
+            anchor("0°", R2 { x: e.c.x.clone() + e.r.x.clone(), y: e.c.y.clone() }),
+            anchor("90°", R2 { x: e.c.x.clone(), y: e.c.y.clone() + e.r.y.clone() }),
+        ],
+        Shape::XYRRT(e) => {
+            let cos_t = e.t.clone().cos();
+            let sin_t = e.t.clone().sin();
+            vec![
+                anchor("center", e.c.clone()),
+                anchor("0°", R2 {
+                    x: e.c.x.clone() + e.r.x.clone() * cos_t.clone(),
+                    y: e.c.y.clone() + e.r.x.clone() * sin_t.clone(),
+                }),
+                anchor("90°", R2 {
+                    x: e.c.x.clone() - e.r.y.clone() * sin_t,
+                    y: e.c.y.clone() + e.r.y.clone() * cos_t,
+                }),
+            ]
+        }
+        Shape::Polygon(p) => {
+            p.vertices.iter().enumerate().map(|(i, v)| {
+                anchor(&format!("v{i}"), v.clone())
+            }).collect()
+        }
     }
 }
 
@@ -458,9 +519,15 @@ impl Step {
         // Take shapes back from `scene`
         let shapes = sets.iter().map(|s| s.borrow().to_owned().shape).collect::<Vec<Shape<D>>>();
 
+        // Compute gradient anchors (project error gradient onto geometric anchor points)
+        let error_d = error.d();
+        let gradient_anchors: Vec<Vec<GradientAnchor>> = shapes.iter()
+            .map(|s| shape_gradient_anchors(s, &error_d))
+            .collect();
+
         let converged = error.v() + penalties.total() < CONVERGENCE_THRESHOLD;
         debug!("all-in error: {:?}, converged: {}", error, converged);
-        Ok(Step { shapes, components, targets, total_area, errors, error, converged, penalties, penalty_config })
+        Ok(Step { shapes, components, targets, total_area, errors, error, converged, penalties, penalty_config, gradient_anchors })
     }
 
     pub fn n(&self) -> usize {
