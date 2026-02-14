@@ -40,7 +40,7 @@ impl Default for PenaltyConfig {
             self_intersection: 1.0,
             regularity: 0.0,  // disabled by default; P:A subsumes it
             shape_perimeter_area: 1.0,
-            region_perimeter_area: 1.0,
+            region_perimeter_area: 0.1,  // lower than shape_perimeter_area since regions can't independently reshape
         }
     }
 }
@@ -483,25 +483,36 @@ impl Step {
         }
 
         // Per-DR perimeter:area penalty (isoperimetric ratio P²/(4πA) - 1)
-        // Perimeter is f64-only (not differentiable), so this is a diagnostic value + scalar penalty.
-        // The differentiable gradient push comes from the shape-level perimeter:area penalty.
+        // Fully differentiable: boundary_length_dual() returns Dual, so optimizer gets gradient signal.
+        let mut total_region_pa_penalty = scene.zero();
         let mut region_perimeter_area_v = 0.0;
         if penalty_config.region_perimeter_area > 0.0 {
             for component in &scene.components {
                 for region in &component.regions {
-                    let area_v: f64 = region.area().into();
+                    let area = region.area();
+                    let area_v: f64 = area.clone().into();
                     if area_v < 1e-12 { continue; }
-                    let perimeter: f64 = region.segments.iter()
-                        .map(|s| s.edge.borrow().boundary_length())
-                        .sum();
-                    let iso = perimeter * perimeter / (4.0 * std::f64::consts::PI * area_v) - 1.0;
-                    if iso > 0.0 {
+                    let perimeter = region.segments.iter()
+                        .map(|s| s.edge.borrow().boundary_length_dual())
+                        .reduce(|a, b| a + b)
+                        .unwrap_or_else(|| scene.zero());
+                    let p_sq = perimeter.clone() * &perimeter;
+                    let four_pi_a = area * (4.0 * std::f64::consts::PI);
+                    let ratio = p_sq / &four_pi_a;
+                    let iso_v = ratio.v() - 1.0;
+                    if iso_v > 0.0 {
                         let rp = region_penalties.entry(region.key.clone()).or_default();
-                        rp.perimeter_area = iso;
-                        region_perimeter_area_v += iso;
+                        rp.perimeter_area = iso_v;
+                        // Area-weight (f64 scalar) so thin slivers don't dominate the total
+                        let weighted = (ratio - 1.0) * (area_v / total_area_v);
+                        region_perimeter_area_v += iso_v * (area_v / total_area_v);
+                        total_region_pa_penalty = total_region_pa_penalty + weighted;
                     }
                 }
             }
+        }
+        if region_perimeter_area_v > 0.0 && penalty_config.region_perimeter_area > 0.0 {
+            error += Dual::new(0., total_region_pa_penalty.d()) * penalty_config.region_perimeter_area;
         }
 
         let penalties = Penalties {

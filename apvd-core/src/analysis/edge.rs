@@ -1,6 +1,6 @@
 use std::{fmt::Display, rc::Rc, cell::RefCell, collections::BTreeSet, ops::{Add, Mul, Div, Sub}, f64::consts::TAU};
 
-use crate::{boundary_coord::BoundaryCoord, math::deg::Deg, node::N, r2::R2, set::S, shape::Shape::{Circle, XYRR, XYRRT, Polygon}, trig::Trig, dual::Dual, zero::Zero};
+use crate::{boundary_coord::BoundaryCoord, math::deg::Deg, math::sqrt::Sqrt, node::N, r2::R2, set::S, shape::Shape::{Circle, XYRR, XYRRT, Polygon}, trig::Trig, dual::Dual, zero::Zero};
 
 pub type E<D> = Rc<RefCell<Edge<D>>>;
 
@@ -246,6 +246,112 @@ impl<D: EdgeArg + Zero> Edge<D> {
                     prev = pt;
                 }
                 length
+            }
+        }
+    }
+
+    /// Maximum angular step (radians) for numerical arc-length sampling on ellipses.
+    /// Smaller = more accurate but slower. PI/16 ≈ 11° gives sub-percent accuracy.
+    const MAX_ARC_DELTA_THETA: f64 = std::f64::consts::PI / 16.0;
+
+    /// Compute the boundary length of this edge as a Dual (preserves gradients).
+    /// For circles: exact arc length = r * angle_span (both Dual).
+    /// For polygons: sum of vertex-to-vertex distances along the boundary path (Dual coords).
+    /// For ellipses: numerical approximation via adaptive sampling (Dual coords).
+    pub fn boundary_length_dual(&self) -> D where D: Sqrt {
+        let set = self.set.borrow();
+        match &set.shape {
+            Circle(c) => {
+                c.r.clone() * self.angle_span()
+            }
+            Polygon(polygon) => {
+                let p0 = self.node0.borrow().p.clone();
+                let p1 = self.node1.borrow().p.clone();
+                let n = polygon.vertices.len();
+                let first_idx = self.coord0.ceil() as usize;
+                let last_idx = self.coord1.floor() as usize;
+
+                let mut intermediate: Vec<usize> = Vec::new();
+                for vi in first_idx..=last_idx {
+                    let vf = vi as f64;
+                    if vf > self.coord0 + 1e-9 && vf < self.coord1 - 1e-9 {
+                        intermediate.push(vi % n);
+                    }
+                }
+
+                let dist = |a: &R2<D>, b: &R2<D>| -> D {
+                    let dx = b.x.clone() - a.x.clone();
+                    let dy = b.y.clone() - a.y.clone();
+                    (dx.clone() * dx + dy.clone() * dy).sqrt()
+                };
+
+                if intermediate.is_empty() {
+                    return dist(&p0, &p1);
+                }
+
+                let mut length = dist(&p0, &polygon.vertices[intermediate[0]]);
+                for i in 0..intermediate.len() - 1 {
+                    length = length + dist(
+                        &polygon.vertices[intermediate[i]],
+                        &polygon.vertices[intermediate[i + 1]],
+                    );
+                }
+                length + dist(&polygon.vertices[*intermediate.last().unwrap()], &p1)
+            }
+            XYRR(e) => {
+                // Numerical arc length: sample points along the ellipse arc using D-typed coords.
+                // Use node0/node1 positions as exact endpoints; subdivide interior adaptively.
+                let span = self.coord_span();
+                let n_segments = (span / Self::MAX_ARC_DELTA_THETA).ceil().max(1.0) as usize;
+                let p0 = self.node0.borrow().p.clone();
+                let mut length = p0.x.clone().zero();
+                let mut prev = p0;
+                for i in 1..n_segments {
+                    let t = i as f64 / n_segments as f64;
+                    let theta = self.coord0 + t * span;
+                    let pt = R2 {
+                        x: e.c.x.clone() + e.r.x.clone() * theta.cos(),
+                        y: e.c.y.clone() + e.r.y.clone() * theta.sin(),
+                    };
+                    let dx = pt.x.clone() - prev.x.clone();
+                    let dy = pt.y.clone() - prev.y.clone();
+                    length = length + (dx.clone() * dx + dy.clone() * dy).sqrt();
+                    prev = pt;
+                }
+                // Final segment to node1
+                let p1 = self.node1.borrow().p.clone();
+                let dx = p1.x.clone() - prev.x.clone();
+                let dy = p1.y.clone() - prev.y.clone();
+                length + (dx.clone() * dx + dy.clone() * dy).sqrt()
+            }
+            XYRRT(e) => {
+                // Same as XYRR but with rotation applied
+                let span = self.coord_span();
+                let n_segments = (span / Self::MAX_ARC_DELTA_THETA).ceil().max(1.0) as usize;
+                let cos_rot = e.t.clone().cos();
+                let sin_rot = e.t.clone().sin();
+                let p0 = self.node0.borrow().p.clone();
+                let mut length = p0.x.clone().zero();
+                let mut prev = p0;
+                for i in 1..n_segments {
+                    let t = i as f64 / n_segments as f64;
+                    let theta = self.coord0 + t * span;
+                    let local_x = e.r.x.clone() * theta.cos();
+                    let local_y = e.r.y.clone() * theta.sin();
+                    let pt = R2 {
+                        x: e.c.x.clone() + local_x.clone() * cos_rot.clone() - local_y.clone() * sin_rot.clone(),
+                        y: e.c.y.clone() + local_x * sin_rot.clone() + local_y * cos_rot.clone(),
+                    };
+                    let dx = pt.x.clone() - prev.x.clone();
+                    let dy = pt.y.clone() - prev.y.clone();
+                    length = length + (dx.clone() * dx + dy.clone() * dy).sqrt();
+                    prev = pt;
+                }
+                // Final segment to node1
+                let p1 = self.node1.borrow().p.clone();
+                let dx = p1.x.clone() - prev.x.clone();
+                let dy = p1.y.clone() - prev.y.clone();
+                length + (dx.clone() * dx + dy.clone() * dy).sqrt()
             }
         }
     }
