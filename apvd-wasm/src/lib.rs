@@ -4,7 +4,7 @@
 //! enabling browser-based Venn diagram optimization.
 
 use apvd_core::{
-    Model, Step, Targets, TargetsMap, InputSpec, XYRR, D,
+    Model, Step, Targets, TargetsMap, InputSpec, PhaseConfig, XYRR, D,
     shape::Shape,
     TieredConfig, seek_from_keyframe,
 };
@@ -154,11 +154,11 @@ pub fn train_robust(model: JsValue, max_steps: usize) -> JsValue {
     serde_wasm_bindgen::to_value(&model).unwrap()
 }
 
-/// Performs a single gradient descent step with gradient clipping (recommended).
+/// Performs a single gradient descent step with gradient clipping.
 ///
-/// Uses fixed learning rate with gradient clipping for stable updates.
-/// This is the recommended method - it prevents the oscillation that occurs
-/// with error-scaled step sizes.
+/// Backwards-compatible wrapper: uses default clipping params (max_grad_value=0.5,
+/// max_grad_norm=1.0) and preserves the step's existing `penalty_config`.
+/// Prefer [`step_with_config`] for new code that needs to change penalties mid-training.
 ///
 /// # Arguments
 /// * `step` - Current optimization state from [`make_step`] or a previous [`step`] call.
@@ -169,8 +169,32 @@ pub fn train_robust(model: JsValue, max_steps: usize) -> JsValue {
 #[wasm_bindgen]
 pub fn step(step: JsValue, learning_rate: f64) -> JsValue {
     let step: Step = serde_wasm_bindgen::from_value(step).unwrap();
-    // Use sensible defaults for clipping
-    let step = step.step_clipped(learning_rate, 0.5, 1.0).expect("Step failed");
+    let config = PhaseConfig {
+        penalty_config: step.penalty_config.clone(),
+        learning_rate,
+        ..PhaseConfig::default()
+    };
+    let step = step.step_with_phase_config(&config).expect("Step failed");
+    serde_wasm_bindgen::to_value(&step).unwrap()
+}
+
+/// Performs a single gradient descent step using a [`PhaseConfig`].
+///
+/// Takes all optimizer and penalty parameters from the config, enabling
+/// the frontend to change penalty weights and learning rate mid-training
+/// (e.g. for phase-based schedules).
+///
+/// # Arguments
+/// * `step` - Current optimization state from [`make_step`] or a previous step call.
+/// * `config` - Phase configuration with penalty weights, learning rate, and clipping params.
+///
+/// # Returns
+/// New [`Step`] with updated shape positions and the config's penalty weights applied.
+#[wasm_bindgen]
+pub fn step_with_config(step: JsValue, config: JsValue) -> JsValue {
+    let step: Step = serde_wasm_bindgen::from_value(step).unwrap();
+    let config: PhaseConfig = serde_wasm_bindgen::from_value(config).unwrap();
+    let step = step.step_with_phase_config(&config).expect("Step failed");
     serde_wasm_bindgen::to_value(&step).unwrap()
 }
 
@@ -319,13 +343,14 @@ pub fn tiered_nearest_keyframe(config: JsValue, step_idx: usize) -> usize {
 /// Seek to a target step by recomputing from a keyframe.
 ///
 /// Given a keyframe step, recomputes forward to reach the target step.
+/// Uses the same clipped stepping as the training loop for consistent results.
 /// This enables random access to any step with bounded recomputation.
 ///
 /// # Arguments
 /// * `keyframe` - The stored keyframe step.
 /// * `keyframe_idx` - Index of the keyframe.
 /// * `target_idx` - Target step index to seek to.
-/// * `learning_rate` - Learning rate for recomputation steps.
+/// * `config` - Phase configuration (penalty weights, learning rate, clipping params).
 ///
 /// # Returns
 /// The step at target_idx, or throws if recomputation fails.
@@ -334,12 +359,14 @@ pub fn tiered_seek(
     keyframe: JsValue,
     keyframe_idx: usize,
     target_idx: usize,
-    learning_rate: f64,
+    config: JsValue,
 ) -> Result<JsValue, JsValue> {
     let keyframe: Step = serde_wasm_bindgen::from_value(keyframe)
         .map_err(|e| JsValue::from_str(&format!("Failed to parse keyframe: {}", e)))?;
+    let config: PhaseConfig = serde_wasm_bindgen::from_value(config)
+        .map_err(|e| JsValue::from_str(&format!("Failed to parse config: {}", e)))?;
 
-    let result = seek_from_keyframe(&keyframe, keyframe_idx, target_idx, learning_rate)
+    let result = seek_from_keyframe(&keyframe, keyframe_idx, target_idx, &config)
         .map_err(|e| JsValue::from_str(&e))?;
 
     serde_wasm_bindgen::to_value(&result)

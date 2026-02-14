@@ -62,7 +62,7 @@ pub mod to;
 // Re-export key types for external use
 pub use dual::D;
 pub use model::Model;
-pub use step::{Step, PenaltyConfig};
+pub use step::{Step, PenaltyConfig, PhaseConfig};
 pub use targets::{Targets, TargetsMap};
 pub use tiered::{TieredConfig, seek_from_keyframe};
 pub use trace::{TraceStorage, TraceMetadata, StorageStrategy, create_storage};

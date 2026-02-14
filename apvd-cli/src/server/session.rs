@@ -3,7 +3,7 @@
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use apvd_core::{
-    InputSpec, Step, TargetsMap,
+    InputSpec, Step, TargetsMap, PhaseConfig,
     TraceStorage, StorageStrategy, create_storage,
 };
 
@@ -17,8 +17,8 @@ pub(super) struct TrainingSession {
     best_variant: AtomicUsize,
     /// Trace storage for steps (tiered by default)
     storage: std::sync::Mutex<Box<dyn TraceStorage>>,
-    /// Learning rate used for training (needed for recomputation)
-    pub learning_rate: f64,
+    /// Phase config used for training (needed for recomputation from keyframes)
+    pub phase_config: PhaseConfig,
     /// Original inputs (for trace export)
     pub inputs: Vec<InputSpec>,
     /// Original targets (for trace export)
@@ -32,7 +32,7 @@ impl TrainingSession {
             best_error: std::sync::Mutex::new(f64::INFINITY),
             best_variant: AtomicUsize::new(0),
             storage: std::sync::Mutex::new(create_storage(storage_strategy, None)),
-            learning_rate,
+            phase_config: PhaseConfig { learning_rate, ..PhaseConfig::default() },
             inputs,
             targets,
         }
@@ -66,7 +66,7 @@ impl TrainingSession {
     /// Get a step from storage (may recompute from keyframe).
     pub fn get_step(&self, index: usize) -> Result<Step, String> {
         let storage = self.storage.lock().unwrap();
-        storage.get(index, self.learning_rate)
+        storage.get(index, &self.phase_config)
     }
 
     /// Get storage metadata.

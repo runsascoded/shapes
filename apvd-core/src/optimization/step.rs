@@ -45,6 +45,29 @@ impl Default for PenaltyConfig {
     }
 }
 
+/// Combined configuration for a training phase: penalty weights + optimizer params.
+///
+/// Enables the frontend to change all training parameters mid-run (e.g. for
+/// phase-based schedules that adjust penalty weights and learning rate over time).
+#[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
+pub struct PhaseConfig {
+    pub penalty_config: PenaltyConfig,
+    pub learning_rate: f64,
+    pub max_grad_value: f64,
+    pub max_grad_norm: f64,
+}
+
+impl Default for PhaseConfig {
+    fn default() -> Self {
+        PhaseConfig {
+            penalty_config: PenaltyConfig::default(),
+            learning_rate: 0.05,
+            max_grad_value: 0.5,
+            max_grad_norm: 1.0,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Tsify, Serialize, Deserialize)]
 pub struct Step {
     pub shapes: Vec<Shape<D>>,
@@ -661,6 +684,21 @@ impl Step {
     ///
     /// This is a simpler alternative to Adam that doesn't require persistent state.
     pub fn step_clipped(&self, learning_rate: f64, max_grad_value: f64, max_grad_norm: f64) -> Result<Step, SceneError> {
+        let config = PhaseConfig {
+            penalty_config: self.penalty_config.clone(),
+            learning_rate,
+            max_grad_value,
+            max_grad_norm,
+        };
+        self.step_with_phase_config(&config)
+    }
+
+    /// Take an optimization step using a [`PhaseConfig`].
+    ///
+    /// Same gradient clipping logic as [`step_clipped`], but takes all params
+    /// from a `PhaseConfig`. This enables the frontend to change penalty weights
+    /// and optimizer params mid-training (e.g. phase-based schedules).
+    pub fn step_with_phase_config(&self, config: &PhaseConfig) -> Result<Step, SceneError> {
         let error = self.error.clone();
         let grad_vec = (-error.clone()).d();
 
@@ -669,32 +707,32 @@ impl Step {
         // If magnitude is zero (no gradient), skip the step
         if magnitude == 0. || magnitude.is_nan() {
             debug!("  skipping step: magnitude is {} (grad_vec: {:?})", magnitude, grad_vec);
-            return Step::nxt(self.shapes.clone(), self.targets.clone(), self.penalty_config.clone());
+            return Step::nxt(self.shapes.clone(), self.targets.clone(), config.penalty_config.clone());
         }
 
         // Clip by value (per-component)
         let mut clipped: Vec<f64> = grad_vec.iter()
-            .map(|&g| g.clamp(-max_grad_value, max_grad_value))
+            .map(|&g| g.clamp(-config.max_grad_value, config.max_grad_value))
             .collect();
 
         // Clip by L2 norm
         let clipped_norm: f64 = clipped.iter().map(|g| g * g).sum::<f64>().sqrt();
-        if clipped_norm > max_grad_norm {
-            let scale = max_grad_norm / clipped_norm;
+        if clipped_norm > config.max_grad_norm {
+            let scale = config.max_grad_norm / clipped_norm;
             for g in &mut clipped {
                 *g *= scale;
             }
         }
 
         // Apply fixed learning rate (not scaled by error)
-        let step_vec: Vec<f64> = clipped.iter().map(|&g| g * learning_rate).collect();
+        let step_vec: Vec<f64> = clipped.iter().map(|&g| g * config.learning_rate).collect();
 
         debug!("  err {:?} (clipped step)", error);
-        debug!("  learning_rate {}, original magnitude {}, clipped norm {}", learning_rate, magnitude, clipped_norm.min(max_grad_norm));
+        debug!("  learning_rate {}, original magnitude {}, clipped norm {}", config.learning_rate, magnitude, clipped_norm.min(config.max_grad_norm));
         debug!("  step_vec {:?}", step_vec);
 
         let shapes = &self.shapes;
         let new_shapes = shapes.iter().map(|s| s.step(&step_vec)).collect::<Vec<Shape<D>>>();
-        Step::nxt(new_shapes, self.targets.clone(), self.penalty_config.clone())
+        Step::nxt(new_shapes, self.targets.clone(), config.penalty_config.clone())
     }
 }

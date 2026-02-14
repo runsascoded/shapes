@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use super::step::Step;
+use super::step::{Step, PhaseConfig};
 
 /// Tiered keyframe configuration.
 ///
@@ -103,12 +103,13 @@ impl TieredConfig {
 /// Seek to a target step by recomputing from a keyframe.
 ///
 /// Given a keyframe step and target index, runs forward steps to reach target.
+/// Uses [`PhaseConfig`] for consistent clipped stepping (same as the FE training loop).
 /// Returns the step at `target_idx` or an error if recomputation fails.
 pub fn seek_from_keyframe(
     keyframe: &Step,
     keyframe_idx: usize,
     target_idx: usize,
-    learning_rate: f64,
+    config: &PhaseConfig,
 ) -> Result<Step, String> {
     if target_idx < keyframe_idx {
         return Err(format!(
@@ -124,7 +125,7 @@ pub fn seek_from_keyframe(
 
     let mut current = keyframe.clone();
     for i in 0..steps_needed {
-        current = current.step(learning_rate).map_err(|e| {
+        current = current.step_with_phase_config(config).map_err(|e| {
             format!(
                 "Recompute failed at step {} (offset {}): {}",
                 keyframe_idx + i + 1,

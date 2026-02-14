@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet, BinaryHeap};
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use super::step::Step;
+use super::step::{Step, PhaseConfig};
 
 /// A stored step with its index and whether it's a keyframe.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,7 +30,7 @@ pub trait TraceStorage: Send + Sync {
     fn record(&mut self, index: usize, step: Step, error: f64);
 
     /// Get a step by index. May recompute from a keyframe if not stored directly.
-    fn get(&self, index: usize, learning_rate: f64) -> Result<Step, String>;
+    fn get(&self, index: usize, config: &PhaseConfig) -> Result<Step, String>;
 
     /// Check if a step is stored directly (without recomputation).
     fn is_stored(&self, index: usize) -> bool;
@@ -129,7 +129,7 @@ impl TraceStorage for DenseStorage {
         }
     }
 
-    fn get(&self, index: usize, _learning_rate: f64) -> Result<Step, String> {
+    fn get(&self, index: usize, _config: &PhaseConfig) -> Result<Step, String> {
         self.steps
             .get(index)
             .cloned()
@@ -214,7 +214,7 @@ impl TraceStorage for BtdStorage {
         }
     }
 
-    fn get(&self, index: usize, _learning_rate: f64) -> Result<Step, String> {
+    fn get(&self, index: usize, _config: &PhaseConfig) -> Result<Step, String> {
         // BTD storage can only return stored steps
         self.steps
             .get(&index)
@@ -371,7 +371,7 @@ impl TraceStorage for TieredLruStorage {
         self.compact();
     }
 
-    fn get(&self, index: usize, learning_rate: f64) -> Result<Step, String> {
+    fn get(&self, index: usize, config: &PhaseConfig) -> Result<Step, String> {
         if index >= self.total_steps {
             return Err(format!("Step {} not yet recorded (total: {})", index, self.total_steps));
         }
@@ -388,7 +388,7 @@ impl TraceStorage for TieredLruStorage {
         let keyframe = self.steps.get(&nearest_idx)
             .ok_or_else(|| format!("Keyframe {} not in storage", nearest_idx))?;
 
-        super::tiered::seek_from_keyframe(keyframe, nearest_idx, index, learning_rate)
+        super::tiered::seek_from_keyframe(keyframe, nearest_idx, index, config)
     }
 
     fn is_stored(&self, index: usize) -> bool {
@@ -597,7 +597,7 @@ impl TraceStorage for BtdEvenlySpacedStorage {
         }
     }
 
-    fn get(&self, index: usize, learning_rate: f64) -> Result<Step, String> {
+    fn get(&self, index: usize, config: &PhaseConfig) -> Result<Step, String> {
         if index >= self.total_steps {
             return Err(format!("Step {} not yet recorded (total: {})", index, self.total_steps));
         }
@@ -616,7 +616,7 @@ impl TraceStorage for BtdEvenlySpacedStorage {
         let (kf_idx, kf_step) = self.nearest_keyframe(index)
             .ok_or_else(|| format!("No keyframe found for step {}", index))?;
 
-        super::tiered::seek_from_keyframe(kf_step, kf_idx, index, learning_rate)
+        super::tiered::seek_from_keyframe(kf_step, kf_idx, index, config)
     }
 
     fn is_stored(&self, index: usize) -> bool {

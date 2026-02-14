@@ -808,7 +808,7 @@ pub(super) fn handle_save_trace(
         config: crate::trace::TraceConfig {
             inputs: session.inputs.clone(),
             targets: session.targets.clone(),
-            learning_rate: session.learning_rate,
+            learning_rate: session.phase_config.learning_rate,
             convergence_threshold: 1e-10,
         },
         btd_keyframes: vec![keyframe.clone()],
