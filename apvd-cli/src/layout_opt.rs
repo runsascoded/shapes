@@ -19,6 +19,7 @@ use apvd_core::scene::Scene;
 use apvd_core::shape::Shape;
 
 /// Result of a layout optimization run.
+#[allow(dead_code)]
 pub struct LayoutResult {
     /// Number of shapes
     pub num_shapes: usize,

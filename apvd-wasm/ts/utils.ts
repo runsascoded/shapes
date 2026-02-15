@@ -61,6 +61,34 @@ export function extractShapes(wasmShapes: unknown[]): Shape[] {
 }
 
 // ============================================================================
+// Penalty extraction
+// ============================================================================
+
+/** Shape of the WASM Penalties struct after serde serialization */
+interface WasmPenalties {
+  disjoint: number;
+  contained: number;
+  self_intersection: number;
+  regularity: number;
+  fragmentation: number;
+  perimeter_area: number;
+  region_perimeter_area: number;
+}
+
+/** Sum all penalty fields from a serialized WASM Penalties struct */
+export function penaltyTotal(p: WasmPenalties | undefined | null): number {
+  if (!p) return 0;
+  return (p.disjoint ?? 0) + (p.contained ?? 0) + (p.self_intersection ?? 0)
+    + (p.regularity ?? 0) + (p.fragmentation ?? 0) + (p.perimeter_area ?? 0)
+    + (p.region_perimeter_area ?? 0);
+}
+
+/** Compute loss (|area error| + penalties) from a WASM step */
+export function stepLoss(wasmStep: { error: { v: number }; penalties?: WasmPenalties }): number {
+  return Math.abs(wasmStep.error.v) + penaltyTotal(wasmStep.penalties);
+}
+
+// ============================================================================
 // Sparkline data extraction
 // ============================================================================
 

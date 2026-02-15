@@ -64,6 +64,7 @@ import {
   extractShape,
   extractShapes,
   extractSparklineData,
+  stepLoss,
   tier,
   resolution,
   isKeyframe,
@@ -447,6 +448,11 @@ async function handleTrainBatch(id: string, request: BatchTrainingRequest): Prom
       shapes: extractShapes((wasmStep as { shapes: unknown[] }).shapes),
     }));
 
+    // Compute per-step loss (area error + penalties)
+    const lossPerStep = modelSteps.map((ws: unknown) =>
+      stepLoss(ws as { error: { v: number }; penalties?: any })
+    );
+
     // Extract sparkline data from all steps
     const { gradients, regionErrors } = extractSparklineData(modelSteps, 0);
 
@@ -456,7 +462,8 @@ async function handleTrainBatch(id: string, request: BatchTrainingRequest): Prom
       minStepIndex: minIdx,
       finalShapes: steps[steps.length - 1].shapes,
       sparklineData: {
-        errors: steps.map(s => s.error),
+        errors: lossPerStep,
+        areaErrors: steps.map(s => s.error),
         gradients,
         regionErrors,
       },
@@ -503,18 +510,21 @@ async function handleContinueTraining(id: string, handleId: string, numSteps: nu
 
     // Collect per-step data (skip first step as it duplicates last)
     const batchSteps: Array<{ stepIndex: number; error: number; shapes: Shape[] }> = [];
+    const lossPerStep: number[] = [];
 
     // Extract sparkline data (starting from index 1, skipping duplicate)
     const { gradients: sparklineGradients, regionErrors: sparklineRegionErrors } =
       extractSparklineData(modelSteps, 1);
 
     for (let i = 1; i < modelSteps.length; i++) {
-      const wasmStep = modelSteps[i] as { error: { v: number }; shapes: unknown[] };
+      const wasmStep = modelSteps[i] as { error: { v: number }; shapes: unknown[]; penalties?: any };
       const stepIndex = startStep + i;
       const error = wasmStep.error.v;
       const shapes = extractShapes(wasmStep.shapes);
+      const loss = stepLoss(wasmStep);
 
       batchSteps.push({ stepIndex, error, shapes });
+      lossPerStep.push(loss);
 
       // Store keyframe in session history if tiered storage says so
       if (isKeyframe(stepIndex, bucketSize)) {
@@ -547,7 +557,8 @@ async function handleContinueTraining(id: string, handleId: string, numSteps: nu
       currentError,
       steps: batchSteps,
       sparklineData: {
-        errors: batchSteps.map(s => s.error),
+        errors: lossPerStep,
+        areaErrors: batchSteps.map(s => s.error),
         gradients: sparklineGradients,
         regionErrors: sparklineRegionErrors,
       },

@@ -382,12 +382,16 @@ impl Step {
         }
 
         // Fragmentation penalty: for region keys with multiple disconnected geometric
-        // components, penalize all but the largest. Each key's penalty is the fraction of
-        // that region's own area that's in non-largest fragments (normalized per-region,
-        // not per-total-area). This produces stronger gradients for eliminating tiny nubs
-        // on small regions.
+        // components, penalize the existence of fragments weighted by the region's
+        // importance (its share of total area).
+        //
+        // Uses saturating normalization on the fragment fraction: sat(f) = f/(f+k).
+        // This means any non-trivial fragment quickly produces a penalty proportional
+        // to the region's share of total area, creating strong gradients to eliminate
+        // even tiny fragment nubs.
         let mut total_fragmentation_penalty = scene.zero();
         let mut region_penalties: BTreeMap<String, RegionPenalties> = BTreeMap::new();
+        let frag_k = 1e-4_f64; // half-saturation: frag fraction of 0.01% gets half-penalty
         {
             let mut regions_by_key: BTreeMap<String, Vec<Dual>> = BTreeMap::new();
             for component in &scene.components {
@@ -401,16 +405,24 @@ impl Step {
                     geo_areas.sort_by(|a, b| b.v().partial_cmp(&a.v()).unwrap());
                     // Sum all fragments for this key (region total area)
                     let region_total: Dual = geo_areas.iter().cloned().sum();
+                    let region_weight = region_total.v() / total_area.v();
                     // Sum non-largest fragments
                     let non_largest_sum: Dual = geo_areas.into_iter().skip(1).sum();
-                    let non_largest_sum_v = non_largest_sum.v();
-                    // Fraction of region that's fragmented (in [0, 1))
-                    let key_frac = non_largest_sum / &region_total;
-                    debug!("  fragmentation penalty: key={}, region_total={}, frag_sum={}, frac={}", key, region_total.v(), non_largest_sum_v, key_frac.v());
+                    let _non_largest_sum_v = non_largest_sum.v();
+                    // Fraction of region that's fragmented
+                    let frag_frac = non_largest_sum / &region_total;
+                    // Saturate: sat(f) = f/(f+k), so even tiny frags → ~1
+                    let frag_frac_v = frag_frac.v();
+                    let sat_denom = frag_frac.clone() + frag_k;
+                    let saturated = frag_frac / &sat_denom;
+                    // Weight by region's share of total area
+                    let key_penalty = saturated * region_weight;
+                    debug!("  fragmentation: key={}, region_weight={:.4}, frag_frac={:.6}, saturated={:.4}, penalty={:.6}",
+                        key, region_weight, frag_frac_v, key_penalty.v() / region_weight, key_penalty.v());
                     let rp = region_penalties.entry(key).or_default();
-                    rp.fragmentation = key_frac.v();
+                    rp.fragmentation = key_penalty.v();
                     rp.fragment_count = fragment_count;
-                    total_fragmentation_penalty += key_frac;
+                    total_fragmentation_penalty += key_penalty;
                 }
             }
         }

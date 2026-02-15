@@ -389,9 +389,13 @@ pub(super) fn handle_train_batch(id: &str, params: &Value) -> JsonRpcResponse {
     let mut steps: Vec<Value> = Vec::with_capacity(num_steps);
     let mut min_error = current_step.error.v();
     let mut min_step_index = 0usize;
+    let initial_loss = current_step.error.v().abs() + current_step.penalties.total();
+    let mut min_loss = initial_loss;
+    let mut min_loss_step_index = 0usize;
 
-    // Collect sparkline data: errors and gradients for each step
-    let mut sparkline_errors: Vec<f64> = Vec::with_capacity(num_steps);
+    // Collect sparkline data: loss and area errors for each step
+    let mut sparkline_errors: Vec<f64> = Vec::with_capacity(num_steps);  // loss (error + penalties)
+    let mut sparkline_area_errors: Vec<f64> = Vec::with_capacity(num_steps);  // pure area error
     let mut sparkline_gradients: Vec<Vec<f64>> = Vec::with_capacity(num_steps);
     // Region errors: key -> [error at step 0, error at step 1, ...]
     let mut sparkline_region_errors: std::collections::BTreeMap<String, Vec<f64>> = std::collections::BTreeMap::new();
@@ -408,9 +412,11 @@ pub(super) fn handle_train_batch(id: &str, params: &Value) -> JsonRpcResponse {
     steps.push(serde_json::json!({
         "stepIndex": 0,
         "error": current_step.error.v(),
+        "loss": initial_loss,
         "shapes": initial_shapes,
     }));
-    sparkline_errors.push(current_step.error.v());
+    sparkline_errors.push(initial_loss);
+    sparkline_area_errors.push(current_step.error.v());
     sparkline_gradients.push(current_step.error.d().to_vec());
     for (key, err) in &current_step.errors {
         if let Some(vec) = sparkline_region_errors.get_mut(key) {
@@ -418,11 +424,15 @@ pub(super) fn handle_train_batch(id: &str, params: &Value) -> JsonRpcResponse {
         }
     }
 
-    // Compute remaining steps
+    // Compute remaining steps using fixed-LR stepping (not error-scaled).
+    // Error-scaled step() freezes the optimizer when area error → 0 but penalties remain.
+    let max_grad_value = 0.5;
+    let max_grad_norm = 1.0;
     for i in 1..num_steps {
-        match current_step.step(learning_rate) {
+        match current_step.step_clipped(learning_rate, max_grad_value, max_grad_norm) {
             Ok(next_step) => {
                 let error = next_step.error.v();
+                let loss = error.abs() + next_step.penalties.total();
 
                 // Check for NaN in error or shape coordinates
                 if error.is_nan() {
@@ -448,10 +458,16 @@ pub(super) fn handle_train_batch(id: &str, params: &Value) -> JsonRpcResponse {
                     };
                 }
 
-                // Track minimum
+                // Track minimum area error
                 if error < min_error {
                     min_error = error;
                     min_step_index = i;
+                }
+
+                // Track minimum loss
+                if loss < min_loss {
+                    min_loss = loss;
+                    min_loss_step_index = i;
                 }
 
                 // Record step
@@ -461,11 +477,13 @@ pub(super) fn handle_train_batch(id: &str, params: &Value) -> JsonRpcResponse {
                 steps.push(serde_json::json!({
                     "stepIndex": i,
                     "error": error,
+                    "loss": loss,
                     "shapes": shapes,
                 }));
 
                 // Collect sparkline data
-                sparkline_errors.push(error);
+                sparkline_errors.push(loss);
+                sparkline_area_errors.push(error);
                 sparkline_gradients.push(next_step.error.d().to_vec());
                 for (key, err) in &next_step.errors {
                     if let Some(vec) = sparkline_region_errors.get_mut(key) {
@@ -493,7 +511,8 @@ pub(super) fn handle_train_batch(id: &str, params: &Value) -> JsonRpcResponse {
         .map(|s| serde_json::to_value(s.v()).unwrap())
         .collect();
 
-    eprintln!("[trainBatch] Completed {} steps, minError={} at step {}", steps.len(), min_error, min_step_index);
+    eprintln!("[trainBatch] Completed {} steps, minError={} at step {}, minLoss={} at step {}",
+        steps.len(), min_error, min_step_index, min_loss, min_loss_step_index);
 
     JsonRpcResponse {
         id: id.to_string(),
@@ -501,9 +520,12 @@ pub(super) fn handle_train_batch(id: &str, params: &Value) -> JsonRpcResponse {
             "steps": steps,
             "minError": min_error,
             "minStepIndex": min_step_index,
+            "minLoss": min_loss,
+            "minLossStepIndex": min_loss_step_index,
             "finalShapes": final_shapes,
             "sparklineData": {
                 "errors": sparkline_errors,
+                "areaErrors": sparkline_area_errors,
                 "gradients": sparkline_gradients,
                 "regionErrors": sparkline_region_errors,
             },
