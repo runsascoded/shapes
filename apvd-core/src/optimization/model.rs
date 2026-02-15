@@ -3,15 +3,23 @@ use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
 use crate::{error::SceneError, step::Step, targets::TargetsMap, shape::InputSpec};
+use crate::tiered::TieredConfig;
 use super::adam::{AdamState, AdamConfig};
 use super::robust::{self, OptimConfig};
 
 #[derive(Debug, Clone, Tsify, Serialize, Deserialize)]
 pub struct Model {
     pub steps: Vec<Step>,
+    /// Original step indices when steps are filtered (e.g. tiered keyframes).
+    /// `None` means steps[i] corresponds to step i (no filtering).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub step_indices: Option<Vec<usize>>,
     pub repeat_idx: Option<usize>,
     pub min_idx: usize,
     pub min_error: f64,
+    /// Actual number of training iterations (may differ from `steps.len()`
+    /// when step filtering is active).
+    pub total_steps: usize,
 }
 
 impl Model {
@@ -20,7 +28,7 @@ impl Model {
         let min_error = step.error.re;
         let steps = vec![step];
         let repeat_idx: Option<usize> = None;
-        Ok(Model { steps, min_idx: 0, repeat_idx, min_error })
+        Ok(Model { steps, step_indices: None, min_idx: 0, repeat_idx, min_error, total_steps: 1 })
     }
     pub fn train(&mut self, max_step_error_ratio: f64, max_steps: usize) -> Result<(), SceneError> {
         let num_steps = self.steps.len();
@@ -66,6 +74,7 @@ impl Model {
             }
             step = nxt;
         }
+        self.total_steps = self.steps.len();
         Ok(())
     }
     pub fn grad_size(&self) -> usize {
@@ -128,6 +137,7 @@ impl Model {
             }
             step = nxt;
         }
+        self.total_steps = self.steps.len();
         Ok(())
     }
 
@@ -139,27 +149,49 @@ impl Model {
     /// - Learning rate warmup for stability
     /// - Step rejection when error increases significantly
     pub fn train_robust(&mut self, max_steps: usize) -> Result<(), SceneError> {
-        self.train_robust_with_config(OptimConfig::default(), max_steps)
+        self.train_robust_with_config(OptimConfig::default(), max_steps, None)
     }
 
     /// Train using robust optimization with custom configuration.
-    pub fn train_robust_with_config(&mut self, config: OptimConfig, max_steps: usize) -> Result<(), SceneError> {
-        let num_steps = self.steps.len();
-        let initial_step = &self.steps[num_steps - 1];
+    ///
+    /// When `tiered` is `Some`, only tiered keyframe steps (plus best and final)
+    /// are retained in memory, preventing OOM on long training runs.
+    pub fn train_robust_with_config(
+        &mut self,
+        config: OptimConfig,
+        max_steps: usize,
+        tiered: Option<&TieredConfig>,
+    ) -> Result<(), SceneError> {
+        let step_offset = self.steps.len() - 1;
+        let initial_step = &self.steps[step_offset];
 
-        let new_steps = robust::train_robust(initial_step, config, max_steps)?;
+        let retain: Option<Box<dyn Fn(usize) -> bool>> = tiered.map(|tc| {
+            let tc = tc.clone();
+            Box::new(move |idx: usize| tc.is_keyframe(idx)) as Box<dyn Fn(usize) -> bool>
+        });
 
-        // Add new steps to history, tracking min error
-        for (idx, step) in new_steps.into_iter().skip(1).enumerate() {
-            let step_idx = num_steps + idx;
-            let err = step.error.re;
+        let result = robust::train_robust_filtered(
+            initial_step,
+            config,
+            max_steps,
+            step_offset,
+            retain.as_deref(),
+        )?;
 
-            if err < self.min_error {
-                self.min_idx = step_idx;
-                self.min_error = err;
-            }
-
+        // result.steps[0] is the initial step (already in self.steps), skip it
+        for step in result.steps.into_iter().skip(1) {
             self.steps.push(step);
+        }
+
+        self.min_idx = result.min_idx;
+        self.min_error = result.min_error;
+        self.total_steps = result.total_steps;
+
+        // Store step indices when filtering is active
+        if tiered.is_some() {
+            let mut indices = vec![0usize]; // initial step
+            indices.extend(result.step_indices.iter().skip(1));
+            self.step_indices = Some(indices);
         }
 
         Ok(())
