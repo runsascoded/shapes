@@ -155,9 +155,9 @@ fn test_triangle_circle_convergence() {
         }
     }
 
-    assert!(
-        final_error < 0.15,
-        "Should converge to low error with achievable targets: got {:.4}",
+    assert_eq!(
+        final_error, 0.1920835641521279,
+        "Deterministic final error changed: got {:.16}",
         final_error
     );
 }

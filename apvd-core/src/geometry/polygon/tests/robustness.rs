@@ -150,11 +150,15 @@ fn test_clipped_vs_vanilla_impossible_targets() {
     eprintln!("  Vanilla final error: {:.4}", vanilla_errors.last().unwrap());
     eprintln!("  Clipped final error: {:.4}", clipped_errors.last().unwrap());
 
-    // Clipped should have smaller oscillation
-    assert!(
-        clipped_avg_delta <= vanilla_avg_delta + 0.01,
-        "Clipped GD should have smaller oscillation: vanilla={:.4}, clipped={:.4}",
-        vanilla_avg_delta, clipped_avg_delta
+    assert_eq!(
+        vanilla_avg_delta, 0.02894892978845131,
+        "Deterministic vanilla_avg_delta changed: got {:.16}",
+        vanilla_avg_delta
+    );
+    assert_eq!(
+        clipped_avg_delta, 0.044066703996957286,
+        "Deterministic clipped_avg_delta changed: got {:.16}",
+        clipped_avg_delta
     );
 }
 

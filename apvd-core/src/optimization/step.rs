@@ -39,8 +39,8 @@ impl Default for PenaltyConfig {
             fragmentation: 1.0,
             self_intersection: 1.0,
             regularity: 0.0,  // disabled by default; P:A subsumes it
-            shape_perimeter_area: 1.0,
-            region_perimeter_area: 0.1,  // lower than shape_perimeter_area since regions can't independently reshape
+            shape_perimeter_area: 0.10,  // cap: max contribution as fraction of total target area (10%)
+            region_perimeter_area: 0.0,  // disabled: region shapes are a consequence of shape placement, not independently controllable
         }
     }
 }
@@ -278,7 +278,6 @@ impl Step {
             debug!("  {}: error {}, {}", key, e, err);
             error += err;
         }
-        // let mut error: D = disjoint_targets.iter().map(|(key, _)| errors.get(key).unwrap().error.abs()).sum();
         debug!("step error {:?}", error);
         // Optional/Alternate loss function based on per-region squared errors, weights errors by region size:
         // let error = errors.values().into_iter().map(|e| e.error.clone() * &e.error).sum::<D>().sqrt();
@@ -383,9 +382,10 @@ impl Step {
         }
 
         // Fragmentation penalty: for region keys with multiple disconnected geometric
-        // components, penalize all but the largest (L1 in fragment area).
-        // Normalized by total_area so values are fractions, comparable to area errors.
-        let total_area_v = total_area.v();
+        // components, penalize all but the largest. Each key's penalty is the fraction of
+        // that region's own area that's in non-largest fragments (normalized per-region,
+        // not per-total-area). This produces stronger gradients for eliminating tiny nubs
+        // on small regions.
         let mut total_fragmentation_penalty = scene.zero();
         let mut region_penalties: BTreeMap<String, RegionPenalties> = BTreeMap::new();
         {
@@ -399,24 +399,26 @@ impl Step {
                 let fragment_count = geo_areas.len();
                 if fragment_count > 1 {
                     geo_areas.sort_by(|a, b| b.v().partial_cmp(&a.v()).unwrap());
-                    let mut key_penalty = 0.0;
-                    for frag in geo_areas.into_iter().skip(1) {
-                        debug!("  fragmentation penalty: key={}, fragment area={}", key, frag.v());
-                        key_penalty += frag.v() / total_area_v;
-                        total_fragmentation_penalty += frag;
-                    }
+                    // Sum all fragments for this key (region total area)
+                    let region_total: Dual = geo_areas.iter().cloned().sum();
+                    // Sum non-largest fragments
+                    let non_largest_sum: Dual = geo_areas.into_iter().skip(1).sum();
+                    let non_largest_sum_v = non_largest_sum.v();
+                    // Fraction of region that's fragmented (in [0, 1))
+                    let key_frac = non_largest_sum / &region_total;
+                    debug!("  fragmentation penalty: key={}, region_total={}, frag_sum={}, frac={}", key, region_total.v(), non_largest_sum_v, key_frac.v());
                     let rp = region_penalties.entry(key).or_default();
-                    rp.fragmentation = key_penalty;
+                    rp.fragmentation = key_frac.v();
                     rp.fragment_count = fragment_count;
+                    total_fragmentation_penalty += key_frac;
                 }
             }
         }
-        let normalized_frag = total_fragmentation_penalty / &total_area;
-        let fragmentation_v = normalized_frag.v();
+        let fragmentation_v = total_fragmentation_penalty.v();
         if fragmentation_v > 0.0 {
-            debug!("  total_fragmentation_penalty (normalized): {}", fragmentation_v);
+            debug!("  total_fragmentation_penalty: {}", fragmentation_v);
             if penalty_config.fragmentation > 0.0 {
-                error += Dual::new(0., normalized_frag.d()) * penalty_config.fragmentation;
+                error += Dual::new(0., total_fragmentation_penalty.d()) * penalty_config.fragmentation;
             }
         }
 
@@ -431,6 +433,7 @@ impl Step {
         // Add polygon regularization penalties (self-intersection, convexity, edge regularity, perimeter:area)
         // Self-intersection and regularity are in coordinate-space units → normalize by total_area.
         // Perimeter:area is already dimensionless (P²/(4πA) - 1) → no normalization needed.
+        let total_area_v = total_area.v();
         let mut total_self_intersection_penalty = scene.zero();
         let mut total_regularity_penalty = scene.zero();
         let mut total_perimeter_area_penalty = scene.zero();
@@ -440,30 +443,42 @@ impl Step {
         for set in sets.iter() {
             if let crate::shape::Shape::Polygon(poly) = &set.borrow().shape {
                 // Self-intersection penalty (cross-product depth, area-ish units)
-                let self_int_penalty = poly.self_intersection_penalty_dual();
-                let si_v = self_int_penalty.v();
-                per_shape_raw_si.push(si_v);
-                if si_v > 0.0 {
-                    debug!("  self-intersection penalty (raw): {}", si_v);
-                    total_self_intersection_penalty = total_self_intersection_penalty + self_int_penalty;
+                if penalty_config.self_intersection > 0.0 {
+                    let self_int_penalty = poly.self_intersection_penalty_dual();
+                    let si_v = self_int_penalty.v();
+                    per_shape_raw_si.push(si_v);
+                    if si_v > 0.0 {
+                        debug!("  self-intersection penalty (raw): {}", si_v);
+                        total_self_intersection_penalty = total_self_intersection_penalty + self_int_penalty;
+                    }
+                } else {
+                    per_shape_raw_si.push(0.0);
                 }
 
                 // Regularity penalty (edge variance + convexity, area-ish units)
-                let reg_penalty = poly.regularity_penalty();
-                let reg_v = reg_penalty.v();
-                per_shape_raw_reg.push(reg_v);
-                if reg_v > 0.0 {
-                    debug!("  regularity penalty (raw): {}", reg_v);
-                    total_regularity_penalty = total_regularity_penalty + reg_penalty;
+                if penalty_config.regularity > 0.0 {
+                    let reg_penalty = poly.regularity_penalty();
+                    let reg_v = reg_penalty.v();
+                    per_shape_raw_reg.push(reg_v);
+                    if reg_v > 0.0 {
+                        debug!("  regularity penalty (raw): {}", reg_v);
+                        total_regularity_penalty = total_regularity_penalty + reg_penalty;
+                    }
+                } else {
+                    per_shape_raw_reg.push(0.0);
                 }
 
                 // Perimeter:area ratio penalty (dimensionless)
-                let pa_penalty = poly.perimeter_area_penalty();
-                let pa_v = pa_penalty.v();
-                per_shape_pa.push(pa_v);
-                if pa_v > 0.0 {
-                    debug!("  perimeter:area penalty: {}", pa_v);
-                    total_perimeter_area_penalty = total_perimeter_area_penalty + pa_penalty;
+                if penalty_config.shape_perimeter_area > 0.0 {
+                    let pa_penalty = poly.perimeter_area_penalty();
+                    let pa_v = pa_penalty.v();
+                    per_shape_pa.push(pa_v);
+                    if pa_v > 0.0 {
+                        debug!("  perimeter:area penalty: {}", pa_v);
+                        total_perimeter_area_penalty = total_perimeter_area_penalty + pa_penalty;
+                    }
+                } else {
+                    per_shape_pa.push(0.0);
                 }
             } else {
                 per_shape_raw_si.push(0.0);
@@ -501,7 +516,15 @@ impl Step {
         if perimeter_area_v > 0.0 {
             debug!("  total_perimeter_area_penalty: {}", perimeter_area_v);
             if penalty_config.shape_perimeter_area > 0.0 {
-                error += Dual::new(0., total_perimeter_area_penalty.d()) * penalty_config.shape_perimeter_area;
+                // Saturating normalization: x/(x+k) maps [0,∞) → [0,1), weight = cap.
+                // k=1.0: raw P:A of 1.0 → 50% of cap. Typical values:
+                //   4 × 12-gon (total ~0.09) → 8% of cap ≈ 0.8% AE
+                //   4 × hexagon (total ~0.41) → 29% of cap ≈ 2.9% AE
+                //   4 × square  (total ~1.09) → 52% of cap ≈ 5.2% AE
+                let pa_k = 1.0_f64;
+                let denom = total_perimeter_area_penalty.clone() + pa_k;
+                let saturated = total_perimeter_area_penalty / &denom;
+                error += Dual::new(0., saturated.d()) * penalty_config.shape_perimeter_area;
             }
         }
 
@@ -535,7 +558,11 @@ impl Step {
             }
         }
         if region_perimeter_area_v > 0.0 && penalty_config.region_perimeter_area > 0.0 {
-            error += Dual::new(0., total_region_pa_penalty.d()) * penalty_config.region_perimeter_area;
+            // Same saturating normalization as shape P:A, with lower cap
+            let rpa_k = 1.0_f64;
+            let denom = total_region_pa_penalty.clone() + rpa_k;
+            let saturated = total_region_pa_penalty / &denom;
+            error += Dual::new(0., saturated.d()) * penalty_config.region_perimeter_area;
         }
 
         let penalties = Penalties {

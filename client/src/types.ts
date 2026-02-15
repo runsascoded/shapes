@@ -275,8 +275,10 @@ export interface BatchStep {
 
 /** Sparkline data for visualization */
 export interface SparklineData {
-  /** Error values for each step in the batch */
+  /** Loss values (error + penalties) for each step in the batch */
   errors: number[];
+  /** Pure area error fraction for each step (error.v, without penalties) */
+  areaErrors?: number[];
   /** Gradient vectors for each step (gradients[stepIdx][varIdx]) */
   gradients: number[][];
   /** Per-region error values for each step (regionErrors[regionKey][stepIdx]) */
