@@ -1,0 +1,43 @@
+{
+  "name": "zhang2014e-octagons",
+  "description": "Zhang 2014 Fig 7E: Microarray, Cuffdiff2/DESeq/edgeR. 4 regular octagons.",
+  "inputs": [
+    [{"kind": "Polygon", "vertices": [
+      {"x": -0.117, "y": 1.2}, {"x": -0.683, "y": 0.883}, {"x": -0.883, "y": 0.317},
+      {"x": -0.683, "y": -0.249}, {"x": -0.117, "y": -0.566}, {"x": 0.449, "y": -0.249},
+      {"x": 0.649, "y": 0.317}, {"x": 0.449, "y": 0.883}
+    ]}, [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true]],
+    [{"kind": "Polygon", "vertices": [
+      {"x": 0.883, "y": 1.2}, {"x": 0.317, "y": 0.883}, {"x": 0.117, "y": 0.317},
+      {"x": 0.317, "y": -0.249}, {"x": 0.883, "y": -0.566}, {"x": 1.449, "y": -0.249},
+      {"x": 1.649, "y": 0.317}, {"x": 1.449, "y": 0.883}
+    ]}, [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true]],
+    [{"kind": "Polygon", "vertices": [
+      {"x": 0.383, "y": 0.4}, {"x": -0.183, "y": 0.083}, {"x": -0.383, "y": -0.483},
+      {"x": -0.183, "y": -1.049}, {"x": 0.383, "y": -1.366}, {"x": 0.949, "y": -1.049},
+      {"x": 1.149, "y": -0.483}, {"x": 0.949, "y": 0.083}
+    ]}, [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true]],
+    [{"kind": "Polygon", "vertices": [
+      {"x": 0.383, "y": 2.0}, {"x": -0.183, "y": 1.683}, {"x": -0.383, "y": 1.117},
+      {"x": -0.183, "y": 0.551}, {"x": 0.383, "y": 0.234}, {"x": 0.949, "y": 0.551},
+      {"x": 1.149, "y": 1.117}, {"x": 0.949, "y": 1.683}
+    ]}, [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true]]
+  ],
+  "targets": {
+    "0---": 7,
+    "-1--": 798,
+    "--2-": 0,
+    "---3": 35,
+    "01--": 0,
+    "0-2-": 197,
+    "0--3": 0,
+    "-12-": 1097,
+    "-1-3": 1,
+    "--23": 569,
+    "012-": 4,
+    "01-3": 303,
+    "0-23": 0,
+    "-123": 3177,
+    "0123": 65
+  }
+}
