@@ -197,9 +197,13 @@ enum Commands {
         command: TraceCommands,
     },
 
-    /// Optimize a 5-shape layout by training a single template polygon
-    #[command(name = "5-shape-layout")]
-    FiveShapeLayout {
+    /// Optimize an N-shape layout by training a single template polygon
+    #[command(name = "shape-layout", alias = "5-shape-layout")]
+    ShapeLayout {
+        /// Number of shapes
+        #[arg(short, long, default_value = "5")]
+        num_shapes: usize,
+
         /// Number of vertices per polygon
         #[arg(short, long, default_value = "15")]
         vertices: usize,
@@ -223,6 +227,21 @@ enum Commands {
         /// Initial cardioid dent factor
         #[arg(short, long, default_value = "0.15")]
         dent: f64,
+
+        /// Center offset (each shape translated this far from origin).
+        /// Auto-computed if not specified.
+        #[arg(short, long)]
+        offset: Option<f64>,
+
+        /// Inter-shape rotation angle in degrees.
+        /// Auto-computed if not specified: 60° for N<5, 360/N for N≥5.
+        #[arg(short, long)]
+        angle_step: Option<f64>,
+
+        /// Fix angle_step (don't train it). Forces shapes to keep the
+        /// specified rotation angle, relying on shape deformation instead.
+        #[arg(long)]
+        fix_angle: bool,
 
         /// Output format: "json" for machine-readable, "text" for human-readable
         #[arg(short, long, default_value = "text")]
@@ -579,19 +598,26 @@ fn main() {
                 std::process::exit(1);
             }
         }
-        Commands::FiveShapeLayout { vertices, max_steps, learning_rate, width, height, dent, format } => {
-            eprintln!("Optimizing 5-shape layout: {} vertices, {} steps, lr={}", vertices, max_steps, learning_rate);
+        Commands::ShapeLayout { num_shapes, vertices, max_steps, learning_rate, width, height, dent, offset, angle_step, fix_angle, format } => {
+            eprintln!("Optimizing {}-shape layout: {} vertices, {} steps, lr={}", num_shapes, vertices, max_steps, learning_rate);
             eprintln!("  Initial template: width={}, height={}, dent={}", width, height, dent);
             eprintln!();
 
-            match layout_opt::optimize_layout(vertices, max_steps, learning_rate, width, height, dent) {
+            // Convert CLI angle_step from degrees to radians
+            let angle_step_rad = angle_step.map(|deg| deg.to_radians());
+
+            match layout_opt::optimize_layout(num_shapes, vertices, max_steps, learning_rate, width, height, dent, offset, angle_step_rad, fix_angle) {
                 Ok(result) => {
                     if format == "json" {
                         let output = serde_json::json!({
+                            "num_shapes": num_shapes,
                             "vertices": result.template.iter().map(|v| {
                                 serde_json::json!({"x": v.x, "y": v.y})
                             }).collect::<Vec<_>>(),
                             "n_vertices": vertices,
+                            "offset": result.offset,
+                            "angle_step_deg": result.angle_step.to_degrees(),
+                            "angle_step_rad": result.angle_step,
                             "final_loss": result.final_loss,
                             "min_ratio": result.min_ratio,
                             "loss_history": result.loss_history,
@@ -602,7 +628,7 @@ fn main() {
                         println!("{}", serde_json::to_string_pretty(&output).unwrap());
                     } else {
                         let total: f64 = result.region_areas.iter().filter(|(_, a)| *a > 1e-6).map(|(_, a)| a).sum();
-                        eprintln!("\nOptimized template ({} vertices):", vertices);
+                        eprintln!("\nOptimized template ({} vertices, offset={:.4}, angle_step={:.2}°):", vertices, result.offset, result.angle_step.to_degrees());
                         for (i, v) in result.template.iter().enumerate() {
                             eprintln!("  [{:2}] ({:+.6}, {:+.6})", i, v.x, v.y);
                         }
@@ -618,6 +644,8 @@ fn main() {
 
                         // Print as TypeScript for easy copy-paste
                         eprintln!("\n// TypeScript (paste into layout.ts):");
+                        eprintln!("const optimizedOffset = {:.6};", result.offset);
+                        eprintln!("const optimizedAngleStep = {:.6}; // {:.2}°", result.angle_step, result.angle_step.to_degrees());
                         eprintln!("const optimizedTemplate: R2<number>[] = [");
                         for v in &result.template {
                             eprintln!("  {{ x: {:+.6}, y: {:+.6} }},", v.x, v.y);

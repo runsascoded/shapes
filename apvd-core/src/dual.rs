@@ -133,6 +133,10 @@ impl Dual {
         assert_eq!(self.1, o.1);
         Dual(self.0.clone().atan2(o.0), self.1)
     }
+    #[inline]
+    pub fn ln(self) -> Self {
+        Dual(self.0.clone().ln(), self.1)
+    }
 }
 
 impl Deref for Dual {
