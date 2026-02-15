@@ -181,16 +181,56 @@ impl Optimizer {
     }
 }
 
-/// Train a model using robust optimization.
+/// Result of robust training with optional step filtering.
+pub struct RobustResult {
+    /// Retained steps (filtered by predicate + best + final).
+    pub steps: Vec<Step>,
+    /// Original (absolute) step index for each retained step.
+    pub step_indices: Vec<usize>,
+    /// Total iterations actually completed (accepted steps only).
+    pub total_steps: usize,
+    /// Absolute index of the best (min error) step.
+    pub min_idx: usize,
+    /// Best error achieved.
+    pub min_error: f64,
+}
+
+/// Train using robust optimization, retaining all steps.
 pub fn train_robust(
     initial_step: &Step,
     config: OptimConfig,
     max_steps: usize,
-) -> Result<Vec<Step>, SceneError> {
+) -> Result<RobustResult, SceneError> {
+    train_robust_filtered(initial_step, config, max_steps, 0, None)
+}
+
+/// Train using robust optimization with optional step filtering.
+///
+/// `step_offset`: added to internal indices so `retain` sees absolute step numbers.
+/// `retain`: if `Some`, only steps where `retain(abs_idx)` returns true are kept
+/// in the result (plus the best and final steps, which are always retained).
+pub fn train_robust_filtered(
+    initial_step: &Step,
+    config: OptimConfig,
+    max_steps: usize,
+    step_offset: usize,
+    retain: Option<&dyn Fn(usize) -> bool>,
+) -> Result<RobustResult, SceneError> {
     let grad_size = initial_step.grad_size();
     let mut optimizer = Optimizer::new(grad_size, config);
+
+    // Always retain the initial step
     let mut steps = vec![initial_step.clone()];
+    let mut step_indices = vec![step_offset];
+
     let mut current = initial_step.clone();
+    let mut min_idx = step_offset;
+    let mut min_error = initial_step.error.v();
+    // Track best step separately so we can ensure it's in the output
+    let mut best_step: Option<Step> = None;
+
+    // Count accepted steps (excluding initial)
+    let mut accepted_count: usize = 0;
 
     for step_idx in 0..max_steps {
         let error = current.error.clone();
@@ -235,11 +275,29 @@ pub fn train_robust(
         }
 
         optimizer.accept_step();
+        accepted_count += 1;
+        let abs_idx = step_offset + accepted_count;
 
         debug!("Step {}: error {:.6} -> {:.6} (lr={:.4})",
                step_idx, current_error, new_error, optimizer.effective_lr());
 
-        steps.push(new_step.clone());
+        // Track best
+        if new_error < min_error {
+            min_error = new_error;
+            min_idx = abs_idx;
+            best_step = Some(new_step.clone());
+        }
+
+        // Decide whether to retain this step
+        let should_retain = match retain {
+            Some(f) => f(abs_idx),
+            None => true,
+        };
+        if should_retain {
+            steps.push(new_step.clone());
+            step_indices.push(abs_idx);
+        }
+
         current = new_step;
 
         // Check for convergence (error + penalties very small)
@@ -249,7 +307,35 @@ pub fn train_robust(
         }
     }
 
-    Ok(steps)
+    let total_steps = step_offset + accepted_count + 1; // +1 for initial step
+
+    // Ensure best step is in the output
+    if let Some(best) = best_step {
+        if !step_indices.contains(&min_idx) {
+            steps.push(best);
+            step_indices.push(min_idx);
+        }
+    }
+
+    // Ensure final step is in the output
+    let final_abs_idx = step_offset + accepted_count;
+    if accepted_count > 0 && !step_indices.contains(&final_abs_idx) {
+        steps.push(current);
+        step_indices.push(final_abs_idx);
+    }
+
+    // Sort by step index to maintain order
+    let mut indexed: Vec<_> = step_indices.into_iter().zip(steps.into_iter()).collect();
+    indexed.sort_by_key(|(idx, _)| *idx);
+    let (step_indices, steps): (Vec<_>, Vec<_>) = indexed.into_iter().unzip();
+
+    Ok(RobustResult {
+        steps,
+        step_indices,
+        total_steps,
+        min_idx,
+        min_error,
+    })
 }
 
 #[cfg(test)]

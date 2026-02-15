@@ -792,7 +792,11 @@ fn run_train(
             };
 
             let train_result = if robust {
-                model.train_robust(max_steps)
+                model.train_robust_with_config(
+                    apvd_core::optimization::robust::OptimConfig::default(),
+                    max_steps,
+                    tiered_config.as_ref(),
+                )
             } else {
                 model.train(learning_rate, max_steps)
             };
@@ -812,36 +816,42 @@ fn run_train(
                 .map(|s| serde_json::to_value(s.v()).unwrap())
                 .collect();
 
-            // Collect BTD (Best To Date) step indices
+            // Collect BTD (Best To Date) step indices (using original indices if filtered)
             let mut btd_steps = Vec::new();
             let mut min_so_far = f64::INFINITY;
-            for (idx, step) in model.steps.iter().enumerate() {
+            for (i, step) in model.steps.iter().enumerate() {
                 let error = step.error.v();
                 if error < min_so_far {
                     min_so_far = error;
-                    btd_steps.push(idx);
+                    let abs_idx = model.step_indices.as_ref()
+                        .map_or(i, |indices| indices[i]);
+                    btd_steps.push(abs_idx);
                 }
             }
 
             // Build history if requested
+            let already_filtered = robust && tiered_config.is_some();
             let history = if include_history || include_checkpoints || tiered_config.is_some() {
                 // Determine which steps to include
-                let include_step: Box<dyn Fn(usize) -> bool> = if include_history {
-                    Box::new(|_| true) // all steps
+                let include_step: Box<dyn Fn(usize) -> bool> = if already_filtered || include_history {
+                    // When robust + tiered, steps are already filtered during training;
+                    // when include_history, output everything.
+                    Box::new(|_| true)
                 } else if include_checkpoints {
                     // Checkpoint steps: 0, 100, 500, 1000, best, final
+                    let total = model.total_steps;
                     let mut indices: std::collections::HashSet<usize> = [0, 100, 500, 1000]
                         .iter()
-                        .filter(|&&i| i < model.steps.len())
+                        .filter(|&&i| i < total)
                         .copied()
                         .collect();
                     indices.insert(model.min_idx); // best step
-                    indices.insert(model.steps.len() - 1); // final step
+                    indices.insert(total - 1); // final step
                     Box::new(move |idx| indices.contains(&idx))
                 } else if let Some(ref tc) = tiered_config {
-                    // Tiered keyframes
+                    // Tiered keyframes (non-robust path)
                     let tc = tc.clone();
-                    let final_idx = model.steps.len() - 1;
+                    let final_idx = model.total_steps - 1;
                     let min_idx = model.min_idx;
                     Box::new(move |idx| {
                         tc.is_keyframe(idx) || idx == final_idx || idx == min_idx
@@ -853,8 +863,16 @@ fn run_train(
                 let mut min_so_far = f64::INFINITY;
                 Some(
                     model.steps.iter().enumerate()
-                        .filter(|(idx, _)| include_step(*idx))
-                        .map(|(idx, step)| {
+                        .filter_map(|(i, step)| {
+                            let abs_idx = model.step_indices.as_ref()
+                                .map_or(i, |indices| indices[i]);
+                            if include_step(abs_idx) {
+                                Some((abs_idx, step))
+                            } else {
+                                None
+                            }
+                        })
+                        .map(|(abs_idx, step)| {
                             let error = step.error.v();
                             let is_best = if error < min_so_far {
                                 min_so_far = error;
@@ -863,7 +881,7 @@ fn run_train(
                                 None
                             };
                             TraceStep {
-                                step_idx: idx,
+                                step_idx: abs_idx,
                                 error,
                                 shapes: step.shapes.iter().map(|s| serde_json::to_value(s.v()).unwrap()).collect(),
                                 is_best,
@@ -880,7 +898,7 @@ fn run_train(
                 final_error: final_step.error.v(),
                 min_error: model.min_error,
                 min_step: model.min_idx,
-                total_steps: model.steps.len(),
+                total_steps: model.total_steps,
                 training_time_ms,
                 final_shapes,
                 history,
