@@ -773,7 +773,7 @@ fn run_train(
     let traces: Vec<TrainingTrace> = permutations
         .into_par_iter()
         .enumerate()
-        .map(|(variant_id, permutation)| {
+        .filter_map(|(variant_id, permutation)| {
             let variant_start = Instant::now();
 
             // Reorder inputs according to permutation
@@ -783,13 +783,22 @@ fn run_train(
                 .collect();
 
             // Create and train model
-            let mut model = Model::new(reordered_inputs, targets.clone())
-                .expect("Failed to create model");
+            let mut model = match Model::new(reordered_inputs, targets.clone()) {
+                Ok(m) => m,
+                Err(e) => {
+                    eprintln!("Variant {}: model creation failed: {}", variant_id, e);
+                    return None;
+                }
+            };
 
-            if robust {
-                model.train_robust(max_steps).expect("Training failed");
+            let train_result = if robust {
+                model.train_robust(max_steps)
             } else {
-                model.train(learning_rate, max_steps).expect("Training failed");
+                model.train(learning_rate, max_steps)
+            };
+            if let Err(e) = train_result {
+                eprintln!("Variant {}: training failed: {}", variant_id, e);
+                // Still use whatever steps were completed before the error
             }
 
             let training_time_ms = variant_start.elapsed().as_millis() as u64;
@@ -886,12 +895,16 @@ fn run_train(
                 io::stderr().flush().ok();
             }
 
-            trace
+            Some(trace)
         })
         .collect();
 
     if !quiet && num_variants > 1 {
         eprintln!(); // Newline after progress
+    }
+
+    if traces.is_empty() {
+        return Err("All training variants failed".into());
     }
 
     // Sort by final error and find best

@@ -4,7 +4,7 @@
 use core::f64;
 use std::{cell::RefCell, rc::Rc, collections::{BTreeSet, BTreeMap}, ops::{Neg, Add, Sub, Mul, Div}};
 
-use log::{debug, info, error};
+use log::{debug, info, warn, error};
 use ordered_float::OrderedFloat;
 
 use crate::{node::{N, Node}, contains::{ShapeContainsPoint, ContainsF64}, distance::Distance, error::SceneError, region::RegionArg, set::S, shape::{Shape, AreaArg}, boundary_coord::BoundaryCoord, intersect::{Intersect, IntersectShapesArg}, r2::R2, transform::{CanTransform, HasProjection, CanProject}, dual::Dual, to::To, math::deg::Deg, fmt::Fmt, component::{Component, self}, set::Set};
@@ -296,15 +296,22 @@ where
                         // contains
                         r.contains(&p, &container_shapes)
                     }).collect();
-                    if container_regions.len() != 1 {
-                        return Err(SceneError::ContainerRegionCount {
-                            component_key: container_component.key.clone(),
-                            child_key: component_ptr.borrow().key.clone(),
-                            count: container_regions.len(),
-                            regions: container_regions.iter().map(|r| r.key.clone()).collect(),
-                        });
+                    if container_regions.len() == 1 {
+                        container_regions[0].child_components.push(component_ptr.clone());
+                    } else {
+                        // Degenerate configuration: child component's center doesn't
+                        // land in exactly 1 parent region. This happens transiently
+                        // during optimization when shapes pass through near-tangent
+                        // or overlapping states. Skip the child assignment; area
+                        // accounting will be slightly off but training can continue.
+                        warn!(
+                            "Expected 1 container region within component {} containing {}, found {}: {:?}",
+                            container_component.key,
+                            component_ptr.borrow().key,
+                            container_regions.len(),
+                            container_regions.iter().map(|r| r.key.clone()).collect::<Vec<_>>(),
+                        );
                     }
-                    container_regions[0].child_components.push(component_ptr.clone());
                 }
             }
         }

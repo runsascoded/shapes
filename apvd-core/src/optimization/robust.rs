@@ -32,8 +32,10 @@ pub struct OptimConfig {
     pub warmup_steps: usize,
     /// Reject steps that increase error by more than this factor (default: 1.5)
     pub max_error_increase: f64,
-    /// Maximum consecutive rejected steps before giving up (default: 5)
+    /// Maximum consecutive rejected steps before giving up (default: 50)
     pub max_rejections: usize,
+    /// LR decay factor per rejection (default: 0.5)
+    pub rejection_lr_decay: f64,
 }
 
 impl Default for OptimConfig {
@@ -47,7 +49,8 @@ impl Default for OptimConfig {
             epsilon: 1e-8,
             warmup_steps: 10,
             max_error_increase: 1.5,
-            max_rejections: 5,
+            max_rejections: 50,
+            rejection_lr_decay: 0.5,
         }
     }
 }
@@ -64,6 +67,8 @@ pub struct Optimizer {
     t: usize,
     /// Consecutive rejections
     rejections: usize,
+    /// Current LR scale factor (reduced on rejection, restored on accept)
+    lr_scale: f64,
 }
 
 impl Optimizer {
@@ -74,17 +79,19 @@ impl Optimizer {
             v: vec![0.0; num_params],
             t: 0,
             rejections: 0,
+            lr_scale: 1.0,
         }
     }
 
-    /// Compute effective learning rate with warmup.
-    fn effective_lr(&self) -> f64 {
-        if self.t < self.config.warmup_steps {
+    /// Compute effective learning rate with warmup and rejection decay.
+    pub fn effective_lr(&self) -> f64 {
+        let base = if self.t < self.config.warmup_steps {
             // Linear warmup
             self.config.learning_rate * (self.t + 1) as f64 / self.config.warmup_steps as f64
         } else {
             self.config.learning_rate
-        }
+        };
+        base * self.lr_scale
     }
 
     /// Clip gradients by value and L2 norm.
@@ -139,14 +146,17 @@ impl Optimizer {
     }
 
     /// Check if a step should be rejected (error increased too much).
+    /// On rejection, decays the LR and resets Adam momentum to escape stale gradients.
     pub fn should_reject(&mut self, old_error: f64, new_error: f64) -> bool {
         if new_error > old_error * self.config.max_error_increase {
             self.rejections += 1;
-            debug!("Rejecting step: error {} -> {} (rejection {})",
-                   old_error, new_error, self.rejections);
+            self.lr_scale *= self.config.rejection_lr_decay;
+            // Reset Adam momentum to prevent stale momentum from dominating
+            for m in &mut self.m { *m = 0.0; }
+            debug!("Rejecting step: error {} -> {} (rejection {}, lr_scale={:.4})",
+                   old_error, new_error, self.rejections, self.lr_scale);
             true
         } else {
-            self.rejections = 0;
             false
         }
     }
@@ -156,8 +166,12 @@ impl Optimizer {
         self.rejections >= self.config.max_rejections
     }
 
-    /// Reset rejection counter (call after accepting a step).
+    /// Reset rejection counter and restore LR (call after accepting a step).
     pub fn accept_step(&mut self) {
+        if self.rejections > 0 {
+            // Gradually restore LR (don't snap back to full)
+            self.lr_scale = (self.lr_scale * 2.0).min(1.0);
+        }
         self.rejections = 0;
     }
 
