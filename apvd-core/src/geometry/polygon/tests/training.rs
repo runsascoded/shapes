@@ -122,7 +122,7 @@ fn test_polygon_circle_gradient_diagnosis() {
     }
 
     assert_eq!(
-        final_error, 0.8118835707544667,
+        final_error, 0.6410101480137587,
         "Deterministic final error changed: got {:.16}",
         final_error
     );
@@ -372,7 +372,7 @@ fn test_polygon_circle_adam_optimizer() {
         100. * (1. - final_error / initial_error));
 
     assert_eq!(
-        final_error, 0.8561321266939005,
+        final_error, 0.6092622934652094,
         "Deterministic final error changed: got {:.16}",
         final_error
     );

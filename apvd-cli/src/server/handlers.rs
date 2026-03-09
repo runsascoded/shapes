@@ -387,9 +387,9 @@ pub(super) fn handle_train_batch(id: &str, params: &Value) -> JsonRpcResponse {
 
     // Collect all steps
     let mut steps: Vec<Value> = Vec::with_capacity(num_steps);
-    let mut min_error = current_step.error.v();
+    let mut min_error = current_step.error.v().abs();
     let mut min_step_index = 0usize;
-    let initial_loss = current_step.error.v().abs() + current_step.penalties.total();
+    let initial_loss = min_error + current_step.penalties.total();
     let mut min_loss = initial_loss;
     let mut min_loss_step_index = 0usize;
 
@@ -411,12 +411,12 @@ pub(super) fn handle_train_batch(id: &str, params: &Value) -> JsonRpcResponse {
         .collect();
     steps.push(serde_json::json!({
         "stepIndex": 0,
-        "error": current_step.error.v(),
+        "error": min_error,
         "loss": initial_loss,
         "shapes": initial_shapes,
     }));
     sparkline_errors.push(initial_loss);
-    sparkline_area_errors.push(current_step.error.v());
+    sparkline_area_errors.push(min_error);
     sparkline_gradients.push(current_step.error.d().to_vec());
     for (key, err) in &current_step.errors {
         if let Some(vec) = sparkline_region_errors.get_mut(key) {
@@ -431,8 +431,8 @@ pub(super) fn handle_train_batch(id: &str, params: &Value) -> JsonRpcResponse {
     for i in 1..num_steps {
         match current_step.step_clipped(learning_rate, max_grad_value, max_grad_norm) {
             Ok(next_step) => {
-                let error = next_step.error.v();
-                let loss = error.abs() + next_step.penalties.total();
+                let error = next_step.error.v().abs();
+                let loss = error + next_step.penalties.total();
 
                 // Check for NaN in error or shape coordinates
                 if error.is_nan() {

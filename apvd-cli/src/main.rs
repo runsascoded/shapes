@@ -106,7 +106,7 @@ enum Commands {
     /// Start WebSocket server for frontend connections
     Serve {
         /// Port to listen on
-        #[arg(short, long, default_value = "8080")]
+        #[arg(short, long, default_value = "5185")]
         port: u16,
 
         /// Number of parallel scene variants to train

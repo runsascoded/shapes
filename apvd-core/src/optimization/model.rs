@@ -12,13 +12,14 @@ pub struct Model {
     pub steps: Vec<Step>,
     /// Original step indices when steps are filtered (e.g. tiered keyframes).
     /// `None` means steps[i] corresponds to step i (no filtering).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub step_indices: Option<Vec<usize>>,
     pub repeat_idx: Option<usize>,
     pub min_idx: usize,
     pub min_error: f64,
     /// Actual number of training iterations (may differ from `steps.len()`
     /// when step filtering is active).
+    #[serde(default)]
     pub total_steps: usize,
 }
 
