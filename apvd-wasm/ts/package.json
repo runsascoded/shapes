@@ -1,6 +1,6 @@
 {
   "name": "@apvd/worker",
-  "version": "0.1.0-dist.1483cda",
+  "version": "0.1.0-dist.ef1d96b",
   "private": true,
   "type": "module",
   "peerDependencies": {

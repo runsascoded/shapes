@@ -58,6 +58,12 @@ export interface Error {
     kind: ErrorKind;
 }
 
+export interface GradientAnchor {
+    position: R2<number>;
+    gradient: R2<number>;
+    label: string;
+}
+
 export interface HistoryStep {
     error: number;
     shapes: Shape<number>[];
@@ -74,9 +80,11 @@ export interface Intersection<D> {
 
 export interface Model {
     steps: Step[];
+    step_indices?: number[];
     repeat_idx: number | null;
     min_idx: number;
     min_error: number;
+    total_steps?: number;
 }
 
 export interface OptimConfig {
@@ -89,6 +97,7 @@ export interface OptimConfig {
     warmup_steps: number;
     max_error_increase: number;
     max_rejections: number;
+    rejection_lr_decay: number;
 }
 
 export interface Penalties {
@@ -96,6 +105,28 @@ export interface Penalties {
     contained: number;
     self_intersection: number;
     regularity: number;
+    fragmentation: number;
+    perimeter_area: number;
+    region_perimeter_area: number;
+    region_penalties: RegionPenaltiesMap;
+    per_shape: ShapePenalties[];
+}
+
+export interface PenaltyConfig {
+    disjoint: number;
+    contained: number;
+    fragmentation: number;
+    self_intersection: number;
+    regularity: number;
+    shape_perimeter_area: number;
+    region_perimeter_area: number;
+}
+
+export interface PhaseConfig {
+    penalty_config: PenaltyConfig;
+    learning_rate: number;
+    max_grad_value: number;
+    max_grad_norm: number;
 }
 
 export interface Point {
@@ -120,6 +151,14 @@ export interface Region {
     child_component_keys: string[];
 }
 
+export interface RegionPenalties {
+    fragmentation: number;
+    fragment_count: number;
+    disjoint: number;
+    contained: number;
+    perimeter_area: number;
+}
+
 export interface Segment {
     edge_idx: number;
     fwd: boolean;
@@ -131,6 +170,12 @@ export interface Set<D> {
     shape: Shape<D>;
 }
 
+export interface ShapePenalties {
+    self_intersection: number;
+    regularity: number;
+    perimeter_area: number;
+}
+
 export interface Step {
     shapes: Shape<D>[];
     components: Component[];
@@ -140,6 +185,8 @@ export interface Step {
     error: Dual;
     converged: boolean;
     penalties: Penalties;
+    penalty_config: PenaltyConfig;
+    gradient_anchors: GradientAnchor[][];
 }
 
 export interface Targets<D> {
@@ -186,6 +233,8 @@ export type History = HistoryStep[];
 export type Input = [Shape<number>, Duals];
 
 export type Key = string;
+
+export type RegionPenaltiesMap = Record<string, RegionPenalties>;
 
 export type Shape<D> = ({ kind: "Circle" } & Circle<D>) | ({ kind: "XYRR" } & XYRR<D>) | ({ kind: "XYRRT" } & XYRRT<D>) | ({ kind: "Polygon" } & Polygon<D>);
 
@@ -294,11 +343,11 @@ export function make_step(inputs: any, targets: any): any;
 export function make_tiered_config(bucket_size?: number | null): any;
 
 /**
- * Performs a single gradient descent step with gradient clipping (recommended).
+ * Performs a single gradient descent step with gradient clipping.
  *
- * Uses fixed learning rate with gradient clipping for stable updates.
- * This is the recommended method - it prevents the oscillation that occurs
- * with error-scaled step sizes.
+ * Backwards-compatible wrapper: uses default clipping params (max_grad_value=0.5,
+ * max_grad_norm=1.0) and preserves the step's existing `penalty_config`.
+ * Prefer [`step_with_config`] for new code that needs to change penalties mid-training.
  *
  * # Arguments
  * * `step` - Current optimization state from [`make_step`] or a previous [`step`] call.
@@ -320,6 +369,22 @@ export function step(step: any, learning_rate: number): any;
  * * `max_step_error_ratio` - Learning rate scaling factor.
  */
 export function step_legacy(step: any, max_step_error_ratio: number): any;
+
+/**
+ * Performs a single gradient descent step using a [`PhaseConfig`].
+ *
+ * Takes all optimizer and penalty parameters from the config, enabling
+ * the frontend to change penalty weights and learning rate mid-training
+ * (e.g. for phase-based schedules).
+ *
+ * # Arguments
+ * * `step` - Current optimization state from [`make_step`] or a previous step call.
+ * * `config` - Phase configuration with penalty weights, learning rate, and clipping params.
+ *
+ * # Returns
+ * New [`Step`] with updated shape positions and the config's penalty weights applied.
+ */
+export function step_with_config(step: any, config: any): any;
 
 /**
  * Check if a step should be stored as a keyframe.
@@ -361,18 +426,19 @@ export function tiered_nearest_keyframe(config: any, step_idx: number): number;
  * Seek to a target step by recomputing from a keyframe.
  *
  * Given a keyframe step, recomputes forward to reach the target step.
+ * Uses the same clipped stepping as the training loop for consistent results.
  * This enables random access to any step with bounded recomputation.
  *
  * # Arguments
  * * `keyframe` - The stored keyframe step.
  * * `keyframe_idx` - Index of the keyframe.
  * * `target_idx` - Target step index to seek to.
- * * `learning_rate` - Learning rate for recomputation steps.
+ * * `config` - Phase configuration (penalty weights, learning rate, clipping params).
  *
  * # Returns
  * The step at target_idx, or throws if recomputation fails.
  */
-export function tiered_seek(keyframe: any, keyframe_idx: number, target_idx: number, learning_rate: number): any;
+export function tiered_seek(keyframe: any, keyframe_idx: number, target_idx: number, config: any): any;
 
 /**
  * Runs gradient descent training on a model.
@@ -466,10 +532,11 @@ export interface InitOutput {
     readonly make_tiered_config: (a: number) => any;
     readonly step: (a: any, b: number) => any;
     readonly step_legacy: (a: any, b: number) => any;
+    readonly step_with_config: (a: any, b: any) => any;
     readonly tiered_is_keyframe: (a: any, b: number) => number;
     readonly tiered_keyframe_count: (a: any, b: number) => number;
     readonly tiered_nearest_keyframe: (a: any, b: number) => number;
-    readonly tiered_seek: (a: any, b: number, c: number, d: number) => [number, number, number];
+    readonly tiered_seek: (a: any, b: number, c: number, d: any) => [number, number, number];
     readonly train: (a: any, b: number, c: number) => any;
     readonly train_adam: (a: any, b: number, c: number) => any;
     readonly train_robust: (a: any, b: number) => any;

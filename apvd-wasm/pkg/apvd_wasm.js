@@ -135,11 +135,11 @@ export function make_tiered_config(bucket_size) {
 }
 
 /**
- * Performs a single gradient descent step with gradient clipping (recommended).
+ * Performs a single gradient descent step with gradient clipping.
  *
- * Uses fixed learning rate with gradient clipping for stable updates.
- * This is the recommended method - it prevents the oscillation that occurs
- * with error-scaled step sizes.
+ * Backwards-compatible wrapper: uses default clipping params (max_grad_value=0.5,
+ * max_grad_norm=1.0) and preserves the step's existing `penalty_config`.
+ * Prefer [`step_with_config`] for new code that needs to change penalties mid-training.
  *
  * # Arguments
  * * `step` - Current optimization state from [`make_step`] or a previous [`step`] call.
@@ -171,6 +171,28 @@ export function step(step, learning_rate) {
  */
 export function step_legacy(step, max_step_error_ratio) {
     const ret = wasm.step_legacy(step, max_step_error_ratio);
+    return ret;
+}
+
+/**
+ * Performs a single gradient descent step using a [`PhaseConfig`].
+ *
+ * Takes all optimizer and penalty parameters from the config, enabling
+ * the frontend to change penalty weights and learning rate mid-training
+ * (e.g. for phase-based schedules).
+ *
+ * # Arguments
+ * * `step` - Current optimization state from [`make_step`] or a previous step call.
+ * * `config` - Phase configuration with penalty weights, learning rate, and clipping params.
+ *
+ * # Returns
+ * New [`Step`] with updated shape positions and the config's penalty weights applied.
+ * @param {any} step
+ * @param {any} config
+ * @returns {any}
+ */
+export function step_with_config(step, config) {
+    const ret = wasm.step_with_config(step, config);
     return ret;
 }
 
@@ -232,24 +254,25 @@ export function tiered_nearest_keyframe(config, step_idx) {
  * Seek to a target step by recomputing from a keyframe.
  *
  * Given a keyframe step, recomputes forward to reach the target step.
+ * Uses the same clipped stepping as the training loop for consistent results.
  * This enables random access to any step with bounded recomputation.
  *
  * # Arguments
  * * `keyframe` - The stored keyframe step.
  * * `keyframe_idx` - Index of the keyframe.
  * * `target_idx` - Target step index to seek to.
- * * `learning_rate` - Learning rate for recomputation steps.
+ * * `config` - Phase configuration (penalty weights, learning rate, clipping params).
  *
  * # Returns
  * The step at target_idx, or throws if recomputation fails.
  * @param {any} keyframe
  * @param {number} keyframe_idx
  * @param {number} target_idx
- * @param {number} learning_rate
+ * @param {any} config
  * @returns {any}
  */
-export function tiered_seek(keyframe, keyframe_idx, target_idx, learning_rate) {
-    const ret = wasm.tiered_seek(keyframe, keyframe_idx, target_idx, learning_rate);
+export function tiered_seek(keyframe, keyframe_idx, target_idx, config) {
+    const ret = wasm.tiered_seek(keyframe, keyframe_idx, target_idx, config);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }

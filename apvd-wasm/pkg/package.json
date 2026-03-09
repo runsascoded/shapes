@@ -2,7 +2,7 @@
   "name": "@apvd/wasm",
   "type": "module",
   "description": "WASM bindings for area-proportional Venn diagrams",
-  "version": "0.1.0-dist.1483cda",
+  "version": "0.1.0-dist.ef1d96b",
   "license": "MIT",
   "repository": {
     "type": "git",

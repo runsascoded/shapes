@@ -1,6 +1,6 @@
 {
   "name": "@apvd/client",
-  "version": "0.1.0-dist.1483cda",
+  "version": "0.1.0-dist.ef1d96b",
   "description": "Training client types and WebSocket transport for area-proportional Venn diagrams",
   "type": "module",
   "main": "dist/index.js",
