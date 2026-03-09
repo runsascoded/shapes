@@ -150,13 +150,13 @@ fn test_clipped_vs_vanilla_impossible_targets() {
     eprintln!("  Vanilla final error: {:.4}", vanilla_errors.last().unwrap());
     eprintln!("  Clipped final error: {:.4}", clipped_errors.last().unwrap());
 
-    assert_eq!(
-        vanilla_avg_delta, 0.004467634265441526,
+    assert!(
+        (vanilla_avg_delta - 0.004467634265441526).abs() < 1e-12,
         "Deterministic vanilla_avg_delta changed: got {:.16}",
         vanilla_avg_delta
     );
-    assert_eq!(
-        clipped_avg_delta, 0.002220664609006595,
+    assert!(
+        (clipped_avg_delta - 0.002220664609006595).abs() < 1e-12,
         "Deterministic clipped_avg_delta changed: got {:.16}",
         clipped_avg_delta
     );

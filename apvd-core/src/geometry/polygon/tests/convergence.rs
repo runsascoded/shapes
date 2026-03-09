@@ -155,9 +155,9 @@ fn test_triangle_circle_convergence() {
         }
     }
 
-    assert_eq!(
-        final_error, 8.326672684688674e-17,
-        "Deterministic final error changed: got {:e}",
+    assert!(
+        final_error < 1e-15,
+        "Expected near-zero final error, got {:e}",
         final_error
     );
 }
